@@ -4,4 +4,8 @@ public interface Change {
 
     ChangeId getId();
 
+    ChangeSchema getSchema();
+
+    int getInt(String columnName);
+
 }
