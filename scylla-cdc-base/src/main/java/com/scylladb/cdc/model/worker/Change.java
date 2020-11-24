@@ -6,6 +6,8 @@ public interface Change {
 
     ChangeSchema getSchema();
 
-    int getInt(String columnName);
+    Integer getInt(String columnName);
+
+    Byte getByte(String columnName);
 
 }
