@@ -14,7 +14,6 @@ import com.scylladb.cdc.model.TaskId;
 public final class Worker {
 
     private final Connectors connectors;
-    private final TaskActionsQueue actions = new TaskActionsQueue();
 
     public Worker(Connectors connectors) {
         this.connectors = Preconditions.checkNotNull(connectors);
@@ -63,9 +62,9 @@ public final class Worker {
      * This includes fetching saved state of each task or creating a new initial
      * state for tasks that haven't run successfully before.
      */
-    private void queueFirstActionForEachTask(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
-        createTasksWithState(groupedStreams).map(task -> TaskAction.fetch(connectors, task))
-                .forEach(actions::addWhenReady);
+    private TaskActionsQueue queueFirstActionForEachTask(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
+        return new TaskActionsQueue(createTasksWithState(groupedStreams)
+                .map(task -> TaskAction.createFirstAction(connectors, task)).collect(Collectors.toSet()));
     }
 
     /*
@@ -74,7 +73,7 @@ public final class Worker {
      * At each iteration, runs a single action from |actions| queue if any
      * available.
      */
-    private void performActionsUntilStopRequested() {
+    private void performActionsUntilStopRequested(TaskActionsQueue actions) {
         while (!connectors.transport.shouldStop()) {
             actions.runNextAction();
         }
@@ -96,7 +95,7 @@ public final class Worker {
                 "Tasks from different generations");
 
         connectors.cql.prepare(groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet()));
-        queueFirstActionForEachTask(groupedStreams);
-        performActionsUntilStopRequested();
+        TaskActionsQueue actions = queueFirstActionForEachTask(groupedStreams);
+        performActionsUntilStopRequested(actions);
     }
 }

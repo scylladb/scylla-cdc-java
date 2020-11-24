@@ -37,6 +37,10 @@ public final class TaskState {
         return UUIDs.endOf(windowEnd.toDate().getTime());
     }
 
+    public Timestamp getWindowEndTimestamp() {
+        return windowEnd;
+    }
+
     public TaskState moveToNextWindow() {
         return new TaskState(windowEnd, windowEnd.plus(30, ChronoUnit.SECONDS), Optional.empty());
     }
