@@ -20,6 +20,7 @@ import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.RegularStatement;
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.ResultSetFuture;
+import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.FutureCallback;
@@ -28,6 +29,7 @@ import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.Change;
+import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.Task;
 
 public final class Driver3WorkerCQL implements WorkerCQL {
@@ -88,6 +90,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
     private final class Driver3Reader implements Reader {
 
         private volatile ResultSet rs;
+        private volatile ChangeSchema schema;
 
         public Driver3Reader(ResultSet rs) {
             this.rs = Preconditions.checkNotNull(rs);
@@ -114,7 +117,13 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                     });
                 }
             } else {
-                fut.complete(Optional.of(new Driver3Change(rs.one())));
+                Row row = rs.one();
+                if (schema == null) {
+                    schema = new Driver3SchemaBuilder()
+                            .withClusterMetadata(session.getCluster().getMetadata())
+                            .withRow(row).build();
+                }
+                fut.complete(Optional.of(new Driver3Change(row, schema)));
             }
         }
 
