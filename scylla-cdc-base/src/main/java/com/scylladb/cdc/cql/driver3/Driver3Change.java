@@ -46,4 +46,13 @@ public final class Driver3Change implements Change {
             return row.getByte(columnName);
         }
     }
+
+    @Override
+    public Boolean getBoolean(String columnName) {
+        if (row.isNull(columnName)) {
+            return null;
+        } else {
+            return row.getBool(columnName);
+        }
+    }
 }

@@ -10,4 +10,6 @@ public interface Change {
 
     Byte getByte(String columnName);
 
+    Boolean getBoolean(String columnName);
+
 }
