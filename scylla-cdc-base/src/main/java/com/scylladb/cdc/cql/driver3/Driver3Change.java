@@ -9,6 +9,8 @@ import com.scylladb.cdc.model.worker.Change;
 import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
+import java.util.UUID;
+
 public final class Driver3Change implements Change {
     private final Row row;
     private final ChangeSchema schema;
@@ -54,5 +56,40 @@ public final class Driver3Change implements Change {
         } else {
             return row.getBool(columnName);
         }
+    }
+
+    /*
+     * What follows are temporary methods
+     * used for porting the replicator
+     * from old library to new library.
+     *
+     * Those methods should be removed
+     * after the porting process is done.
+     */
+
+    @Override
+    public UUID TEMPORARY_PORTING_getTime() {
+        return row.getUUID(quoteIfNecessary("cdc$time"));
+    }
+
+    @Override
+    public Integer TEMPORARY_PORTING_getTTL() {
+        return row.isNull(quoteIfNecessary("cdc$ttl")) ? null : (int)row.getLong(quoteIfNecessary("cdc$ttl"));
+    }
+
+    @Override
+    public boolean TEMPORARY_PORTING_isDeleted(String name) {
+        String deletionColumnName = "cdc$deleted_" + name;
+        return !row.isNull(deletionColumnName) && row.getBool(deletionColumnName);
+    }
+
+    @Override
+    public Row TEMPORARY_PORTING_row() {
+        return row;
+    }
+
+    @Override
+    public byte TEMPORARY_PORTING_getOperation() {
+        return row.getByte(quoteIfNecessary("cdc$operation"));
     }
 }
