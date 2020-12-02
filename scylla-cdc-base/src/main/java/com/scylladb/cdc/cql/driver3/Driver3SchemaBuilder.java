@@ -96,6 +96,10 @@ public class Driver3SchemaBuilder {
                 return ChangeSchema.DataType.TINYINT;
             case BIGINT:
                 return ChangeSchema.DataType.BIGINT;
+            case VARCHAR:
+                return ChangeSchema.DataType.VARCHAR;
+            case ASCII:
+                return ChangeSchema.DataType.ASCII;
             default:
                 throw new RuntimeException(String.format("Data type %s is currently not supported.", driverType.getName()));
         }

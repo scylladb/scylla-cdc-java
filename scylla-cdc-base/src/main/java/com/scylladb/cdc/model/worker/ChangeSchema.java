@@ -7,7 +7,7 @@ import java.util.Objects;
 
 public final class ChangeSchema {
     public enum DataType {
-        INT, TINYINT, BIGINT, TEXT, BLOB, TIMEUUID, BOOLEAN
+        INT, TINYINT, BIGINT, TEXT, BLOB, TIMEUUID, BOOLEAN, VARCHAR, ASCII
     }
 
     public enum ColumnType {
