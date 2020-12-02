@@ -115,8 +115,10 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
 
     public void stop() throws InterruptedException {
         stopped = true;
-        for (Thread t : workerThreads) {
-            t.join();
+        if (workerThreads != null) {
+            for (Thread t : workerThreads) {
+                t.join();
+            }
         }
         workerThreads = null;
     }

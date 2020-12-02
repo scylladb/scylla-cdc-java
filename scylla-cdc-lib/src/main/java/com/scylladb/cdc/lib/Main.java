@@ -11,9 +11,9 @@ public class Main {
 
 
     public static void main(String[] args) {
-        try (Cluster c = Cluster.builder().addContactPoint("127.0.0.1").build(); Session s = c.connect()){
+        try (Cluster c = Cluster.builder().addContactPoint("127.0.0.2").build(); Session s = c.connect()){
             HashSet<TableName> tables = new HashSet<>();
-            tables.add(new TableName("ks", "tb"));
+            tables.add(new TableName("ks", "t"));
             CDCConsumer consumer = CDCConsumerBuilder.builder(s, change -> {
                 System.err.println(change.getId());
                 CompletableFuture<Void> f = new CompletableFuture<>();
@@ -21,6 +21,14 @@ public class Main {
                 return f;
             },tables).build();
             consumer.start();
+
+            try {
+                // Run consumer for 120 seconds
+                Thread.sleep(120000);
+                consumer.stop();
+            } catch (InterruptedException e) {
+                // Ignore exception.
+            }
         }
     }
 

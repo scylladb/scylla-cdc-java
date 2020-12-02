@@ -91,7 +91,7 @@ public final class Worker {
         Preconditions.checkArgument(groupedStreams.entrySet().stream().noneMatch(e -> e.getValue().isEmpty()),
                 "Task with no streams");
         Preconditions.checkArgument(
-                groupedStreams.entrySet().stream().map(e -> e.getKey().getGenerationId()).count() > 1,
+                groupedStreams.keySet().stream().map(TaskId::getGenerationId).distinct().count() == 1,
                 "Tasks from different generations");
 
         connectors.cql.prepare(groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet()));
