@@ -694,7 +694,7 @@ public class Main {
             HashSet<TableName> tables = new HashSet<>();
             tables.add(new TableName(keyspace, table));
 
-            CDCConsumer consumer = CDCConsumerBuilder.builder(sSession, new Consumer(mode, dCluster, dSession, keyspace, table, cl), tables).build();
+            CDCConsumer consumer = CDCConsumerBuilder.builder(sSession, new Consumer(mode, dCluster, dSession, keyspace, table, cl), tables).workersCount(1).build();
             consumer.start();
 
             try {
