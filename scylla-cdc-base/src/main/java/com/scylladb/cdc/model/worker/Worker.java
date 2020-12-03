@@ -75,7 +75,11 @@ public final class Worker {
      */
     private void performActionsUntilStopRequested(TaskActionsQueue actions) {
         while (!connectors.transport.shouldStop()) {
-            actions.runNextAction();
+            try {
+                actions.runNextAction();
+            } catch (InterruptedException e) {
+                // Ignore InterruptedException
+            }
         }
     }
 
