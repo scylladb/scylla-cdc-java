@@ -70,7 +70,7 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
         stop();
         stopped = false;
         Connectors connectors = new Connectors(this, new Driver3WorkerCQL(session), new TaskAndChangeConsumerAdapter(consumer));
-        int wCount = workersCount >= workerConfigurations.size() ? workersCount : workerConfigurations.size();
+        int wCount = Math.min(workersCount, workerConfigurations.size());
         workerThreads = new Thread[wCount];
         Map<TaskId, SortedSet<StreamId>>[] tasks = split(workerConfigurations, wCount);
         for (int i = 0; i < wCount; ++i) {
