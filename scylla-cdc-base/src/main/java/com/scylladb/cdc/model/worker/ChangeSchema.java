@@ -6,8 +6,34 @@ import com.google.common.collect.ImmutableList;
 import java.util.Objects;
 
 public final class ChangeSchema {
+    // TODO - Support more information about UDT types and similar.
     public enum DataType {
-        INT, TINYINT, BIGINT, TEXT, BLOB, TIMEUUID, BOOLEAN, VARCHAR, ASCII
+        ASCII,
+        BIGINT,
+        BLOB,
+        BOOLEAN,
+        COUNTER,
+        DECIMAL,
+        DOUBLE,
+        FLOAT,
+        INT,
+        TEXT,
+        TIMESTAMP,
+        UUID,
+        VARCHAR,
+        VARINT,
+        TIMEUUID,
+        INET,
+        DATE,
+        TIME,
+        SMALLINT,
+        TINYINT,
+        DURATION,
+        LIST,
+        MAP,
+        SET,
+        UDT,
+        TUPLE,
     }
 
     public enum ColumnType {

@@ -82,24 +82,58 @@ public class Driver3SchemaBuilder {
 
     private ChangeSchema.DataType translateColumnDataType(DataType driverType) {
         switch (driverType.getName()) {
+            case ASCII:
+                return ChangeSchema.DataType.ASCII;
+            case BIGINT:
+                return ChangeSchema.DataType.BIGINT;
+            case BLOB:
+                return ChangeSchema.DataType.BLOB;
+            case BOOLEAN:
+                return ChangeSchema.DataType.BOOLEAN;
+            case COUNTER:
+                return ChangeSchema.DataType.COUNTER;
+            case DECIMAL:
+                return ChangeSchema.DataType.DECIMAL;
+            case DOUBLE:
+                return ChangeSchema.DataType.DOUBLE;
+            case FLOAT:
+                return ChangeSchema.DataType.FLOAT;
             case INT:
                 return ChangeSchema.DataType.INT;
             case TEXT:
                 return ChangeSchema.DataType.TEXT;
-            case BLOB:
-                return ChangeSchema.DataType.BLOB;
-            case TIMEUUID:
-                return ChangeSchema.DataType.TIMEUUID;
-            case BOOLEAN:
-                return ChangeSchema.DataType.BOOLEAN;
-            case TINYINT:
-                return ChangeSchema.DataType.TINYINT;
-            case BIGINT:
-                return ChangeSchema.DataType.BIGINT;
+            case TIMESTAMP:
+                return ChangeSchema.DataType.TIMESTAMP;
+            case UUID:
+                return ChangeSchema.DataType.UUID;
             case VARCHAR:
                 return ChangeSchema.DataType.VARCHAR;
-            case ASCII:
-                return ChangeSchema.DataType.ASCII;
+            case VARINT:
+                return ChangeSchema.DataType.VARINT;
+            case TIMEUUID:
+                return ChangeSchema.DataType.TIMEUUID;
+            case INET:
+                return ChangeSchema.DataType.INET;
+            case DATE:
+                return ChangeSchema.DataType.DATE;
+            case TIME:
+                return ChangeSchema.DataType.TIME;
+            case SMALLINT:
+                return ChangeSchema.DataType.SMALLINT;
+            case TINYINT:
+                return ChangeSchema.DataType.TINYINT;
+            case DURATION:
+                return ChangeSchema.DataType.DURATION;
+            case LIST:
+                return ChangeSchema.DataType.LIST;
+            case MAP:
+                return ChangeSchema.DataType.MAP;
+            case SET:
+                return ChangeSchema.DataType.SET;
+            case UDT:
+                return ChangeSchema.DataType.UDT;
+            case TUPLE:
+                return ChangeSchema.DataType.TUPLE;
             default:
                 throw new RuntimeException(String.format("Data type %s is currently not supported.", driverType.getName()));
         }
