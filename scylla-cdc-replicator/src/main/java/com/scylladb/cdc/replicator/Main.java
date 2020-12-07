@@ -93,7 +93,7 @@ public class Main {
         private final Session session;
         private final ConsistencyLevel cl;
         private final TableMetadata table;
-        private final Map<Byte, Operation> preparedOps = new HashMap<>();
+        private final Map<RawChange.OperationType, Operation> preparedOps = new HashMap<>();
         private final PreparedStatement preimageQuery;
 
         private final Mode mode;
@@ -550,16 +550,16 @@ public class Main {
             table = c.getMetadata().getKeyspaces().stream().filter(k -> k.getName().equals(keyspace))
                     .findAny().get().getTable(tableName);
             preimageQuery = createPreimageQuery(session, table);
-            preparedOps.put((byte) 1,
+            preparedOps.put(RawChange.OperationType.ROW_UPDATE,
                     hasCollection(table) ? new UnpreparedUpdateOp(table) : new UpdateOp(s, table));
-            preparedOps.put((byte) 2, new InsertOp(s, table));
-            preparedOps.put((byte) 3, new RowDeleteOp(s, table));
-            preparedOps.put((byte) 4, new PartitionDeleteOp(s, table));
+            preparedOps.put(RawChange.OperationType.ROW_INSERT, new InsertOp(s, table));
+            preparedOps.put(RawChange.OperationType.ROW_DELETE, new RowDeleteOp(s, table));
+            preparedOps.put(RawChange.OperationType.PARTITION_DELETE, new PartitionDeleteOp(s, table));
             RangeTombstoneState rtState = new RangeTombstoneState(table);
-            preparedOps.put((byte) 5, new RangeDeleteStartOp(rtState, true));
-            preparedOps.put((byte) 6, new RangeDeleteStartOp(rtState, false));
-            preparedOps.put((byte) 7, new RangeDeleteEndOp(s, table, rtState, true));
-            preparedOps.put((byte) 8, new RangeDeleteEndOp(s, table, rtState, false));
+            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_LEFT_BOUND, new RangeDeleteStartOp(rtState, true));
+            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND, new RangeDeleteStartOp(rtState, false));
+            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, rtState, true));
+            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, rtState, false));
         }
 
         private static boolean hasCollection(TableMetadata t) {
@@ -567,11 +567,11 @@ public class Main {
         }
 
         private CompletableFuture<Void> consumeDelta(RawChange change) {
-            Byte operationType = change.TEMPORARY_PORTING_getOperation();
+            RawChange.OperationType operationType = change.getOperationType();
             Operation op = preparedOps.get(operationType);
             if (op == null) {
-                System.err.println("Unsupported operation: " + change.TEMPORARY_PORTING_getOperation());
-                throw new UnsupportedOperationException("" + change.TEMPORARY_PORTING_getOperation());
+                System.err.println("Unsupported operation: " + operationType);
+                throw new UnsupportedOperationException(operationType.toString());
             }
             Statement stmt = op.getStatement(change, cl);
             if (stmt == null) {
@@ -581,25 +581,39 @@ public class Main {
         }
 
         private CompletableFuture<Void> consumePostimage(RawChange change) {
-            Byte operationType = change.TEMPORARY_PORTING_getOperation();
+            RawChange.OperationType operationType = change.getOperationType();
             ByteBuffer streamid = change.getId().getStreamId().getValue();
-            if (operationType == 0) {
-                throw new IllegalStateException("Unexpected preimage");
-            } else if (operationType < 3) {
-                nextPostimageOperation.put(streamid, preparedOps.get(operationType));
-                return FutureUtils.completed(null);
-            } else if (operationType < 9) {
-                nextPostimageOperation.remove(streamid);
-                return consumeDelta(change);
-            } else {
-                Operation op = nextPostimageOperation.remove(streamid);
-                if (op != null) {
-                    Statement stmt = op.getStatement(change, cl, mode);
-                    if (stmt != null) {
-                        return FutureUtils.convert(session.executeAsync(stmt), "Consume postimage");
+            switch (operationType) {
+                case PRE_IMAGE:
+                    throw new IllegalStateException("Unexpected preimage");
+
+                case ROW_UPDATE:
+                case ROW_INSERT:
+                    nextPostimageOperation.put(streamid, preparedOps.get(operationType));
+                    return FutureUtils.completed(null);
+
+                case ROW_DELETE:
+                case PARTITION_DELETE:
+                case ROW_RANGE_DELETE_INCLUSIVE_LEFT_BOUND:
+                case ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND:
+                case ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND:
+                case ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND:
+                    nextPostimageOperation.remove(streamid);
+                    return consumeDelta(change);
+
+                case POST_IMAGE:
+                    Operation op = nextPostimageOperation.remove(streamid);
+                    if (op != null) {
+                        Statement stmt = op.getStatement(change, cl, mode);
+                        if (stmt != null) {
+                            return FutureUtils.convert(session.executeAsync(stmt), "Consume postimage");
+                        }
                     }
-                }
-                return FutureUtils.completed(null);
+                    return FutureUtils.completed(null);
+
+                default:
+                    System.err.println("Unsupported operation: " + operationType);
+                    throw new UnsupportedOperationException(operationType.toString());
             }
         }
 
@@ -657,23 +671,24 @@ public class Main {
         }
 
         private CompletableFuture<Void> consumePreimage(RawChange change) {
-            Byte operationType = change.TEMPORARY_PORTING_getOperation();
-            if (operationType == 0) {
-                BoundStatement stmt = preimageQuery.bind();
-                Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
-                        .collect(Collectors.toSet());
-                for (Definition d : change.TEMPORARY_PORTING_row().getColumnDefinitions()) {
-                    if (primaryColumns.contains(d.getName())) {
-                        stmt.setBytesUnsafe(d.getName(), change.getAsBytes(d.getName()));
+            RawChange.OperationType operationType = change.getOperationType();
+            switch (operationType) {
+                case PRE_IMAGE:
+                    BoundStatement stmt = preimageQuery.bind();
+                    Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
+                            .collect(Collectors.toSet());
+                    for (Definition d : change.TEMPORARY_PORTING_row().getColumnDefinitions()) {
+                        if (primaryColumns.contains(d.getName())) {
+                            stmt.setBytesUnsafe(d.getName(), change.getAsBytes(d.getName()));
+                        }
                     }
-                }
-                stmt.setConsistencyLevel(ConsistencyLevel.ALL);
-                stmt.setIdempotent(true);
-                return FutureUtils.transformDeferred(session.executeAsync(stmt), r -> checkPreimage(change, r));
-            } else if (operationType < 9) {
-                return consumeDelta(change);
-            } else {
-                throw new IllegalStateException("Unexpected postimage");
+                    stmt.setConsistencyLevel(ConsistencyLevel.ALL);
+                    stmt.setIdempotent(true);
+                    return FutureUtils.transformDeferred(session.executeAsync(stmt), r -> checkPreimage(change, r));
+                case POST_IMAGE:
+                    throw new IllegalStateException("Unexpected postimage");
+                default:
+                    return consumeDelta(change);
             }
         }
 

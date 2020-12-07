@@ -32,6 +32,11 @@ public final class Driver3RawChange implements RawChange {
     }
 
     @Override
+    public OperationType getOperationType() {
+        return OperationType.parse(getByte(quoteIfNecessary("cdc$operation")));
+    }
+
+    @Override
     public ChangeSchema getSchema() {
         return schema;
     }
@@ -108,10 +113,5 @@ public final class Driver3RawChange implements RawChange {
     @Override
     public Row TEMPORARY_PORTING_row() {
         return row;
-    }
-
-    @Override
-    public byte TEMPORARY_PORTING_getOperation() {
-        return getByte(quoteIfNecessary("cdc$operation"));
     }
 }
