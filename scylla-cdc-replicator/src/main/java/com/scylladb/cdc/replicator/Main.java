@@ -144,7 +144,7 @@ public class Main {
             protected void bindAllNonCDCColumns(BoundStatement stmt, RawChange c, Mode m) {
                 for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
                     if (!d.getName().startsWith("cdc$")) {
-                        if (c.TEMPORARY_PORTING_row().isNull(d.getName()) && !c.TEMPORARY_PORTING_isDeleted(d.getName())) {
+                        if (c.getAsObject(d.getName()) == null && !c.TEMPORARY_PORTING_isDeleted(d.getName())) {
                             stmt.unset(d.getName());
                         } else {
                             switch (m) {
@@ -234,7 +234,7 @@ public class Main {
                                 type2 = CodecRegistry.DEFAULT_INSTANCE.codecFor(c.getType().getTypeArguments().get(1)).getJavaType();
                             }
                             String deletedElementsColumnName = "cdc$deleted_elements_" + c.getName();
-                            if (!change.TEMPORARY_PORTING_row().isNull(deletedElementsColumnName)) {
+                            if (change.getAsObject(deletedElementsColumnName) != null) {
                                 if (c.getType().getName() == DataType.Name.SET) {
                                     op = removeAll(c.getName(), change.getSet(deletedElementsColumnName));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
@@ -642,7 +642,7 @@ public class Main {
                     Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
                             .collect(Collectors.toSet());
                     for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
-                        if (!d.getName().startsWith("cdc$") && !primaryColumns.contains(d.getName()) && !c.TEMPORARY_PORTING_row().isNull(d.getName())) {
+                        if (!d.getName().startsWith("cdc$") && !primaryColumns.contains(d.getName()) && c.getAsObject(d.getName()) != null) {
                             System.out.println("Inconsistency detected.\nNo row in target.");
                             return FutureUtils.completed(null);
                         }
