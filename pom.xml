@@ -18,6 +18,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <scylla.driver.version>3.10.1-scylla-0</scylla.driver.version>
+        <flogger.version>0.5.1</flogger.version>
     </properties>
 
     <dependencies>
@@ -26,6 +27,16 @@
             <artifactId>scylla-driver-core</artifactId>
             <version>${scylla.driver.version}</version>
             <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger</artifactId>
+            <version>${flogger.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger-system-backend</artifactId>
+            <version>${flogger.version}</version>
         </dependency>
     </dependencies>
 </project>

@@ -52,6 +52,7 @@ import com.datastax.driver.core.querybuilder.ListSetIdxTimeUUIDAssignment;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.Select;
 import com.datastax.driver.core.querybuilder.Update;
+import com.google.common.flogger.FluentLogger;
 import com.google.common.io.BaseEncoding;
 import com.google.common.reflect.TypeToken;
 
@@ -67,6 +68,8 @@ import net.sourceforge.argparse4j.inf.Namespace;
 import sun.misc.Signal;
 
 public class Main {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
     private static enum Mode {
         DELTA, PREIMAGE, POSTIMAGE;
 
@@ -674,6 +677,8 @@ public class Main {
 
         @Override
         public CompletableFuture<Void> consume(RawChange change) {
+            logger.atInfo().log("Replicator consuming change: %s", change.getId());
+
             switch (mode) {
                 case DELTA: return consumeDelta(change);
                 case POSTIMAGE: return consumePostimage(change);

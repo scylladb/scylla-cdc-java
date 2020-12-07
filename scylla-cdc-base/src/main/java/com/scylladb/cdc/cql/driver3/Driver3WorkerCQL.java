@@ -23,6 +23,7 @@ import com.datastax.driver.core.ResultSetFuture;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
 import com.google.common.base.Preconditions;
+import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.scylladb.cdc.cql.WorkerCQL;
@@ -33,6 +34,7 @@ import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.Task;
 
 public final class Driver3WorkerCQL implements WorkerCQL {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Session session;
     private final Map<TableName, PreparedStatement> preparedStmts = new HashMap<>();
@@ -148,6 +150,8 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                         .bind(task.streams.stream().map(StreamId::getValue).collect(Collectors.toList()),
                                 task.state.getWindowStart(), task.state.getWindowEnd())
                         .setConsistencyLevel(computeCL()));
+        logger.atInfo().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
+
         Futures.addCallback(future, new FutureCallback<ResultSet>() {
 
             @Override

@@ -9,9 +9,12 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
+import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 
 public abstract class TaskAction {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
     private static final ScheduledExecutorService internalExecutor = Executors
             .newSingleThreadScheduledExecutor(new ThreadFactory() {
                 @Override
@@ -45,8 +48,9 @@ public abstract class TaskAction {
             return readerFuture.thenApply(reader -> (TaskAction) new UpdateStatusTaskAction(connectors, task, reader)).exceptionally(ex -> {
                 // Exception occured while starting up the reader. Retry by starting
                 // this TaskAction once again.
-
+                
                 // TODO - implement some backoff strategy.
+                logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. Task state: %s. Will retry.", task.id, task.state);
                 return new ReadNewWindowTaskAction(connectors, task);
             });
         }
@@ -92,8 +96,9 @@ public abstract class TaskAction {
             return reader.nextChange().thenCompose(this::consumeChange).exceptionally(ex -> {
                 // Exception occured while reading the window, we will have to restart
                 // ReadNewWindowTaskAction - read a window from state defined in task.
-                
+
                 // TODO - implement some backoff strategy.
+                logger.atSevere().withCause(ex).log("Error while consuming change. Task: %s. Task state: %s. Will retry.", task.id, task.state);
                 return new ReadNewWindowTaskAction(connectors, task);
             });
         }

@@ -1,10 +1,15 @@
 package com.scylladb.cdc.model.worker;
 
+import com.google.common.flogger.FluentLogger;
+
 import java.util.Collection;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 
 public final class TaskActionsQueue {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
     /*
      * Inside runNextAction() we wait this number of
      * milliseconds for next action to appear inside the queue.
@@ -43,7 +48,10 @@ public final class TaskActionsQueue {
         if (action != null) {
             // This queue::add may be executed in any thread
             // add() unfortunately is blocking
-            action.run().thenAccept(queue::add);
+            action.run().thenAccept(queue::add).exceptionally(ex -> {
+                logger.atSevere().withCause(ex).log("Unhandled exception in TaskActionsQueue.");
+                return null;
+            });
         }
     }
 }
