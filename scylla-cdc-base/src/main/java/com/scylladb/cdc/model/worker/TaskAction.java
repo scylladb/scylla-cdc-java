@@ -25,26 +25,8 @@ public abstract class TaskAction {
 
     public abstract CompletableFuture<TaskAction> run();
 
-    private static CompletableFuture<TaskAction> fetchOrWait(Connectors connectors, Task task,
-            ReadNewWindowTaskAction action) {
-        Date end = task.state.getWindowEndTimestamp().toDate();
-        Date now = new Date();
-        long toWait = end.getTime() - now.getTime() + TimeUnit.SECONDS.toMillis(30);
-        if (toWait > 0) {
-            CompletableFuture<TaskAction> result = new CompletableFuture<>();
-            internalExecutor.schedule(() -> result.complete(action), toWait, TimeUnit.MILLISECONDS);
-            return result;
-        }
-        return fetch(connectors, task);
-    }
-
     public static TaskAction createFirstAction(Connectors connectors, Task task) {
         return new ReadNewWindowTaskAction(connectors, task);
-    }
-
-    private static CompletableFuture<TaskAction> fetch(Connectors connectors, Task task) {
-        return connectors.cql.createReader(task)
-                .thenApply(reader -> new ConsumeChangeTaskAction(connectors, task, reader));
     }
 
     private static final class ReadNewWindowTaskAction extends TaskAction {
@@ -58,9 +40,28 @@ public abstract class TaskAction {
 
         @Override
         public CompletableFuture<TaskAction> run() {
-            return fetchOrWait(connectors, task, this);
+            CompletableFuture<Void> waitFuture = waitForWindow();
+            CompletableFuture<Reader> readerFuture = waitFuture.thenCompose(w -> connectors.cql.createReader(task));
+            return readerFuture.thenApply(reader -> (TaskAction) new UpdateStatusTaskAction(connectors, task, reader)).exceptionally(ex -> {
+                // Exception occured while starting up the reader. Retry by starting
+                // this TaskAction once again.
+
+                // TODO - implement some backoff strategy.
+                return new ReadNewWindowTaskAction(connectors, task);
+            });
         }
 
+        private CompletableFuture<Void> waitForWindow() {
+            Date end = task.state.getWindowEndTimestamp().toDate();
+            Date now = new Date();
+            long toWait = end.getTime() - now.getTime() + TimeUnit.SECONDS.toMillis(30);
+            if (toWait > 0) {
+                CompletableFuture<Void> result = new CompletableFuture<>();
+                internalExecutor.schedule(() -> result.complete(null), toWait, TimeUnit.MILLISECONDS);
+                return result;
+            }
+            return CompletableFuture.completedFuture(null);
+        }
     }
 
     private static class ConsumeChangeTaskAction extends TaskAction {
@@ -87,7 +88,13 @@ public abstract class TaskAction {
 
         @Override
         public CompletableFuture<TaskAction> run() {
-            return reader.nextChange().thenCompose(this::consumeChange);
+            return reader.nextChange().thenCompose(this::consumeChange).exceptionally(ex -> {
+                // Exception occured while reading the window, we will have to restart
+                // ReadNewWindowTaskAction - read a window from state defined in task.
+                
+                // TODO - implement some backoff strategy.
+                return new ReadNewWindowTaskAction(connectors, task);
+            });
         }
 
     }
@@ -120,7 +127,7 @@ public abstract class TaskAction {
             TaskState newState = task.state.moveToNextWindow();
             connectors.transport.moveStateToNextWindow(task.id, newState);
             Task newTask = task.updateState(newState);
-            return fetchOrWait(connectors, newTask, new ReadNewWindowTaskAction(connectors, newTask));
+            return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(connectors, newTask));
         }
     }
 }
