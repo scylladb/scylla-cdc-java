@@ -7,9 +7,9 @@ import com.scylladb.cdc.transport.WorkerTransport;
 public final class Connectors {
     public final WorkerTransport transport;
     public final WorkerCQL cql;
-    public final TaskAndChangeConsumer consumer;
+    public final TaskAndRawChangeConsumer consumer;
 
-    public Connectors(WorkerTransport transport, WorkerCQL cql, TaskAndChangeConsumer consumer) {
+    public Connectors(WorkerTransport transport, WorkerCQL cql, TaskAndRawChangeConsumer consumer) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);

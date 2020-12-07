@@ -4,7 +4,11 @@ import com.datastax.driver.core.Row;
 
 import java.util.UUID;
 
-public interface Change {
+/*
+ * Represents a single CDC log row,
+ * without any post-processing.
+ */
+public interface RawChange {
 
     ChangeId getId();
 

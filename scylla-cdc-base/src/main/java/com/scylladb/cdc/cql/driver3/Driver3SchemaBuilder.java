@@ -8,7 +8,6 @@ import com.datastax.driver.core.Row;
 import com.datastax.driver.core.TableMetadata;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.scylladb.cdc.model.worker.Change;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
 import java.util.List;

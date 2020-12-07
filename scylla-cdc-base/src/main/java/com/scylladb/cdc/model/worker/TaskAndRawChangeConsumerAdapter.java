@@ -4,16 +4,16 @@ import java.util.concurrent.CompletableFuture;
 
 import com.google.common.base.Preconditions;
 
-public class TaskAndChangeConsumerAdapter implements TaskAndChangeConsumer {
+public class TaskAndRawChangeConsumerAdapter implements TaskAndRawChangeConsumer {
 
-    private final ChangeConsumer consumer;
+    private final RawChangeConsumer consumer;
 
-    public TaskAndChangeConsumerAdapter(ChangeConsumer consumer) {
+    public TaskAndRawChangeConsumerAdapter(RawChangeConsumer consumer) {
         this.consumer = Preconditions.checkNotNull(consumer);
     }
 
     @Override
-    public CompletableFuture<Task> consume(Task task, Change change) {
+    public CompletableFuture<Task> consume(Task task, RawChange change) {
         return consumer.consume(change).thenApply(ignored -> task.updateState(change.getId()));
     }
 

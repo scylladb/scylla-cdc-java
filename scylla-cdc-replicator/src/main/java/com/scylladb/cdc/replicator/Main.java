@@ -28,7 +28,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import com.datastax.driver.core.BoundStatement;
@@ -59,8 +58,8 @@ import com.google.common.reflect.TypeToken;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.worker.Change;
-import com.scylladb.cdc.model.worker.ChangeConsumer;
+import com.scylladb.cdc.model.worker.RawChange;
+import com.scylladb.cdc.model.worker.RawChangeConsumer;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
@@ -84,7 +83,7 @@ public class Main {
         }
     }
 
-    private static final class Consumer implements ChangeConsumer {
+    private static final class Consumer implements RawChangeConsumer {
         private static final String TIMESTAMP_MARKER_NAME = "using_timestamp_bind_marker";
         private static final String TTL_MARKER_NAME = "using_ttl_bind_marker";
 
@@ -98,8 +97,8 @@ public class Main {
         private final ConcurrentHashMap<ByteBuffer, Operation> nextPostimageOperation = new ConcurrentHashMap<>();
 
         private static interface Operation {
-            Statement getStatement(Change c, ConsistencyLevel cl);
-            Statement getStatement(Change c, ConsistencyLevel cl, Mode m);
+            Statement getStatement(RawChange c, ConsistencyLevel cl);
+            Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m);
         }
 
         private static long timeuuidToTimestamp(UUID from) {
@@ -117,11 +116,11 @@ public class Main {
                 preparedStmt = session.prepare(getStatement(table));
             }
 
-            public Statement getStatement(Change c, ConsistencyLevel cl) {
+            public Statement getStatement(RawChange c, ConsistencyLevel cl) {
                 return getStatement(c, cl, Mode.DELTA);
             }
 
-            public Statement getStatement(Change c, ConsistencyLevel cl, Mode m) {
+            public Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m) {
                 BoundStatement stmt = preparedStmt.bind();
                 stmt.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(c.TEMPORARY_PORTING_getTime()));
                 bindInternal(stmt, c, m);
@@ -130,7 +129,7 @@ public class Main {
                 return stmt;
             }
 
-            protected void bindTTL(BoundStatement stmt, Change c) {
+            protected void bindTTL(BoundStatement stmt, RawChange c) {
                 Integer ttl = c.TEMPORARY_PORTING_getTTL();
                 if (ttl != null) {
                     stmt.setInt(TTL_MARKER_NAME, ttl);
@@ -139,7 +138,7 @@ public class Main {
                 }
             }
 
-            protected void bindAllNonCDCColumns(BoundStatement stmt, Change c, Mode m) {
+            protected void bindAllNonCDCColumns(BoundStatement stmt, RawChange c, Mode m) {
                 for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
                     if (!d.getName().startsWith("cdc$")) {
                         if (c.TEMPORARY_PORTING_row().isNull(d.getName()) && !c.TEMPORARY_PORTING_isDeleted(d.getName())) {
@@ -175,7 +174,7 @@ public class Main {
                 }
             }
 
-            protected void bindPrimaryKeyColumns(BoundStatement stmt, Change c) {
+            protected void bindPrimaryKeyColumns(BoundStatement stmt, RawChange c) {
                 Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
                         .collect(Collectors.toSet());
                 for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
@@ -187,7 +186,7 @@ public class Main {
                 }
             }
 
-            protected void bindPartitionKeyColumns(BoundStatement stmt, Change c) {
+            protected void bindPartitionKeyColumns(BoundStatement stmt, RawChange c) {
                 Set<String> partitionColumns = table.getPartitionKey().stream().map(ColumnMetadata::getName)
                         .collect(Collectors.toSet());
                 for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
@@ -199,7 +198,7 @@ public class Main {
                 }
             }
 
-            protected abstract void bindInternal(BoundStatement stmt, Change c, Mode m);
+            protected abstract void bindInternal(BoundStatement stmt, RawChange c, Mode m);
         }
 
         private static class UnpreparedUpdateOp implements Operation {
@@ -209,12 +208,12 @@ public class Main {
                 table = t;
             }
 
-            public Statement getStatement(Change c, ConsistencyLevel cl) {
+            public Statement getStatement(RawChange c, ConsistencyLevel cl) {
                 return getStatement(c, cl, Mode.DELTA);
             }
 
             @Override
-            public Statement getStatement(Change change, ConsistencyLevel cl, Mode m) {
+            public Statement getStatement(RawChange change, ConsistencyLevel cl, Mode m) {
                 Update builder = QueryBuilder.update(table);
                 Set<ColumnMetadata> primaryColumns = new HashSet<>(table.getPrimaryKey());
                 table.getColumns().stream().forEach(c -> {
@@ -299,7 +298,7 @@ public class Main {
             }
 
             @Override
-            protected void bindInternal(BoundStatement stmt, Change c, Mode m) {
+            protected void bindInternal(BoundStatement stmt, RawChange c, Mode m) {
                 bindTTL(stmt, c);
                 bindAllNonCDCColumns(stmt, c, m);
             }
@@ -320,7 +319,7 @@ public class Main {
             }
 
             @Override
-            protected void bindInternal(BoundStatement stmt, Change c, Mode m) {
+            protected void bindInternal(BoundStatement stmt, RawChange c, Mode m) {
                 bindTTL(stmt, c);
                 bindAllNonCDCColumns(stmt, c, m);
             }
@@ -341,7 +340,7 @@ public class Main {
             }
 
             @Override
-            protected void bindInternal(BoundStatement stmt, Change c, Mode m) {
+            protected void bindInternal(BoundStatement stmt, RawChange c, Mode m) {
                 bindPrimaryKeyColumns(stmt, c);
             }
 
@@ -361,7 +360,7 @@ public class Main {
             }
 
             @Override
-            protected void bindInternal(BoundStatement stmt, Change c, Mode m) {
+            protected void bindInternal(BoundStatement stmt, RawChange c, Mode m) {
                 bindPartitionKeyColumns(stmt, c);
             }
 
@@ -376,12 +375,12 @@ public class Main {
                 this.inclusive = inclusive;
             }
 
-            public Statement getStatement(Change c, ConsistencyLevel cl) {
+            public Statement getStatement(RawChange c, ConsistencyLevel cl) {
                 return getStatement(c, cl, Mode.DELTA);
             }
 
             @Override
-            public Statement getStatement(Change c, ConsistencyLevel cl, Mode m) {
+            public Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m) {
                 state.addStart(c, inclusive);
                 return null;
             }
@@ -418,7 +417,7 @@ public class Main {
                 }
             }
 
-            private static Statement bind(TableMetadata table, PreparedStatement stmt, Change change, PrimaryKeyValue startVal, ConsistencyLevel cl) {
+            private static Statement bind(TableMetadata table, PreparedStatement stmt, RawChange change, PrimaryKeyValue startVal, ConsistencyLevel cl) {
                 BoundStatement s = stmt.bind();
                 Iterator<ColumnMetadata> keyIt = table.getPrimaryKey().iterator();
                 ColumnMetadata prevCol = keyIt.next();
@@ -443,12 +442,12 @@ public class Main {
                 return s;
             }
 
-            public Statement getStatement(Change c, ConsistencyLevel cl) {
+            public Statement getStatement(RawChange c, ConsistencyLevel cl) {
                 return getStatement(c, cl, Mode.DELTA);
             }
 
             @Override
-            public Statement getStatement(Change c, ConsistencyLevel cl, Mode m) {
+            public Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m) {
                 byte[] streamId = new byte[16];
                 c.getId().getStreamId().getValue().duplicate().get(streamId, 0, 16);
                 DeletionStart start = state.getStart(streamId);
@@ -517,7 +516,7 @@ public class Main {
                 this.table = table;
             }
 
-            public void addStart(Change c, boolean inclusive) {
+            public void addStart(RawChange c, boolean inclusive) {
                 byte[] bytes = new byte[16];
                 c.getId().getStreamId().getValue().duplicate().get(bytes, 0, 16);
                 state.put(new Key(bytes), new DeletionStart(new PrimaryKeyValue(table, c.TEMPORARY_PORTING_row()), inclusive));
@@ -562,7 +561,7 @@ public class Main {
             return t.getColumns().stream().anyMatch(c -> c.getType().isCollection() && !c.getType().isFrozen());
         }
 
-        private CompletableFuture<Void> consumeDelta(Change change) {
+        private CompletableFuture<Void> consumeDelta(RawChange change) {
             Byte operationType = change.TEMPORARY_PORTING_getOperation();
             Operation op = preparedOps.get(operationType);
             if (op == null) {
@@ -576,7 +575,7 @@ public class Main {
             return FutureUtils.convert(session.executeAsync(stmt), "Consume delta " + operationType);
         }
 
-        private CompletableFuture<Void> consumePostimage(Change change) {
+        private CompletableFuture<Void> consumePostimage(RawChange change) {
             Byte operationType = change.TEMPORARY_PORTING_getOperation();
             ByteBuffer streamid = change.getId().getStreamId().getValue();
             if (operationType == 0) {
@@ -618,7 +617,7 @@ public class Main {
             return a.equals(b);
         }
 
-        private CompletableFuture<Void> checkPreimage(Change c, ResultSet rs) {
+        private CompletableFuture<Void> checkPreimage(RawChange c, ResultSet rs) {
             if (rs.getAvailableWithoutFetching() == 0) {
                 if (rs.isFullyFetched()) {
                     Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
@@ -652,7 +651,7 @@ public class Main {
             return FutureUtils.completed(null);
         }
 
-        private CompletableFuture<Void> consumePreimage(Change change) {
+        private CompletableFuture<Void> consumePreimage(RawChange change) {
             Byte operationType = change.TEMPORARY_PORTING_getOperation();
             if (operationType == 0) {
                 BoundStatement stmt = preimageQuery.bind();
@@ -674,7 +673,7 @@ public class Main {
         }
 
         @Override
-        public CompletableFuture<Void> consume(Change change) {
+        public CompletableFuture<Void> consume(RawChange change) {
             switch (mode) {
                 case DELTA: return consumeDelta(change);
                 case POSTIMAGE: return consumePostimage(change);

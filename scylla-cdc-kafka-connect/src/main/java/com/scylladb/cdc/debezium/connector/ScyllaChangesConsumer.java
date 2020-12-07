@@ -1,11 +1,8 @@
 package com.scylladb.cdc.debezium.connector;
 
-import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.TaskId;
-import com.scylladb.cdc.model.worker.Change;
-import com.scylladb.cdc.model.worker.ChangeSchema;
+import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
-import com.scylladb.cdc.model.worker.TaskAndChangeConsumer;
+import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumer;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.util.Clock;
 import org.slf4j.Logger;
@@ -13,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CompletableFuture;
 
-public class ScyllaChangesConsumer implements TaskAndChangeConsumer {
+public class ScyllaChangesConsumer implements TaskAndRawChangeConsumer {
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     private final EventDispatcher<CollectionId> dispatcher;
@@ -29,7 +26,7 @@ public class ScyllaChangesConsumer implements TaskAndChangeConsumer {
     }
 
     @Override
-    public CompletableFuture<Task> consume(Task task, Change change) {
+    public CompletableFuture<Task> consume(Task task, RawChange change) {
         TaskStateOffsetContext taskStateOffsetContext = offsetContext.taskStateOffsetContext(task.id);
         try {
             logger.info("Dispatching change: {}", change.getId().toString());

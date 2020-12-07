@@ -1,6 +1,6 @@
 package com.scylladb.cdc.debezium.connector;
 
-import com.scylladb.cdc.model.worker.Change;
+import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import io.debezium.data.Envelope;
 import io.debezium.pipeline.AbstractChangeRecordEmitter;
@@ -11,16 +11,16 @@ import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<ScyllaCollectionSchema> {
 
-    private final Change change;
+    private final RawChange change;
     private final ScyllaSchema schema;
 
-    public ScyllaChangeRecordEmitter(Change change, OffsetContext offsetContext, ScyllaSchema schema, Clock clock) {
+    public ScyllaChangeRecordEmitter(RawChange change, OffsetContext offsetContext, ScyllaSchema schema, Clock clock) {
         super(offsetContext, clock);
         this.change = change;
         this.schema = schema;
     }
 
-    public Change getChange() {
+    public RawChange getChange() {
         return change;
     }
 
@@ -86,7 +86,7 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
         receiver.changeRecord(scyllaCollectionSchema, getOperation(), keyStruct, envelope, getOffset(), null);
     }
 
-    private void fillStructWithChange(ScyllaCollectionSchema schema, Struct keyStruct, Struct valueStruct, Change change) {
+    private void fillStructWithChange(ScyllaCollectionSchema schema, Struct keyStruct, Struct valueStruct, RawChange change) {
         for (ChangeSchema.ColumnDefinition cdef : change.getSchema().getColumnDefinitions()) {
             if (cdef.getColumnName().startsWith("cdc$")) continue;
             ChangeSchema.DataType type = cdef.getDataType();

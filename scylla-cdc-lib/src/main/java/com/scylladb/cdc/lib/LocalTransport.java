@@ -15,9 +15,9 @@ import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
-import com.scylladb.cdc.model.worker.ChangeConsumer;
+import com.scylladb.cdc.model.worker.RawChangeConsumer;
 import com.scylladb.cdc.model.worker.Connectors;
-import com.scylladb.cdc.model.worker.TaskAndChangeConsumerAdapter;
+import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumerAdapter;
 import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.transport.MasterTransport;
 import com.scylladb.cdc.transport.WorkerTransport;
@@ -28,11 +28,11 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
     private final Session session;
     private volatile boolean stopped = true;
     private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
-    private final ChangeConsumer consumer;
+    private final RawChangeConsumer consumer;
     private volatile int workersCount;
     private Thread[] workerThreads;
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, Session session, int workersCount, ChangeConsumer consumer) {
+    public LocalTransport(ThreadGroup cdcThreadGroup, Session session, int workersCount, RawChangeConsumer consumer) {
         this.session = Preconditions.checkNotNull(session);
         Preconditions.checkArgument(workersCount > 0);
         this.workersCount = workersCount;
@@ -69,7 +69,7 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
         }
         stop();
         stopped = false;
-        Connectors connectors = new Connectors(this, new Driver3WorkerCQL(session), new TaskAndChangeConsumerAdapter(consumer));
+        Connectors connectors = new Connectors(this, new Driver3WorkerCQL(session), new TaskAndRawChangeConsumerAdapter(consumer));
         int wCount = Math.min(workersCount, workerConfigurations.size());
         workerThreads = new Thread[wCount];
         Map<TaskId, SortedSet<StreamId>>[] tasks = split(workerConfigurations, wCount);

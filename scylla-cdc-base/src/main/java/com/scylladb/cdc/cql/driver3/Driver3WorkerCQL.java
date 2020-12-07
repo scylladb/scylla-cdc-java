@@ -28,7 +28,7 @@ import com.google.common.util.concurrent.Futures;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.worker.Change;
+import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.Task;
 
@@ -96,7 +96,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
             this.rs = Preconditions.checkNotNull(rs);
         }
 
-        private void findNext(CompletableFuture<Optional<Change>> fut) {
+        private void findNext(CompletableFuture<Optional<RawChange>> fut) {
             if (rs.getAvailableWithoutFetching() == 0) {
                 if (rs.isFullyFetched()) {
                     fut.complete(Optional.empty());
@@ -123,13 +123,13 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                             .withClusterMetadata(session.getCluster().getMetadata())
                             .withRow(row).build();
                 }
-                fut.complete(Optional.of(new Driver3Change(row, schema)));
+                fut.complete(Optional.of(new Driver3RawChange(row, schema)));
             }
         }
 
         @Override
-        public CompletableFuture<Optional<Change>> nextChange() {
-            CompletableFuture<Optional<Change>> result = new CompletableFuture<>();
+        public CompletableFuture<Optional<RawChange>> nextChange() {
+            CompletableFuture<Optional<RawChange>> result = new CompletableFuture<>();
             findNext(result);
             return result;
         }

@@ -5,17 +5,17 @@ import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 import com.datastax.driver.core.Row;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.StreamId;
-import com.scylladb.cdc.model.worker.Change;
+import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
 import java.util.UUID;
 
-public final class Driver3Change implements Change {
+public final class Driver3RawChange implements RawChange {
     private final Row row;
     private final ChangeSchema schema;
 
-    public Driver3Change(Row row, ChangeSchema schema) {
+    public Driver3RawChange(Row row, ChangeSchema schema) {
         this.row = Preconditions.checkNotNull(row);
         this.schema = Preconditions.checkNotNull(schema);
     }

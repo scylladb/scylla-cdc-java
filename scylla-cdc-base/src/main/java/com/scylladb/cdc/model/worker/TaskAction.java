@@ -75,7 +75,7 @@ public abstract class TaskAction {
             this.reader = Preconditions.checkNotNull(reader);
         }
 
-        private CompletableFuture<TaskAction> consumeChange(Optional<Change> change) {
+        private CompletableFuture<TaskAction> consumeChange(Optional<RawChange> change) {
             if (change.isPresent()) {
                 return connectors.consumer.consume(task, change.get())
                         .thenApply(updatedTask -> new UpdateStatusTaskAction(connectors, updatedTask, reader));
