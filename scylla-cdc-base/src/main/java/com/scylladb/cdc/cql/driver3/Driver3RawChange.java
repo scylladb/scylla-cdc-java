@@ -2,20 +2,23 @@ package com.scylladb.cdc.cql.driver3;
 
 import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 
+import com.datastax.driver.core.CodecRegistry;
 import com.datastax.driver.core.Row;
 import com.google.common.base.Preconditions;
+import com.google.common.reflect.TypeToken;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
+import java.util.Map;
 import java.util.UUID;
 
 public final class Driver3RawChange implements RawChange {
     private final Row row;
-    private final ChangeSchema schema;
+    private final Driver3ChangeSchema schema;
 
-    public Driver3RawChange(Row row, ChangeSchema schema) {
+    public Driver3RawChange(Row row, Driver3ChangeSchema schema) {
         this.row = Preconditions.checkNotNull(row);
         this.schema = Preconditions.checkNotNull(schema);
     }
@@ -32,30 +35,33 @@ public final class Driver3RawChange implements RawChange {
     }
 
     @Override
-    public Integer getInt(String columnName) {
+    public Object getAsObject(String columnName) {
         if (row.isNull(columnName)) {
             return null;
         } else {
-            return row.getInt(columnName);
+            TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(schema.getDriverType(columnName)).getJavaType();
+            return row.get(columnName, type);
         }
+    }
+
+    @Override
+    public Integer getInt(String columnName) {
+        return (Integer) getAsObject(columnName);
     }
 
     @Override
     public Byte getByte(String columnName) {
-        if (row.isNull(columnName)) {
-            return null;
-        } else {
-            return row.getByte(columnName);
-        }
+       return (Byte) getAsObject(columnName);
     }
 
     @Override
     public Boolean getBoolean(String columnName) {
-        if (row.isNull(columnName)) {
-            return null;
-        } else {
-            return row.getBool(columnName);
-        }
+        return (Boolean) getAsObject(columnName);
+    }
+
+    @Override
+    public Map getMap(String columnName) {
+        return (Map) getAsObject(columnName);
     }
 
     /*
@@ -90,6 +96,6 @@ public final class Driver3RawChange implements RawChange {
 
     @Override
     public byte TEMPORARY_PORTING_getOperation() {
-        return row.getByte(quoteIfNecessary("cdc$operation"));
+        return getByte(quoteIfNecessary("cdc$operation"));
     }
 }

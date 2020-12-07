@@ -2,6 +2,7 @@ package com.scylladb.cdc.model.worker;
 
 import com.datastax.driver.core.Row;
 
+import java.util.Map;
 import java.util.UUID;
 
 /*
@@ -14,11 +15,18 @@ public interface RawChange {
 
     ChangeSchema getSchema();
 
+    /*
+     * Gets the value of column as Java Object.
+     */
+    Object getAsObject(String columnName);
+
     Integer getInt(String columnName);
 
     Byte getByte(String columnName);
 
     Boolean getBoolean(String columnName);
+
+    Map getMap(String columnName);
 
     /*
      * What follows are temporary methods

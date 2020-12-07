@@ -40,10 +40,10 @@ public class Driver3SchemaBuilder {
         return this;
     }
 
-    public ChangeSchema build() {
+    public Driver3ChangeSchema build() {
         generatePrimaryKeyColumns();
 
-        return new ChangeSchema(generateChangeSchemaColumns());
+        return new Driver3ChangeSchema(generateChangeSchemaColumns(), row);
     }
 
     private void generatePrimaryKeyColumns() {

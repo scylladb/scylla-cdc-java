@@ -5,7 +5,7 @@ import com.google.common.collect.ImmutableList;
 
 import java.util.Objects;
 
-public final class ChangeSchema {
+public class ChangeSchema {
     // TODO - Support more information about UDT types and similar.
     public enum DataType {
         ASCII,

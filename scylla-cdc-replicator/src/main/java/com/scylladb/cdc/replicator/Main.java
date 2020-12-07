@@ -155,7 +155,8 @@ public class Main {
                                         DataType innerType = meta.getType().getTypeArguments().get(0);
                                         TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(innerType).getJavaType();
                                         TreeMap<UUID, Object> sorted = new TreeMap<>();
-                                        for (Entry<UUID, Object> e : c.TEMPORARY_PORTING_row().getMap(d.getName(), TypeToken.of(UUID.class), type).entrySet()) {
+                                        Map<UUID, Object> cMap = c.getMap(d.getName());
+                                        for (Entry<UUID, Object> e : cMap.entrySet()) {
                                             sorted.put(e.getKey(), e.getValue());
                                         }
                                         List<Object> list = new ArrayList<>();
@@ -250,10 +251,10 @@ public class Main {
                                 if (c.getType().getName() == DataType.Name.SET) {
                                     op = addAll(c.getName(), change.TEMPORARY_PORTING_row().getSet(c.getName(), type));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
-                                    op = putAll(c.getName(), change.TEMPORARY_PORTING_row().getMap(c.getName(), type, type2));
+                                    op = putAll(c.getName(), change.getMap(c.getName()));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
-                                    for (Entry<UUID, Object> e : change.TEMPORARY_PORTING_row().getMap(c.getName(), TypeToken.of(UUID.class), type)
-                                            .entrySet()) {
+                                    Map<UUID, Object> cMap = change.getMap(c.getName());
+                                    for (Entry<UUID, Object> e : cMap.entrySet()) {
                                         builder.with(new ListSetIdxTimeUUIDAssignment(c.getName(), e.getKey(), e.getValue()));
                                     }
                                     return;
