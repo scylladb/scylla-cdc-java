@@ -95,11 +95,6 @@ public final class Driver3RawChange implements RawChange {
      */
 
     @Override
-    public UUID TEMPORARY_PORTING_getTime() {
-        return row.getUUID(quoteIfNecessary("cdc$time"));
-    }
-
-    @Override
     public Integer TEMPORARY_PORTING_getTTL() {
         return row.isNull(quoteIfNecessary("cdc$ttl")) ? null : (int)row.getLong(quoteIfNecessary("cdc$ttl"));
     }

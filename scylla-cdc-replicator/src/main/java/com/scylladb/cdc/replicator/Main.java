@@ -125,7 +125,7 @@ public class Main {
 
             public Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m) {
                 BoundStatement stmt = preparedStmt.bind();
-                stmt.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(c.TEMPORARY_PORTING_getTime()));
+                stmt.setLong(TIMESTAMP_MARKER_NAME,  timeuuidToTimestamp(c.getId().getTime()));
                 bindInternal(stmt, c, m);
                 stmt.setConsistencyLevel(cl);
                 stmt.setIdempotent(true);
@@ -272,9 +272,9 @@ public class Main {
                 });
                 Integer ttl = change.TEMPORARY_PORTING_getTTL();
                 if (ttl != null) {
-                    builder.using(timestamp(timeuuidToTimestamp(change.TEMPORARY_PORTING_getTime()))).and(ttl(ttl));
+                    builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime()))).and(ttl(ttl));
                 } else {
-                    builder.using(timestamp(timeuuidToTimestamp(change.TEMPORARY_PORTING_getTime())));
+                    builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime())));
                 }
                 return builder;
             }
@@ -441,7 +441,7 @@ public class Main {
                 }
                 s.setBytesUnsafe(prevCol.getName() + "_start", ByteBuffer.wrap(start));
                 s.setBytesUnsafe(prevCol.getName() + "_end", end);
-                s.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(change.TEMPORARY_PORTING_getTime()));
+                s.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(change.getId().getTime()));
                 s.setConsistencyLevel(cl);
                 s.setIdempotent(true);
                 return s;

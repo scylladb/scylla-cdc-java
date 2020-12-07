@@ -75,9 +75,6 @@ public interface RawChange {
      */
 
     @Deprecated
-    UUID TEMPORARY_PORTING_getTime();
-
-    @Deprecated
     Integer TEMPORARY_PORTING_getTTL();
 
     @Deprecated
