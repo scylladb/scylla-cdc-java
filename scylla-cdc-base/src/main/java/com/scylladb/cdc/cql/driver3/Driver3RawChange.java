@@ -11,6 +11,7 @@ import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -42,6 +43,15 @@ public final class Driver3RawChange implements RawChange {
         } else {
             TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(schema.getDriverType(columnName)).getJavaType();
             return row.get(columnName, type);
+        }
+    }
+
+    @Override
+    public ByteBuffer getAsBytes(String columnName) {
+        if (row.isNull(columnName)) {
+            return null;
+        } else {
+            return row.getBytesUnsafe(columnName);
         }
     }
 

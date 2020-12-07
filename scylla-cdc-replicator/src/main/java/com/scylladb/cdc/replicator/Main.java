@@ -165,7 +165,7 @@ public class Main {
                                         }
                                         stmt.setList(d.getName(), list);
                                     } else {
-                                        stmt.setBytesUnsafe(d.getName(), c.TEMPORARY_PORTING_row().getBytesUnsafe(d.getName()));
+                                        stmt.setBytesUnsafe(d.getName(), c.getAsBytes(d.getName()));
                                     }
                                     break;
                                 case PREIMAGE:
@@ -184,7 +184,7 @@ public class Main {
                 for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
                     if (!d.getName().startsWith("cdc$")) {
                         if (primaryColumns.contains(d.getName())) {
-                            stmt.setBytesUnsafe(d.getName(), c.TEMPORARY_PORTING_row().getBytesUnsafe(d.getName()));
+                            stmt.setBytesUnsafe(d.getName(), c.getAsBytes(d.getName()));
                         }
                     }
                 }
@@ -196,7 +196,7 @@ public class Main {
                 for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
                     if (!d.getName().startsWith("cdc$")) {
                         if (partitionColumns.contains(d.getName())) {
-                            stmt.setBytesUnsafe(d.getName(), c.TEMPORARY_PORTING_row().getBytesUnsafe(d.getName()));
+                            stmt.setBytesUnsafe(d.getName(), c.getAsBytes(d.getName()));
                         }
                     }
                 }
@@ -426,7 +426,7 @@ public class Main {
                 BoundStatement s = stmt.bind();
                 Iterator<ColumnMetadata> keyIt = table.getPrimaryKey().iterator();
                 ColumnMetadata prevCol = keyIt.next();
-                ByteBuffer end = change.TEMPORARY_PORTING_row().getBytesUnsafe(prevCol.getName());
+                ByteBuffer end = change.getAsBytes(prevCol.getName());
                 byte[] start = startVal.values.get(prevCol.getName());
                 while (keyIt.hasNext()) {
                     ColumnMetadata col = keyIt.next();
@@ -435,7 +435,7 @@ public class Main {
                         break;
                     }
                     s.setBytesUnsafe(prevCol.getName(), end);
-                    end = change.TEMPORARY_PORTING_row().getBytesUnsafe(col.getName());
+                    end = change.getAsBytes(col.getName());
                     prevCol = col;
                     start = newStart;
                 }
@@ -481,9 +481,9 @@ public class Main {
         private static class PrimaryKeyValue {
             public final Map<String, byte[]> values = new HashMap<>();
 
-            public PrimaryKeyValue(TableMetadata table, Row row) {
+            public PrimaryKeyValue(TableMetadata table, RawChange change) {
                 for (ColumnMetadata col : table.getPrimaryKey()) {
-                    ByteBuffer buf = row.getBytesUnsafe(col.getName());
+                    ByteBuffer buf = change.getAsBytes(col.getName());
                     if (buf != null) {
                         byte[] bytes = new byte[buf.remaining()];
                         buf.get(bytes);
@@ -524,7 +524,7 @@ public class Main {
             public void addStart(RawChange c, boolean inclusive) {
                 byte[] bytes = new byte[16];
                 c.getId().getStreamId().getValue().duplicate().get(bytes, 0, 16);
-                state.put(new Key(bytes), new DeletionStart(new PrimaryKeyValue(table, c.TEMPORARY_PORTING_row()), inclusive));
+                state.put(new Key(bytes), new DeletionStart(new PrimaryKeyValue(table, c), inclusive));
             }
 
             public DeletionStart getStart(byte[] streamId) {
@@ -641,7 +641,7 @@ public class Main {
             for (Definition d : expectedRow.getColumnDefinitions()) {
                 try {
                     ByteBuffer expectedColumn = expectedRow.getBytesUnsafe(d.getName());
-                    ByteBuffer column = c.TEMPORARY_PORTING_row().getBytesUnsafe(d.getName());
+                    ByteBuffer column = c.getAsBytes(d.getName());
                     if (!equal(expectedColumn, column)) {
                         System.out.println("Inconsistency detected.\n Wrong values for column "
                                 + d.getName() + " expected " + print(expectedColumn) + " but got " + print(column));
@@ -664,7 +664,7 @@ public class Main {
                         .collect(Collectors.toSet());
                 for (Definition d : change.TEMPORARY_PORTING_row().getColumnDefinitions()) {
                     if (primaryColumns.contains(d.getName())) {
-                        stmt.setBytesUnsafe(d.getName(), change.TEMPORARY_PORTING_row().getBytesUnsafe(d.getName()));
+                        stmt.setBytesUnsafe(d.getName(), change.getAsBytes(d.getName()));
                     }
                 }
                 stmt.setConsistencyLevel(ConsistencyLevel.ALL);

@@ -2,6 +2,7 @@ package com.scylladb.cdc.model.worker;
 
 import com.datastax.driver.core.Row;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -20,6 +21,12 @@ public interface RawChange {
      * Gets the value of column as Java Object.
      */
     Object getAsObject(String columnName);
+
+    /*
+     * Gets the value of column as ByteBuffer.
+     * (As it was returned by a driver)
+     */
+    ByteBuffer getAsBytes(String columnName);
 
     Integer getInt(String columnName);
 
