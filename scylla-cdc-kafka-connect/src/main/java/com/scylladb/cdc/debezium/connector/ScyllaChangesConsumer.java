@@ -26,7 +26,7 @@ public class ScyllaChangesConsumer implements TaskAndRawChangeConsumer {
     }
 
     @Override
-    public CompletableFuture<Task> consume(Task task, RawChange change) {
+    public CompletableFuture<Void> consume(Task task, RawChange change) {
         TaskStateOffsetContext taskStateOffsetContext = offsetContext.taskStateOffsetContext(task.id);
         try {
             logger.info("Dispatching change: {}", change.getId().toString());
@@ -36,6 +36,6 @@ public class ScyllaChangesConsumer implements TaskAndRawChangeConsumer {
             logger.error("Exception while dispatching change: {}", change.getId().toString());
             logger.error("Exception details: {}", e.getMessage());
         }
-        return CompletableFuture.completedFuture(task);
+        return CompletableFuture.completedFuture(null);
     }
 }

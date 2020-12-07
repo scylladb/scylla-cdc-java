@@ -13,8 +13,8 @@ public class TaskAndRawChangeConsumerAdapter implements TaskAndRawChangeConsumer
     }
 
     @Override
-    public CompletableFuture<Task> consume(Task task, RawChange change) {
-        return consumer.consume(change).thenApply(ignored -> task.updateState(change.getId()));
+    public CompletableFuture<Void> consume(Task task, RawChange change) {
+        return consumer.consume(change);
     }
 
 }

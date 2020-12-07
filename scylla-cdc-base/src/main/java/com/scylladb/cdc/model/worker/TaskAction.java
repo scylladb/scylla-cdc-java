@@ -77,8 +77,9 @@ public abstract class TaskAction {
 
         private CompletableFuture<TaskAction> consumeChange(Optional<RawChange> change) {
             if (change.isPresent()) {
+                Task updatedTask = task.updateState(change.get().getId());
                 return connectors.consumer.consume(task, change.get())
-                        .thenApply(updatedTask -> new UpdateStatusTaskAction(connectors, updatedTask, reader));
+                        .thenApply(q -> new UpdateStatusTaskAction(connectors, updatedTask, reader));
             } else {
                 CompletableFuture<TaskAction> result = new CompletableFuture<>();
                 result.complete(new MoveToNextWindowTaskAction(connectors, task));

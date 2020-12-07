@@ -7,6 +7,6 @@ public interface TaskAndRawChangeConsumer {
     /*
      * No assumption should be made regarding the thread invoking this method
      */
-    CompletableFuture<Task> consume(Task task, RawChange change);
+    CompletableFuture<Void> consume(Task task, RawChange change);
 
 }
