@@ -12,6 +12,7 @@ import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class Driver3RawChange implements RawChange {
@@ -62,6 +63,11 @@ public final class Driver3RawChange implements RawChange {
     @Override
     public Map getMap(String columnName) {
         return (Map) getAsObject(columnName);
+    }
+
+    @Override
+    public Set getSet(String columnName) {
+        return (Set) getAsObject(columnName);
     }
 
     /*

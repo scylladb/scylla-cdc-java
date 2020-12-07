@@ -3,6 +3,7 @@ package com.scylladb.cdc.model.worker;
 import com.datastax.driver.core.Row;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /*
@@ -27,6 +28,8 @@ public interface RawChange {
     Boolean getBoolean(String columnName);
 
     Map getMap(String columnName);
+
+    Set getSet(String columnName);
 
     /*
      * What follows are temporary methods

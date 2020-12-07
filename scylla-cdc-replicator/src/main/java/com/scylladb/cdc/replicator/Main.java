@@ -223,7 +223,7 @@ public class Main {
                 table.getColumns().stream().forEach(c -> {
                     TypeCodec<Object> codec = CodecRegistry.DEFAULT_INSTANCE.codecFor(c.getType());
                     if (primaryColumns.contains(c)) {
-                        builder.where(eq(c.getName(), change.TEMPORARY_PORTING_row().get(c.getName(), codec)));
+                        builder.where(eq(c.getName(), change.getAsObject(c.getName())));
                     } else {
                         Assignment op = null;
                         if (c.getType().isCollection() && !c.getType().isFrozen() && !change.TEMPORARY_PORTING_isDeleted(c.getName())) {
@@ -236,11 +236,12 @@ public class Main {
                             String deletedElementsColumnName = "cdc$deleted_elements_" + c.getName();
                             if (!change.TEMPORARY_PORTING_row().isNull(deletedElementsColumnName)) {
                                 if (c.getType().getName() == DataType.Name.SET) {
-                                    op = removeAll(c.getName(), change.TEMPORARY_PORTING_row().getSet(deletedElementsColumnName, type));
+                                    op = removeAll(c.getName(), change.getSet(deletedElementsColumnName));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
-                                    op = removeAll(c.getName(), change.TEMPORARY_PORTING_row().getSet(deletedElementsColumnName, type));
+                                    op = removeAll(c.getName(), change.getSet(deletedElementsColumnName));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
-                                    for (UUID key : change.TEMPORARY_PORTING_row().getSet(deletedElementsColumnName, UUID.class)) {
+                                    Set<UUID> cSet = change.getSet(deletedElementsColumnName);
+                                    for (UUID key : cSet) {
                                         builder.with(new ListSetIdxTimeUUIDAssignment(c.getName(), key, null));
                                     }
                                     return;
@@ -249,7 +250,7 @@ public class Main {
                                 }
                             } else {
                                 if (c.getType().getName() == DataType.Name.SET) {
-                                    op = addAll(c.getName(), change.TEMPORARY_PORTING_row().getSet(c.getName(), type));
+                                    op = addAll(c.getName(), change.getSet(c.getName()));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
                                     op = putAll(c.getName(), change.getMap(c.getName()));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
@@ -264,7 +265,7 @@ public class Main {
                             }
                         }
                         if (op == null) {
-                            op = set(c.getName(), change.TEMPORARY_PORTING_row().get(c.getName(), codec));
+                            op = set(c.getName(), change.getAsObject(c.getName()));
                         }
                         builder.with(op);
                     }
