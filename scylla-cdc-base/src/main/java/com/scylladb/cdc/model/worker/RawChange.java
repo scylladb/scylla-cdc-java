@@ -1,11 +1,19 @@
 package com.scylladb.cdc.model.worker;
 
 import com.datastax.driver.core.Row;
+import com.sun.org.apache.xpath.internal.operations.Bool;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 
 /*
  * Represents a single CDC log row,
@@ -40,9 +48,13 @@ public interface RawChange {
 
     ChangeId getId();
 
-    OperationType getOperationType();
+    default OperationType getOperationType() {
+        return OperationType.parse(getByte(quoteIfNecessary("cdc$operation")));
+    }
 
-    Long getTTL();
+    default Long getTTL() {
+        return getLong(quoteIfNecessary("cdc$ttl"));
+    }
 
     ChangeSchema getSchema();
 
@@ -57,17 +69,69 @@ public interface RawChange {
      */
     ByteBuffer getAsBytes(String columnName);
 
-    Long getLong(String columnName);
+    default ByteBuffer getBytes(String columnName) {
+        return (ByteBuffer) getAsObject(columnName);
+    }
 
-    Integer getInt(String columnName);
+    default String getString(String columnName) {
+        return (String) getAsObject(columnName);
+    }
 
-    Byte getByte(String columnName);
+    default BigInteger getVarint(String columnName) {
+        return (BigInteger) getAsObject(columnName);
+    }
 
-    Boolean getBoolean(String columnName);
+    default BigDecimal getDecimal(String columnName) {
+        return (BigDecimal) getAsObject(columnName);
+    }
 
-    Map getMap(String columnName);
+    default UUID getUUID(String columnName) {
+        return (UUID) getAsObject(columnName);
+    }
 
-    Set getSet(String columnName);
+    default InetAddress getInet(String columnName) {
+        return (InetAddress) getAsObject(columnName);
+    }
+
+    default Float getFloat(String columnName) {
+        return (Float) getAsObject(columnName);
+    }
+
+    default Double getDouble(String columnName) {
+        return (Double) getAsObject(columnName);
+    }
+
+    default Long getLong(String columnName) {
+        return (Long) getAsObject(columnName);
+    }
+
+    default Integer getInt(String columnName) {
+        return (Integer) getAsObject(columnName);
+    }
+
+    default Short getShort(String columnName) {
+        return (Short) getAsObject(columnName);
+    }
+
+    default Byte getByte(String columnName) {
+        return (Byte) getAsObject(columnName);
+    }
+
+    default Boolean getBoolean(String columnName) {
+        return (Boolean) getAsObject(columnName);
+    }
+
+    default Map getMap(String columnName) {
+        return (Map) getAsObject(columnName);
+    }
+
+    default Set getSet(String columnName) {
+        return (Set) getAsObject(columnName);
+    }
+
+    default List getList(String columnName) {
+        return (List) getAsObject(columnName);
+    }
 
     /*
      * What follows are temporary methods

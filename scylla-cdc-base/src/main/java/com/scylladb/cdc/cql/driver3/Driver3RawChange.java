@@ -32,16 +32,6 @@ public final class Driver3RawChange implements RawChange {
     }
 
     @Override
-    public OperationType getOperationType() {
-        return OperationType.parse(getByte(quoteIfNecessary("cdc$operation")));
-    }
-
-    @Override
-    public Long getTTL() {
-        return getLong(quoteIfNecessary("cdc$ttl"));
-    }
-
-    @Override
     public ChangeSchema getSchema() {
         return schema;
     }
@@ -51,6 +41,7 @@ public final class Driver3RawChange implements RawChange {
         if (row.isNull(columnName)) {
             return null;
         } else {
+            // TODO - just use getObject()... - drastically simplify!
             TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(schema.getDriverType(columnName)).getJavaType();
             return row.get(columnName, type);
         }
@@ -63,36 +54,6 @@ public final class Driver3RawChange implements RawChange {
         } else {
             return row.getBytesUnsafe(columnName);
         }
-    }
-
-    @Override
-    public Long getLong(String columnName) {
-        return (Long) getAsObject(columnName);
-    }
-
-    @Override
-    public Integer getInt(String columnName) {
-        return (Integer) getAsObject(columnName);
-    }
-
-    @Override
-    public Byte getByte(String columnName) {
-       return (Byte) getAsObject(columnName);
-    }
-
-    @Override
-    public Boolean getBoolean(String columnName) {
-        return (Boolean) getAsObject(columnName);
-    }
-
-    @Override
-    public Map getMap(String columnName) {
-        return (Map) getAsObject(columnName);
-    }
-
-    @Override
-    public Set getSet(String columnName) {
-        return (Set) getAsObject(columnName);
     }
 
     /*
