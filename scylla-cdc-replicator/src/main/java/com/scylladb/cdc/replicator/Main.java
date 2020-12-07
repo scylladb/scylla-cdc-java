@@ -133,9 +133,9 @@ public class Main {
             }
 
             protected void bindTTL(BoundStatement stmt, RawChange c) {
-                Integer ttl = c.TEMPORARY_PORTING_getTTL();
+                Long ttl = c.getTTL();
                 if (ttl != null) {
-                    stmt.setInt(TTL_MARKER_NAME, ttl);
+                    stmt.setInt(TTL_MARKER_NAME, (int)((long) ttl));
                 } else {
                     stmt.unset(TTL_MARKER_NAME);
                 }
@@ -270,9 +270,9 @@ public class Main {
                         builder.with(op);
                     }
                 });
-                Integer ttl = change.TEMPORARY_PORTING_getTTL();
+                Long ttl = change.getTTL();
                 if (ttl != null) {
-                    builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime()))).and(ttl(ttl));
+                    builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime()))).and(ttl((int)((long)ttl)));
                 } else {
                     builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime())));
                 }

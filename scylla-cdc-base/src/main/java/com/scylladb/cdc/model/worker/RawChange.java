@@ -42,6 +42,8 @@ public interface RawChange {
 
     OperationType getOperationType();
 
+    Long getTTL();
+
     ChangeSchema getSchema();
 
     /*
@@ -54,6 +56,8 @@ public interface RawChange {
      * (As it was returned by a driver)
      */
     ByteBuffer getAsBytes(String columnName);
+
+    Long getLong(String columnName);
 
     Integer getInt(String columnName);
 
@@ -73,9 +77,6 @@ public interface RawChange {
      * Those methods should be removed
      * after the porting process is done.
      */
-
-    @Deprecated
-    Integer TEMPORARY_PORTING_getTTL();
 
     @Deprecated
     boolean TEMPORARY_PORTING_isDeleted(String name);

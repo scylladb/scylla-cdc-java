@@ -37,6 +37,11 @@ public final class Driver3RawChange implements RawChange {
     }
 
     @Override
+    public Long getTTL() {
+        return getLong(quoteIfNecessary("cdc$ttl"));
+    }
+
+    @Override
     public ChangeSchema getSchema() {
         return schema;
     }
@@ -58,6 +63,11 @@ public final class Driver3RawChange implements RawChange {
         } else {
             return row.getBytesUnsafe(columnName);
         }
+    }
+
+    @Override
+    public Long getLong(String columnName) {
+        return (Long) getAsObject(columnName);
     }
 
     @Override
@@ -93,11 +103,6 @@ public final class Driver3RawChange implements RawChange {
      * Those methods should be removed
      * after the porting process is done.
      */
-
-    @Override
-    public Integer TEMPORARY_PORTING_getTTL() {
-        return row.isNull(quoteIfNecessary("cdc$ttl")) ? null : (int)row.getLong(quoteIfNecessary("cdc$ttl"));
-    }
 
     @Override
     public boolean TEMPORARY_PORTING_isDeleted(String name) {
