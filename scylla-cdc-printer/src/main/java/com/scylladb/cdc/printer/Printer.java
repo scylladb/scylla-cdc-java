@@ -43,9 +43,12 @@ public class Printer {
             System.out.println(cd.getColumnName() + " " + cd.getCdcLogDataType());
         }
 
+        System.out.println();
         System.out.println("Non-cdc columns:");
         for (ChangeSchema.ColumnDefinition cd : changeSchema.getNonCdcColumnDefinitions()) {
             System.out.println(cd.getColumnName() + " " + cd.getCdcLogDataType() + " " + cd.getBaseTableColumnType());
+            System.out.print("With value: ");
+            System.out.println(change.getAsObject(cd.getColumnName()));
         }
     }
 

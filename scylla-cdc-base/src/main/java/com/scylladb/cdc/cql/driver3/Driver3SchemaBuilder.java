@@ -93,59 +93,66 @@ public class Driver3SchemaBuilder {
     }
 
     private ChangeSchema.DataType translateColumnDataType(DataType driverType) {
+        List<DataType> driverTypeArguments = driverType.getTypeArguments();
+        Preconditions.checkNotNull(driverTypeArguments);
+        ImmutableList<ChangeSchema.DataType> typeArguments = driverTypeArguments.stream()
+                .map(this::translateColumnDataType)
+                .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
+
         switch (driverType.getName()) {
             case ASCII:
-                return ChangeSchema.DataType.ASCII;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.ASCII);
             case BIGINT:
-                return ChangeSchema.DataType.BIGINT;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT);
             case BLOB:
-                return ChangeSchema.DataType.BLOB;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB);
             case BOOLEAN:
-                return ChangeSchema.DataType.BOOLEAN;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN);
             case COUNTER:
-                return ChangeSchema.DataType.COUNTER;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.COUNTER);
             case DECIMAL:
-                return ChangeSchema.DataType.DECIMAL;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.DECIMAL);
             case DOUBLE:
-                return ChangeSchema.DataType.DOUBLE;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.DOUBLE);
             case FLOAT:
-                return ChangeSchema.DataType.FLOAT;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.FLOAT);
             case INT:
-                return ChangeSchema.DataType.INT;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.INT);
             case TEXT:
-                return ChangeSchema.DataType.TEXT;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.TEXT);
             case TIMESTAMP:
-                return ChangeSchema.DataType.TIMESTAMP;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.TIMESTAMP);
             case UUID:
-                return ChangeSchema.DataType.UUID;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.UUID);
             case VARCHAR:
-                return ChangeSchema.DataType.VARCHAR;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.VARCHAR);
             case VARINT:
-                return ChangeSchema.DataType.VARINT;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.VARINT);
             case TIMEUUID:
-                return ChangeSchema.DataType.TIMEUUID;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID);
             case INET:
-                return ChangeSchema.DataType.INET;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.INET);
             case DATE:
-                return ChangeSchema.DataType.DATE;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.DATE);
             case TIME:
-                return ChangeSchema.DataType.TIME;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.TIME);
             case SMALLINT:
-                return ChangeSchema.DataType.SMALLINT;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.SMALLINT);
             case TINYINT:
-                return ChangeSchema.DataType.TINYINT;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT);
             case DURATION:
-                return ChangeSchema.DataType.DURATION;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.DURATION);
             case LIST:
-                return ChangeSchema.DataType.LIST;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.LIST);
             case MAP:
-                return ChangeSchema.DataType.MAP;
+                Preconditions.checkArgument(typeArguments.size() == 2);
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, typeArguments);
             case SET:
-                return ChangeSchema.DataType.SET;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.SET);
             case UDT:
-                return ChangeSchema.DataType.UDT;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.UDT);
             case TUPLE:
-                return ChangeSchema.DataType.TUPLE;
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE);
             default:
                 throw new RuntimeException(String.format("Data type %s is currently not supported.", driverType.getName()));
         }

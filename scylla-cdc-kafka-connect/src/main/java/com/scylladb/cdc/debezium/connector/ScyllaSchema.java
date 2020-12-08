@@ -53,7 +53,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
                     || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
 
             Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
-            if (cdef.getCdcLogDataType() == ChangeSchema.DataType.INT) {
+            if (cdef.getCdcLogDataType().getCqlType() == ChangeSchema.CqlType.INT) {
                 columnSchema = Schema.OPTIONAL_INT32_SCHEMA;
             }
             Schema cellSchema = SchemaBuilder.struct()
@@ -69,7 +69,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
                     && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
 
             Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
-            if (cdef.getCdcLogDataType() == ChangeSchema.DataType.INT) {
+            if (cdef.getCdcLogDataType().getCqlType() == ChangeSchema.CqlType.INT) {
                 columnSchema = Schema.OPTIONAL_INT32_SCHEMA;
             }
             keySchemaBuilder = keySchemaBuilder.field(cdef.getColumnName(), columnSchema);
@@ -84,7 +84,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
                 afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), cellSchemas.get(cdef.getColumnName()));
             } else {
                 Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
-                if (cdef.getCdcLogDataType() == ChangeSchema.DataType.INT) {
+                if (cdef.getCdcLogDataType().getCqlType() == ChangeSchema.CqlType.INT) {
                     columnSchema = Schema.OPTIONAL_INT32_SCHEMA;
                 }
                 afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), columnSchema);

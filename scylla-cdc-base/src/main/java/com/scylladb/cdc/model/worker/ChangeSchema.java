@@ -7,8 +7,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class ChangeSchema {
-    // TODO - Support more information about UDT types and similar.
-    public enum DataType {
+    public enum CqlType {
         ASCII,
         BIGINT,
         BLOB,
@@ -35,6 +34,61 @@ public class ChangeSchema {
         SET,
         UDT,
         TUPLE,
+    }
+
+    public static class DataType {
+        private final CqlType cqlType;
+        private final ImmutableList<DataType> typeArguments;
+
+        public DataType(CqlType cqlType) {
+            this(cqlType, null);
+        }
+
+        public DataType(CqlType cqlType, ImmutableList<DataType> typeArguments) {
+            this.cqlType = cqlType;
+            this.typeArguments = typeArguments;
+
+            if (typeArguments != null) {
+                Preconditions.checkArgument(cqlType == CqlType.MAP,
+                        "Unexpected type arguments for this CQL type.");
+            }
+        }
+
+        public CqlType getCqlType() {
+            return cqlType;
+        }
+
+        public ImmutableList<DataType> getTypeArguments() {
+            if (typeArguments == null) {
+                throw new IllegalStateException("Cannot get type arguments for this CQL type: " + cqlType.name());
+            }
+            return typeArguments;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            DataType dataType = (DataType) o;
+            return cqlType == dataType.cqlType &&
+                    Objects.equals(typeArguments, dataType.typeArguments);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(cqlType, typeArguments);
+        }
+
+        @Override
+        public String toString() {
+            String result = cqlType.name();
+            if (typeArguments != null) {
+                result += '<';
+                result += typeArguments.stream().map(DataType::toString).collect(Collectors.joining(", "));
+                result += '>';
+            }
+            return result;
+        }
     }
 
     public enum ColumnType {
