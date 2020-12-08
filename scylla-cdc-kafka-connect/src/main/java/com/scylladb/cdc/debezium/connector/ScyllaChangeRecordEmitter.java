@@ -92,7 +92,7 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
             ChangeSchema.DataType type = cdef.getDataType();
             Object value = change.getInt(cdef.getColumnName());
 
-            if (cdef.getColumnType() == ChangeSchema.ColumnType.PARTITION_KEY || cdef.getColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) {
+            if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) {
                 valueStruct.put(cdef.getColumnName(), value);
                 keyStruct.put(cdef.getColumnName(), value);
             } else {

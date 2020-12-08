@@ -43,12 +43,12 @@ public class ChangeSchema {
     public static final class ColumnDefinition {
         private final String columnName;
         private final DataType dataType;
-        private final ColumnType columnType;
+        private final ColumnType baseTableColumnType;
 
-        public ColumnDefinition(String columnName, DataType dataType, ColumnType columnType) {
+        public ColumnDefinition(String columnName, DataType dataType, ColumnType baseTableColumnType) {
             this.columnName = columnName;
             this.dataType = dataType;
-            this.columnType = columnType;
+            this.baseTableColumnType = baseTableColumnType;
         }
 
         public String getColumnName() {
@@ -59,8 +59,11 @@ public class ChangeSchema {
             return dataType;
         }
 
-        public ColumnType getColumnType() {
-            return columnType;
+        public ColumnType getBaseTableColumnType() {
+            // TODO - incorrectly returns REGULAR when
+            // executed on cdc$ columns. Should throw
+            // instead.
+            return baseTableColumnType;
         }
 
         @Override
@@ -70,12 +73,12 @@ public class ChangeSchema {
             ColumnDefinition that = (ColumnDefinition) o;
             return columnName.equals(that.columnName) &&
                     dataType == that.dataType &&
-                    columnType == that.columnType;
+                    baseTableColumnType == that.baseTableColumnType;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(columnName, dataType, columnType);
+            return Objects.hash(columnName, dataType, baseTableColumnType);
         }
     }
 

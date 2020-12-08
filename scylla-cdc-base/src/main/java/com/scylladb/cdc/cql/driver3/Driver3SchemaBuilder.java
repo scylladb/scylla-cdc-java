@@ -70,13 +70,13 @@ public class Driver3SchemaBuilder {
     private ChangeSchema.ColumnDefinition translateColumnDefinition(ColumnDefinitions.Definition driverDefinition) {
         String columnName = driverDefinition.getName();
         ChangeSchema.DataType dataType = translateColumnDataType(driverDefinition.getType());
-        ChangeSchema.ColumnType columnType = ChangeSchema.ColumnType.REGULAR;
+        ChangeSchema.ColumnType baseTableColumnType = ChangeSchema.ColumnType.REGULAR;
         if (baseTablePartitionKeyColumnNames.contains(columnName)) {
-            columnType = ChangeSchema.ColumnType.PARTITION_KEY;
+            baseTableColumnType = ChangeSchema.ColumnType.PARTITION_KEY;
         } else if (baseTableClusteringKeyColumnNames.contains(columnName)) {
-            columnType = ChangeSchema.ColumnType.CLUSTERING_KEY;
+            baseTableColumnType = ChangeSchema.ColumnType.CLUSTERING_KEY;
         }
-        return new ChangeSchema.ColumnDefinition(columnName, dataType, columnType);
+        return new ChangeSchema.ColumnDefinition(columnName, dataType, baseTableColumnType);
     }
 
     private ChangeSchema.DataType translateColumnDataType(DataType driverType) {

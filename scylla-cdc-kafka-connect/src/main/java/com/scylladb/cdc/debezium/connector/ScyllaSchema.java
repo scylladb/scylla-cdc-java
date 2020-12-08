@@ -49,8 +49,8 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         Map<String, Schema> cellSchemas = new HashMap<>();
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getColumnDefinitions()) {
             if (cdef.getColumnName().startsWith("cdc$")) continue;
-            if (cdef.getColumnType() == ChangeSchema.ColumnType.PARTITION_KEY
-                    || cdef.getColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
+            if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY
+                    || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
 
             Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
             if (cdef.getDataType() == ChangeSchema.DataType.INT) {
@@ -65,8 +65,8 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
                 .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Key"));
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getColumnDefinitions()) {
             if (cdef.getColumnName().startsWith("cdc$")) continue;
-            if (cdef.getColumnType() != ChangeSchema.ColumnType.PARTITION_KEY
-                    && cdef.getColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
+            if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY
+                    && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
 
             Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
             if (cdef.getDataType() == ChangeSchema.DataType.INT) {
@@ -80,7 +80,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         SchemaBuilder afterSchemaBuilder = SchemaBuilder.struct();
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getColumnDefinitions()) {
             if (cdef.getColumnName().startsWith("cdc$")) continue;
-            if (cdef.getColumnType() != ChangeSchema.ColumnType.PARTITION_KEY && cdef.getColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) {
+            if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) {
                 afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), cellSchemas.get(cdef.getColumnName()));
             } else {
                 Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
