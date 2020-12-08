@@ -38,7 +38,13 @@ public class Printer {
         System.out.println(change.getId());
 
         ChangeSchema changeSchema = change.getSchema();
-        for (ChangeSchema.ColumnDefinition cd : changeSchema.getColumnDefinitions()) {
+        System.out.println("Cdc columns:");
+        for (ChangeSchema.ColumnDefinition cd : changeSchema.getCdcColumnDefinitions()) {
+            System.out.println(cd.getColumnName() + " " + cd.getCdcLogDataType());
+        }
+
+        System.out.println("Non-cdc columns:");
+        for (ChangeSchema.ColumnDefinition cd : changeSchema.getNonCdcColumnDefinitions()) {
             System.out.println(cd.getColumnName() + " " + cd.getCdcLogDataType() + " " + cd.getBaseTableColumnType());
         }
     }

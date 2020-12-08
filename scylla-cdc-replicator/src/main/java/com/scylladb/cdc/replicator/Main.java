@@ -59,6 +59,7 @@ import com.google.common.reflect.TypeToken;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;
 import net.sourceforge.argparse4j.ArgumentParsers;
@@ -142,37 +143,35 @@ public class Main {
             }
 
             protected void bindAllNonCDCColumns(BoundStatement stmt, RawChange c, Mode m) {
-                for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
-                    if (!d.getName().startsWith("cdc$")) {
-                        if (c.getAsObject(d.getName()) == null && !c.TEMPORARY_PORTING_isDeleted(d.getName())) {
-                            stmt.unset(d.getName());
-                        } else {
-                            switch (m) {
-                                case DELTA:
-                                case POSTIMAGE:
-                                    ColumnMetadata meta = table.getColumn(d.getName());
-                                    if (meta.getType().getName() == DataType.Name.LIST && !meta.getType().isFrozen()) {
-                                        DataType innerType = meta.getType().getTypeArguments().get(0);
-                                        TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(innerType).getJavaType();
-                                        TreeMap<UUID, Object> sorted = new TreeMap<>();
-                                        Map<UUID, Object> cMap = c.getMap(d.getName());
-                                        for (Entry<UUID, Object> e : cMap.entrySet()) {
-                                            sorted.put(e.getKey(), e.getValue());
-                                        }
-                                        List<Object> list = new ArrayList<>();
-                                        for (Entry<UUID, Object> e : sorted.entrySet()) {
-                                            list.add(e.getValue());
-                                        }
-                                        stmt.setList(d.getName(), list);
-                                    } else {
-                                        stmt.setBytesUnsafe(d.getName(), c.getAsBytes(d.getName()));
+                for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
+                    if (c.getAsObject(cd.getColumnName()) == null && !c.TEMPORARY_PORTING_isDeleted(cd.getColumnName())) {
+                        stmt.unset(cd.getColumnName());
+                    } else {
+                        switch (m) {
+                            case DELTA:
+                            case POSTIMAGE:
+                                ColumnMetadata meta = table.getColumn(cd.getColumnName());
+                                if (meta.getType().getName() == DataType.Name.LIST && !meta.getType().isFrozen()) {
+                                    DataType innerType = meta.getType().getTypeArguments().get(0);
+                                    TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(innerType).getJavaType();
+                                    TreeMap<UUID, Object> sorted = new TreeMap<>();
+                                    Map<UUID, Object> cMap = c.getMap(cd.getColumnName());
+                                    for (Entry<UUID, Object> e : cMap.entrySet()) {
+                                        sorted.put(e.getKey(), e.getValue());
                                     }
-                                    break;
-                                case PREIMAGE:
-                                    throw new UnsupportedOperationException("Mode not supported " + m);
-                                default:
-                                    throw new IllegalStateException("Unknown mode " + m);
-                            }
+                                    List<Object> list = new ArrayList<>();
+                                    for (Entry<UUID, Object> e : sorted.entrySet()) {
+                                        list.add(e.getValue());
+                                    }
+                                    stmt.setList(cd.getColumnName(), list);
+                                } else {
+                                    stmt.setBytesUnsafe(cd.getColumnName(), c.getAsBytes(cd.getColumnName()));
+                                }
+                                break;
+                            case PREIMAGE:
+                                throw new UnsupportedOperationException("Mode not supported " + m);
+                            default:
+                                throw new IllegalStateException("Unknown mode " + m);
                         }
                     }
                 }
@@ -181,11 +180,9 @@ public class Main {
             protected void bindPrimaryKeyColumns(BoundStatement stmt, RawChange c) {
                 Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
                         .collect(Collectors.toSet());
-                for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
-                    if (!d.getName().startsWith("cdc$")) {
-                        if (primaryColumns.contains(d.getName())) {
-                            stmt.setBytesUnsafe(d.getName(), c.getAsBytes(d.getName()));
-                        }
+                for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
+                    if (primaryColumns.contains(cd.getColumnName())) {
+                        stmt.setBytesUnsafe(cd.getColumnName(), c.getAsBytes(cd.getColumnName()));
                     }
                 }
             }
@@ -193,11 +190,9 @@ public class Main {
             protected void bindPartitionKeyColumns(BoundStatement stmt, RawChange c) {
                 Set<String> partitionColumns = table.getPartitionKey().stream().map(ColumnMetadata::getName)
                         .collect(Collectors.toSet());
-                for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
-                    if (!d.getName().startsWith("cdc$")) {
-                        if (partitionColumns.contains(d.getName())) {
-                            stmt.setBytesUnsafe(d.getName(), c.getAsBytes(d.getName()));
-                        }
+                for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
+                    if (partitionColumns.contains(cd.getColumnName())) {
+                        stmt.setBytesUnsafe(cd.getColumnName(), c.getAsBytes(cd.getColumnName()));
                     }
                 }
             }
@@ -641,8 +636,8 @@ public class Main {
                 if (rs.isFullyFetched()) {
                     Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
                             .collect(Collectors.toSet());
-                    for (Definition d : c.TEMPORARY_PORTING_row().getColumnDefinitions()) {
-                        if (!d.getName().startsWith("cdc$") && !primaryColumns.contains(d.getName()) && c.getAsObject(d.getName()) != null) {
+                    for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
+                        if (!primaryColumns.contains(cd.getColumnName()) && c.getAsObject(cd.getColumnName()) != null) {
                             System.out.println("Inconsistency detected.\nNo row in target.");
                             return FutureUtils.completed(null);
                         }
@@ -677,9 +672,9 @@ public class Main {
                     BoundStatement stmt = preimageQuery.bind();
                     Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
                             .collect(Collectors.toSet());
-                    for (Definition d : change.TEMPORARY_PORTING_row().getColumnDefinitions()) {
-                        if (primaryColumns.contains(d.getName())) {
-                            stmt.setBytesUnsafe(d.getName(), change.getAsBytes(d.getName()));
+                    for (ChangeSchema.ColumnDefinition cd : change.getSchema().getAllColumnDefinitions()) {
+                        if (primaryColumns.contains(cd.getColumnName())) {
+                            stmt.setBytesUnsafe(cd.getColumnName(), change.getAsBytes(cd.getColumnName()));
                         }
                     }
                     stmt.setConsistencyLevel(ConsistencyLevel.ALL);

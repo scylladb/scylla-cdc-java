@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class ChangeSchema {
     // TODO - Support more information about UDT types and similar.
@@ -51,6 +52,10 @@ public class ChangeSchema {
             this.baseTableColumnType = baseTableColumnType;
         }
 
+        public boolean isCdcColumn() {
+            return this.columnName.startsWith("cdc$");
+        }
+
         public String getColumnName() {
             return columnName;
         }
@@ -60,9 +65,9 @@ public class ChangeSchema {
         }
 
         public ColumnType getBaseTableColumnType() {
-            // TODO - incorrectly returns REGULAR when
-            // executed on cdc$ columns. Should throw
-            // instead.
+            if (isCdcColumn()) {
+                throw new IllegalStateException("Cannot get base table column type for CDC columns.");
+            }
             return baseTableColumnType;
         }
 
@@ -88,8 +93,18 @@ public class ChangeSchema {
         this.columnDefinitions = Preconditions.checkNotNull(columnDefinitions);
     }
 
-    public ImmutableList<ColumnDefinition> getColumnDefinitions() {
+    public ImmutableList<ColumnDefinition> getAllColumnDefinitions() {
         return columnDefinitions;
+    }
+
+    public ImmutableList<ColumnDefinition> getCdcColumnDefinitions() {
+        return columnDefinitions.stream().filter(ColumnDefinition::isCdcColumn)
+                .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
+    }
+
+    public ImmutableList<ColumnDefinition> getNonCdcColumnDefinitions() {
+        return columnDefinitions.stream().filter(c -> !c.isCdcColumn())
+                .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
     }
 
     @Override

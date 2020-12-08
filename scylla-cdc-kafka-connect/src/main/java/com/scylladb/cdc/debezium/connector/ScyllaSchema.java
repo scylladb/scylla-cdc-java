@@ -47,7 +47,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         }
 
         Map<String, Schema> cellSchemas = new HashMap<>();
-        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getColumnDefinitions()) {
+        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getAllColumnDefinitions()) {
             if (cdef.getColumnName().startsWith("cdc$")) continue;
             if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY
                     || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
@@ -63,7 +63,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
 
         SchemaBuilder keySchemaBuilder = SchemaBuilder.struct()
                 .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Key"));
-        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getColumnDefinitions()) {
+        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getAllColumnDefinitions()) {
             if (cdef.getColumnName().startsWith("cdc$")) continue;
             if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY
                     && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
@@ -78,7 +78,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         final Schema keySchema = keySchemaBuilder.build();
 
         SchemaBuilder afterSchemaBuilder = SchemaBuilder.struct();
-        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getColumnDefinitions()) {
+        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getAllColumnDefinitions()) {
             if (cdef.getColumnName().startsWith("cdc$")) continue;
             if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) {
                 afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), cellSchemas.get(cdef.getColumnName()));
