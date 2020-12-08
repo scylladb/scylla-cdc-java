@@ -18,9 +18,9 @@ import java.util.UUID;
 
 public final class Driver3RawChange implements RawChange {
     private final Row row;
-    private final Driver3ChangeSchema schema;
+    private final ChangeSchema schema;
 
-    public Driver3RawChange(Row row, Driver3ChangeSchema schema) {
+    public Driver3RawChange(Row row, ChangeSchema schema) {
         this.row = Preconditions.checkNotNull(row);
         this.schema = Preconditions.checkNotNull(schema);
     }
@@ -41,9 +41,7 @@ public final class Driver3RawChange implements RawChange {
         if (row.isNull(columnName)) {
             return null;
         } else {
-            // TODO - just use getObject()... - drastically simplify!
-            TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(schema.getDriverType(columnName)).getJavaType();
-            return row.get(columnName, type);
+            return row.getObject(columnName);
         }
     }
 

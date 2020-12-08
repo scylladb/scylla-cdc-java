@@ -92,7 +92,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
     private final class Driver3Reader implements Reader {
 
         private volatile ResultSet rs;
-        private volatile Driver3ChangeSchema schema;
+        private volatile ChangeSchema schema;
 
         public Driver3Reader(ResultSet rs) {
             this.rs = Preconditions.checkNotNull(rs);
