@@ -89,7 +89,7 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
     private void fillStructWithChange(ScyllaCollectionSchema schema, Struct keyStruct, Struct valueStruct, RawChange change) {
         for (ChangeSchema.ColumnDefinition cdef : change.getSchema().getColumnDefinitions()) {
             if (cdef.getColumnName().startsWith("cdc$")) continue;
-            ChangeSchema.DataType type = cdef.getDataType();
+            ChangeSchema.DataType type = cdef.getCdcLogDataType();
             Object value = change.getInt(cdef.getColumnName());
 
             if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) {

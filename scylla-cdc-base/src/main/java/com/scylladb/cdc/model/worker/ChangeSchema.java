@@ -42,12 +42,12 @@ public class ChangeSchema {
 
     public static final class ColumnDefinition {
         private final String columnName;
-        private final DataType dataType;
+        private final DataType cdcLogDataType;
         private final ColumnType baseTableColumnType;
 
-        public ColumnDefinition(String columnName, DataType dataType, ColumnType baseTableColumnType) {
+        public ColumnDefinition(String columnName, DataType cdcLogDataType, ColumnType baseTableColumnType) {
             this.columnName = columnName;
-            this.dataType = dataType;
+            this.cdcLogDataType = cdcLogDataType;
             this.baseTableColumnType = baseTableColumnType;
         }
 
@@ -55,8 +55,8 @@ public class ChangeSchema {
             return columnName;
         }
 
-        public DataType getDataType() {
-            return dataType;
+        public DataType getCdcLogDataType() {
+            return cdcLogDataType;
         }
 
         public ColumnType getBaseTableColumnType() {
@@ -72,13 +72,13 @@ public class ChangeSchema {
             if (o == null || getClass() != o.getClass()) return false;
             ColumnDefinition that = (ColumnDefinition) o;
             return columnName.equals(that.columnName) &&
-                    dataType == that.dataType &&
+                    cdcLogDataType == that.cdcLogDataType &&
                     baseTableColumnType == that.baseTableColumnType;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(columnName, dataType, baseTableColumnType);
+            return Objects.hash(columnName, cdcLogDataType, baseTableColumnType);
         }
     }
 
