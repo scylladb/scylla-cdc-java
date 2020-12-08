@@ -10,6 +10,7 @@ import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -43,6 +44,108 @@ public interface RawChange {
         public static OperationType parse(byte value) {
             // TODO - validation
             return enumValues[value];
+        }
+    }
+
+    /*
+     * Represents CQL type DURATION
+     */
+    class Duration {
+        // months, days and nanoseconds
+        private final long months;
+        private final long days;
+        private final long nanoseconds;
+
+        public Duration(long months, long days, long nanoseconds) {
+            this.months = months;
+            this.days = days;
+            this.nanoseconds = nanoseconds;
+        }
+
+        public long getMonths() {
+            return months;
+        }
+
+        public long getDays() {
+            return days;
+        }
+
+        public long getNanoseconds() {
+            return nanoseconds;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Duration duration = (Duration) o;
+            return months == duration.months &&
+                    days == duration.days &&
+                    nanoseconds == duration.nanoseconds;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(months, days, nanoseconds);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Duration(%d, %d, %d)", months, days, nanoseconds);
+        }
+    }
+
+    /*
+     * Represents CQL type DATE
+     */
+    class CqlDate {
+        private final int year;
+        private final int month;
+        private final int day;
+
+        public CqlDate(int year, int month, int day) {
+            this.year = year;
+            this.month = month;
+            this.day = day;
+        }
+
+        public int getYear() {
+            return year;
+        }
+
+        public int getMonth() {
+            return month;
+        }
+
+        public int getDay() {
+            return day;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CqlDate cqlDate = (CqlDate) o;
+            return year == cqlDate.year &&
+                    month == cqlDate.month &&
+                    day == cqlDate.day;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(year, month, day);
+        }
+
+        private String pad(String s) {
+            if (s.length() < 2) {
+                return "0" + s;
+            }
+            return s;
+        }
+
+        @Override
+        public String toString() {
+            return year + "-" + pad(Integer.toString(month)) + "-" + pad(Integer.toString(day));
         }
     }
 
@@ -131,6 +234,26 @@ public interface RawChange {
 
     default List getList(String columnName) {
         return (List) getAsObject(columnName);
+    }
+
+    default Map<String, Object> getUDT(String columnName) {
+        return (Map<String, Object>) getAsObject(columnName);
+    }
+
+    default Date getTimestamp(String columnName) {
+        return (Date) getAsObject(columnName);
+    }
+
+    default Long getTime(String columnName) {
+        return (Long) getAsObject(columnName);
+    }
+
+    default Duration getDuration(String columnName) {
+        return (Duration) getAsObject(columnName);
+    }
+
+    default CqlDate getDate(String columnName) {
+        return (CqlDate) getAsObject(columnName);
     }
 
     /*
