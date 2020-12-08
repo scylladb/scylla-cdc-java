@@ -11,6 +11,7 @@
         <module>scylla-cdc-lib</module>
         <module>scylla-cdc-kafka-connect</module>
         <module>scylla-cdc-replicator</module>
+        <module>scylla-cdc-printer</module>
     </modules>
 
     <properties>
