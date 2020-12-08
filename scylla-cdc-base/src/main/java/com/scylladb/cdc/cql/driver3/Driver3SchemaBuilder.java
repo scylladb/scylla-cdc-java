@@ -51,6 +51,19 @@ public class Driver3SchemaBuilder {
         Preconditions.checkNotNull(baseTableName);
         Preconditions.checkNotNull(metadata);
 
+        /*
+         * This is a potentially really dangerous operation. Rationale:
+         * 1) Metadata (returned by session.getCluster().getMetadata()) might be stale.
+         * 2) Even if Metadata was always up-to-date, we could have a race condition:
+         *    a) session.getCluster().getMetadata()
+         *    b) Do a query on CDC log (which returns other metadata)
+         * If the metadata changed between call a) and b) there could be a discrepancy
+         * between them. However, in this place we are only reading what
+         * columns are in primary key, which cannot be changed. But, there could
+         * be a situation when someone drops the table and quickly recreates it (with
+         * different schema) and this operation took place between call a) and b).
+         * In such case, this code is not correct!
+         */
         TableMetadata baseTableMetadata = metadata.getKeyspace(keyspace).getTable(baseTableName);
         baseTablePartitionKeyColumnNames = baseTableMetadata.getPartitionKey().stream().map(ColumnMetadata::getName).collect(Collectors.toSet());
         baseTableClusteringKeyColumnNames = baseTableMetadata.getClusteringColumns().stream().map(ColumnMetadata::getName).collect(Collectors.toSet());
