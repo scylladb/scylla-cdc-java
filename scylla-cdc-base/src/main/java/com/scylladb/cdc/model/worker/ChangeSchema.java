@@ -48,10 +48,12 @@ public class ChangeSchema {
             this.cqlType = cqlType;
             this.typeArguments = typeArguments;
 
-            if (typeArguments != null) {
-                Preconditions.checkArgument(cqlType == CqlType.MAP,
-                        "Unexpected type arguments for this CQL type.");
-            }
+            boolean hasTypeArguments = typeArguments != null;
+            boolean shouldHaveTypeArguments = cqlType == CqlType.MAP
+                    || cqlType == CqlType.LIST || cqlType == CqlType.SET || cqlType == CqlType.TUPLE;
+
+            Preconditions.checkArgument(hasTypeArguments == shouldHaveTypeArguments,
+                    "Unexpected value of type arguments for this CQL type: " + cqlType.name());
         }
 
         public CqlType getCqlType() {

@@ -6,6 +6,7 @@ import com.datastax.driver.core.DataType;
 import com.datastax.driver.core.Metadata;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.TableMetadata;
+import com.datastax.driver.core.TupleType;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.scylladb.cdc.model.worker.ChangeSchema;
@@ -143,16 +144,23 @@ public class Driver3SchemaBuilder {
             case DURATION:
                 return new ChangeSchema.DataType(ChangeSchema.CqlType.DURATION);
             case LIST:
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.LIST);
+                Preconditions.checkArgument(typeArguments.size() == 1);
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, typeArguments);
             case MAP:
                 Preconditions.checkArgument(typeArguments.size() == 2);
                 return new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, typeArguments);
             case SET:
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.SET);
+                Preconditions.checkArgument(typeArguments.size() == 1);
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.SET, typeArguments);
             case UDT:
                 return new ChangeSchema.DataType(ChangeSchema.CqlType.UDT);
             case TUPLE:
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE);
+                Preconditions.checkArgument(driverType instanceof TupleType);
+                TupleType tupleType = (TupleType) driverType;
+                typeArguments = tupleType.getComponentTypes().stream().map(this::translateColumnDataType)
+                        .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
+                Preconditions.checkArgument(!typeArguments.isEmpty());
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, typeArguments);
             default:
                 throw new RuntimeException(String.format("Data type %s is currently not supported.", driverType.getName()));
         }
