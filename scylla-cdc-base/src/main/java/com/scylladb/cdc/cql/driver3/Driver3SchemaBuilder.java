@@ -7,11 +7,15 @@ import com.datastax.driver.core.Metadata;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.TableMetadata;
 import com.datastax.driver.core.TupleType;
+import com.datastax.driver.core.UserType;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -153,7 +157,13 @@ public class Driver3SchemaBuilder {
                 Preconditions.checkArgument(typeArguments.size() == 1);
                 return new ChangeSchema.DataType(ChangeSchema.CqlType.SET, typeArguments);
             case UDT:
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.UDT);
+                Preconditions.checkArgument(driverType instanceof UserType);
+                UserType userType = (UserType) driverType;
+                ImmutableMap.Builder<String, ChangeSchema.DataType> fieldsBuilder = new ImmutableMap.Builder<>();
+                for (UserType.Field f : userType) {
+                    fieldsBuilder.put(f.getName(), translateColumnDataType(f.getType()));
+                }
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.UDT, fieldsBuilder.build());
             case TUPLE:
                 Preconditions.checkArgument(driverType instanceof TupleType);
                 TupleType tupleType = (TupleType) driverType;

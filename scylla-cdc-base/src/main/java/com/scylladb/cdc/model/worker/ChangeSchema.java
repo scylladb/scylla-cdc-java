@@ -2,7 +2,9 @@ package com.scylladb.cdc.model.worker;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -38,15 +40,38 @@ public class ChangeSchema {
 
     public static class DataType {
         private final CqlType cqlType;
+
+        /*
+         * Used in MAP, LIST, SET and TUPLE.
+         */
         private final ImmutableList<DataType> typeArguments;
 
+        /*
+         * Used in UDT. Map from field name to its DataType.
+         * Type ImmutableMap is ordered by insertion time,
+         * so the order of entries matches the order in UDT.
+         */
+        private final ImmutableMap<String, DataType> fields;
+
         public DataType(CqlType cqlType) {
-            this(cqlType, null);
+            this(cqlType, null, null);
         }
 
         public DataType(CqlType cqlType, ImmutableList<DataType> typeArguments) {
+            this(cqlType, typeArguments, null);
+        }
+
+        public DataType(CqlType cqlType, ImmutableMap<String, DataType> fields) {
+            this(cqlType, null, fields);
+        }
+
+        public DataType(CqlType cqlType, ImmutableList<DataType> typeArguments, ImmutableMap<String, DataType> fields) {
+            Preconditions.checkArgument(typeArguments == null || fields == null,
+                    "Cannot have both non-null type arguments and fields.");
+
             this.cqlType = cqlType;
             this.typeArguments = typeArguments;
+            this.fields = fields;
 
             boolean hasTypeArguments = typeArguments != null;
             boolean shouldHaveTypeArguments = cqlType == CqlType.MAP
@@ -54,6 +79,12 @@ public class ChangeSchema {
 
             Preconditions.checkArgument(hasTypeArguments == shouldHaveTypeArguments,
                     "Unexpected value of type arguments for this CQL type: " + cqlType.name());
+
+            boolean hasFields = fields != null;
+            boolean shouldHaveFields = cqlType == CqlType.UDT;
+
+            Preconditions.checkArgument(hasFields == shouldHaveFields,
+                    "Unexpected value of fields for this CQL type: " + cqlType.name());
         }
 
         public CqlType getCqlType() {
@@ -67,29 +98,44 @@ public class ChangeSchema {
             return typeArguments;
         }
 
+        public ImmutableMap<String, DataType> getFields() {
+            if (fields == null) {
+                throw new IllegalStateException("Cannot get fields for this CQL type: " + cqlType.name());
+            }
+            return fields;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             DataType dataType = (DataType) o;
             return cqlType == dataType.cqlType &&
-                    Objects.equals(typeArguments, dataType.typeArguments);
+                    Objects.equals(typeArguments, dataType.typeArguments) &&
+                    Objects.equals(fields, dataType.fields);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(cqlType, typeArguments);
+            return Objects.hash(cqlType, typeArguments, fields);
         }
 
         @Override
         public String toString() {
-            String result = cqlType.name();
+            StringBuilder result = new StringBuilder();
+            result.append(cqlType.name());
             if (typeArguments != null) {
-                result += '<';
-                result += typeArguments.stream().map(DataType::toString).collect(Collectors.joining(", "));
-                result += '>';
+                result.append('<');
+                result.append(typeArguments.stream().map(DataType::toString).collect(Collectors.joining(", ")));
+                result.append('>');
             }
-            return result;
+            if (fields != null) {
+                result.append('{');
+                result.append(fields.entrySet().stream().map(e -> e.getKey() + " " + e.getValue())
+                        .collect(Collectors.joining(", ")));
+                result.append('}');
+            }
+            return result.toString();
         }
     }
 
