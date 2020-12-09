@@ -163,7 +163,8 @@ public class Driver3SchemaBuilder {
                 for (UserType.Field f : userType) {
                     fieldsBuilder.put(f.getName(), translateColumnDataType(f.getType()));
                 }
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.UDT, fieldsBuilder.build());
+                ChangeSchema.DataType.UdtType udtType = new ChangeSchema.DataType.UdtType(fieldsBuilder.build(), userType.getKeyspace(), userType.getTypeName());
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.UDT, udtType);
             case TUPLE:
                 Preconditions.checkArgument(driverType instanceof TupleType);
                 TupleType tupleType = (TupleType) driverType;

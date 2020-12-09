@@ -107,7 +107,7 @@ public final class Driver3RawChange implements RawChange {
             UDTValue driverUDT = (UDTValue) driverObject;
 
             Map<String, Field> translatedMap = new LinkedHashMap<>();
-            for (Map.Entry<String, ChangeSchema.DataType> entry : dataType.getFields().entrySet()) {
+            for (Map.Entry<String, ChangeSchema.DataType> entry : dataType.getUdtType().getFields().entrySet()) {
                 Object translatedObject = translateDriverObject(driverUDT.getObject(entry.getKey()), entry.getValue());
                 Field field = new Field(entry.getValue(), translatedObject);
                 translatedMap.put(entry.getKey(), field);

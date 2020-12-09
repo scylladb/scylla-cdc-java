@@ -47,12 +47,52 @@ public class ChangeSchema {
          */
         private final ImmutableList<DataType> typeArguments;
 
-        /*
-         * Used in UDT. Map from field name to its DataType.
-         * Type ImmutableMap is ordered by insertion time,
-         * so the order of entries matches the order in UDT.
-         */
-        private final ImmutableMap<String, DataType> fields;
+        public static class UdtType {
+            /*
+             * Map from field name to its DataType.
+             * Type ImmutableMap is ordered by insertion time,
+             * so the order of entries matches the order in UDT.
+             */
+            private final ImmutableMap<String, DataType> fields;
+
+            private final String keyspace;
+            private final String name;
+
+            public UdtType(ImmutableMap<String, DataType> fields, String keyspace, String name) {
+                this.fields = fields;
+                this.keyspace = keyspace;
+                this.name = name;
+            }
+
+            public ImmutableMap<String, DataType> getFields() {
+                return fields;
+            }
+
+            public String getKeyspace() {
+                return keyspace;
+            }
+
+            public String getName() {
+                return name;
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) return true;
+                if (o == null || getClass() != o.getClass()) return false;
+                UdtType udtType = (UdtType) o;
+                return fields.equals(udtType.fields) &&
+                        keyspace.equals(udtType.keyspace) &&
+                        name.equals(udtType.name);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(fields, keyspace, name);
+            }
+        }
+
+        private final UdtType udtType;
 
         public DataType(CqlType cqlType) {
             this(cqlType, null, null);
@@ -62,17 +102,17 @@ public class ChangeSchema {
             this(cqlType, typeArguments, null);
         }
 
-        public DataType(CqlType cqlType, ImmutableMap<String, DataType> fields) {
-            this(cqlType, null, fields);
+        public DataType(CqlType cqlType, UdtType udtType) {
+            this(cqlType, null, udtType);
         }
 
-        public DataType(CqlType cqlType, ImmutableList<DataType> typeArguments, ImmutableMap<String, DataType> fields) {
-            Preconditions.checkArgument(typeArguments == null || fields == null,
-                    "Cannot have both non-null type arguments and fields.");
+        public DataType(CqlType cqlType, ImmutableList<DataType> typeArguments, UdtType udtType) {
+            Preconditions.checkArgument(typeArguments == null || udtType == null,
+                    "Cannot have both non-null type arguments and UdtType.");
 
             this.cqlType = cqlType;
             this.typeArguments = typeArguments;
-            this.fields = fields;
+            this.udtType = udtType;
 
             boolean hasTypeArguments = typeArguments != null;
             boolean shouldHaveTypeArguments = cqlType == CqlType.MAP
@@ -81,11 +121,11 @@ public class ChangeSchema {
             Preconditions.checkArgument(hasTypeArguments == shouldHaveTypeArguments,
                     "Unexpected value of type arguments for this CQL type: " + cqlType.name());
 
-            boolean hasFields = fields != null;
-            boolean shouldHaveFields = cqlType == CqlType.UDT;
+            boolean hasUdtType = udtType != null;
+            boolean shouldHaveUdtType = cqlType == CqlType.UDT;
 
-            Preconditions.checkArgument(hasFields == shouldHaveFields,
-                    "Unexpected value of fields for this CQL type: " + cqlType.name());
+            Preconditions.checkArgument(hasUdtType == shouldHaveUdtType,
+                    "Unexpected value of UdtType for this CQL type: " + cqlType.name());
         }
 
         public CqlType getCqlType() {
@@ -99,11 +139,11 @@ public class ChangeSchema {
             return typeArguments;
         }
 
-        public ImmutableMap<String, DataType> getFields() {
-            if (fields == null) {
-                throw new IllegalStateException("Cannot get fields for this CQL type: " + cqlType.name());
+        public UdtType getUdtType() {
+            if (udtType == null) {
+                throw new IllegalStateException("Cannot get UdtType for this CQL type: " + cqlType.name());
             }
-            return fields;
+            return udtType;
         }
 
         @Override
@@ -113,12 +153,12 @@ public class ChangeSchema {
             DataType dataType = (DataType) o;
             return cqlType == dataType.cqlType &&
                     Objects.equals(typeArguments, dataType.typeArguments) &&
-                    Objects.equals(fields, dataType.fields);
+                    Objects.equals(udtType, dataType.udtType);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(cqlType, typeArguments, fields);
+            return Objects.hash(cqlType, typeArguments, udtType);
         }
 
         @Override
@@ -130,9 +170,10 @@ public class ChangeSchema {
                 result.append(typeArguments.stream().map(DataType::toString).collect(Collectors.joining(", ")));
                 result.append('>');
             }
-            if (fields != null) {
+            if (udtType != null) {
+                result.append('(').append(udtType.keyspace).append('.').append(udtType.name).append(')');
                 result.append('{');
-                result.append(fields.entrySet().stream().map(e -> e.getKey() + " " + e.getValue())
+                result.append(udtType.getFields().entrySet().stream().map(e -> e.getKey() + " " + e.getValue())
                         .collect(Collectors.joining(", ")));
                 result.append('}');
             }
