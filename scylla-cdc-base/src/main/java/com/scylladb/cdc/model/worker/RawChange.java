@@ -1,6 +1,8 @@
 package com.scylladb.cdc.model.worker;
 
 import com.datastax.driver.core.Row;
+import com.scylladb.cdc.model.cql.Cell;
+import com.scylladb.cdc.model.cql.Field;
 import com.sun.org.apache.xpath.internal.operations.Bool;
 
 import java.math.BigDecimal;
@@ -172,6 +174,11 @@ public interface RawChange {
      */
     ByteBuffer getAsBytes(String columnName);
 
+    default Cell getCell(String columnName) {
+        ChangeSchema.ColumnDefinition columnDefinition = getSchema().getColumnDefinition(columnName);
+        return new Cell(columnDefinition, columnDefinition.getCdcLogDataType(), getAsObject(columnName));
+    }
+
     default ByteBuffer getBytes(String columnName) {
         return (ByteBuffer) getAsObject(columnName);
     }
@@ -224,20 +231,20 @@ public interface RawChange {
         return (Boolean) getAsObject(columnName);
     }
 
-    default Map getMap(String columnName) {
-        return (Map) getAsObject(columnName);
+    default Map<Field, Field> getMap(String columnName) {
+        return (Map<Field, Field>) getAsObject(columnName);
     }
 
-    default Set getSet(String columnName) {
-        return (Set) getAsObject(columnName);
+    default Set<Field> getSet(String columnName) {
+        return (Set<Field>) getAsObject(columnName);
     }
 
-    default List getList(String columnName) {
-        return (List) getAsObject(columnName);
+    default List<Field> getList(String columnName) {
+        return (List<Field>) getAsObject(columnName);
     }
 
-    default Map<String, Object> getUDT(String columnName) {
-        return (Map<String, Object>) getAsObject(columnName);
+    default Map<String, Field> getUDT(String columnName) {
+        return (Map<String, Field>) getAsObject(columnName);
     }
 
     default Date getTimestamp(String columnName) {

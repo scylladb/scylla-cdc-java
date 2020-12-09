@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableMap;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class ChangeSchema {
@@ -207,6 +208,12 @@ public class ChangeSchema {
     public ImmutableList<ColumnDefinition> getNonCdcColumnDefinitions() {
         return columnDefinitions.stream().filter(c -> !c.isCdcColumn())
                 .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
+    }
+
+    public ColumnDefinition getColumnDefinition(String columnName) {
+        // TODO - do not linearly search
+        Optional<ColumnDefinition> result = columnDefinitions.stream().filter(c -> c.getColumnName().equals(columnName)).findFirst();
+        return result.orElseThrow(() -> new IllegalArgumentException("Column name " + columnName + "is not present in change schema."));
     }
 
     @Override
