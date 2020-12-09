@@ -47,6 +47,7 @@ public final class Driver3RawChange implements RawChange {
         if (row.isNull(columnName)) {
             return null;
         } else {
+            // TODO - check if quoteIfNecessary is needed here in getObject()
             ChangeSchema.ColumnDefinition columnDefinition = schema.getColumnDefinition(columnName);
             return translateDriverObject(row.getObject(columnName), columnDefinition.getCdcLogDataType());
         }
@@ -143,14 +144,18 @@ public final class Driver3RawChange implements RawChange {
      * after the porting process is done.
      */
 
+    @Deprecated
+    public Object TEMPORARY_PORTING_getAsDriverObject(String columnName) {
+        if (row.isNull(columnName)) {
+            return null;
+        } else {
+            return row.getObject(columnName);
+        }
+    }
+
     @Override
     public boolean TEMPORARY_PORTING_isDeleted(String name) {
         String deletionColumnName = "cdc$deleted_" + name;
         return !row.isNull(deletionColumnName) && row.getBool(deletionColumnName);
-    }
-
-    @Override
-    public Row TEMPORARY_PORTING_row() {
-        return row;
     }
 }

@@ -56,6 +56,7 @@ import com.google.common.flogger.FluentLogger;
 import com.google.common.io.BaseEncoding;
 import com.google.common.reflect.TypeToken;
 
+import com.scylladb.cdc.cql.driver3.Driver3RawChange;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
@@ -155,7 +156,7 @@ public class Main {
                                     DataType innerType = meta.getType().getTypeArguments().get(0);
                                     TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(innerType).getJavaType();
                                     TreeMap<UUID, Object> sorted = new TreeMap<>();
-                                    Map<UUID, Object> cMap = c.getMap(cd.getColumnName());
+                                    Map<UUID, Object> cMap = (Map<UUID, Object>) ((Driver3RawChange)c).TEMPORARY_PORTING_getAsDriverObject(cd.getColumnName());
                                     for (Entry<UUID, Object> e : cMap.entrySet()) {
                                         sorted.put(e.getKey(), e.getValue());
                                     }
@@ -218,7 +219,7 @@ public class Main {
                 table.getColumns().stream().forEach(c -> {
                     TypeCodec<Object> codec = CodecRegistry.DEFAULT_INSTANCE.codecFor(c.getType());
                     if (primaryColumns.contains(c)) {
-                        builder.where(eq(c.getName(), change.getAsObject(c.getName())));
+                        builder.where(eq(c.getName(), ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName())));
                     } else {
                         Assignment op = null;
                         if (c.getType().isCollection() && !c.getType().isFrozen() && !change.TEMPORARY_PORTING_isDeleted(c.getName())) {
@@ -231,11 +232,11 @@ public class Main {
                             String deletedElementsColumnName = "cdc$deleted_elements_" + c.getName();
                             if (change.getAsObject(deletedElementsColumnName) != null) {
                                 if (c.getType().getName() == DataType.Name.SET) {
-                                    op = removeAll(c.getName(), change.getSet(deletedElementsColumnName));
+                                    op = removeAll(c.getName(), (Set) ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(deletedElementsColumnName));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
-                                    op = removeAll(c.getName(), change.getSet(deletedElementsColumnName));
+                                    op = removeAll(c.getName(), (Set) ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(deletedElementsColumnName));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
-                                    Set<UUID> cSet = change.getSet(deletedElementsColumnName);
+                                    Set<UUID> cSet = (Set<UUID>) ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(deletedElementsColumnName);
                                     for (UUID key : cSet) {
                                         builder.with(new ListSetIdxTimeUUIDAssignment(c.getName(), key, null));
                                     }
@@ -245,11 +246,11 @@ public class Main {
                                 }
                             } else {
                                 if (c.getType().getName() == DataType.Name.SET) {
-                                    op = addAll(c.getName(), change.getSet(c.getName()));
+                                    op = addAll(c.getName(), (Set)((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName()));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
-                                    op = putAll(c.getName(), change.getMap(c.getName()));
+                                    op = putAll(c.getName(), (Map)((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName()));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
-                                    Map<UUID, Object> cMap = change.getMap(c.getName());
+                                    Map<UUID, Object> cMap = (Map<UUID, Object>)((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName());
                                     for (Entry<UUID, Object> e : cMap.entrySet()) {
                                         builder.with(new ListSetIdxTimeUUIDAssignment(c.getName(), e.getKey(), e.getValue()));
                                     }
@@ -260,7 +261,7 @@ public class Main {
                             }
                         }
                         if (op == null) {
-                            op = set(c.getName(), change.getAsObject(c.getName()));
+                            op = set(c.getName(), ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName()));
                         }
                         builder.with(op);
                     }

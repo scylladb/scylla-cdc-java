@@ -213,7 +213,7 @@ public class ChangeSchema {
     public ColumnDefinition getColumnDefinition(String columnName) {
         // TODO - do not linearly search
         Optional<ColumnDefinition> result = columnDefinitions.stream().filter(c -> c.getColumnName().equals(columnName)).findFirst();
-        return result.orElseThrow(() -> new IllegalArgumentException("Column name " + columnName + "is not present in change schema."));
+        return result.orElseThrow(() -> new IllegalArgumentException("Column name " + columnName + " is not present in change schema."));
     }
 
     @Override

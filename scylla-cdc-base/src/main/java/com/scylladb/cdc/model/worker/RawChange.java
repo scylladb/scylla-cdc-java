@@ -16,8 +16,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.datastax.driver.core.Metadata.quoteIfNecessary;
-
 /*
  * Represents a single CDC log row,
  * without any post-processing.
@@ -154,11 +152,11 @@ public interface RawChange {
     ChangeId getId();
 
     default OperationType getOperationType() {
-        return OperationType.parse(getByte(quoteIfNecessary("cdc$operation")));
+        return OperationType.parse(getByte("cdc$operation"));
     }
 
     default Long getTTL() {
-        return getLong(quoteIfNecessary("cdc$ttl"));
+        return getLong("cdc$ttl");
     }
 
     ChangeSchema getSchema();
@@ -274,7 +272,4 @@ public interface RawChange {
 
     @Deprecated
     boolean TEMPORARY_PORTING_isDeleted(String name);
-
-    @Deprecated
-    Row TEMPORARY_PORTING_row();
 }
