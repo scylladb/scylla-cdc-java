@@ -30,7 +30,7 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
 
     @Override
     protected Envelope.Operation getOperation() {
-        byte cdcOperation = this.change.getByte("cdc$operation");
+        byte cdcOperation = this.change.getCell("cdc$operation").getByte();
         if (cdcOperation == 2) {
             return Envelope.Operation.CREATE;
         } else if (cdcOperation == 1) {
@@ -89,13 +89,13 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
     private void fillStructWithChange(ScyllaCollectionSchema schema, Struct keyStruct, Struct valueStruct, RawChange change) {
         for (ChangeSchema.ColumnDefinition cdef : change.getSchema().getNonCdcColumnDefinitions()) {
             ChangeSchema.DataType type = cdef.getCdcLogDataType();
-            Object value = change.getInt(cdef.getColumnName());
+            Object value = change.getCell(cdef.getColumnName()).getInt();
 
             if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) {
                 valueStruct.put(cdef.getColumnName(), value);
                 keyStruct.put(cdef.getColumnName(), value);
             } else {
-                Boolean isDeleted = this.change.getBoolean("cdc$deleted_" + cdef.getColumnName());
+                Boolean isDeleted = this.change.getCell("cdc$deleted_" + cdef.getColumnName()).getBoolean();
                 if (value != null || (isDeleted != null && isDeleted)) {
                     Struct cell = new Struct(schema.cellSchema(cdef.getColumnName()));
                     cell.put(ScyllaSchema.CELL_VALUE, value);

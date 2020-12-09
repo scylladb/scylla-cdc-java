@@ -5,6 +5,7 @@ import com.datastax.driver.core.Session;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.cql.Cell;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import sun.misc.Signal;
@@ -46,9 +47,10 @@ public class Printer {
         System.out.println();
         System.out.println("Non-cdc columns:");
         for (ChangeSchema.ColumnDefinition cd : changeSchema.getNonCdcColumnDefinitions()) {
+            Cell cell = change.getCell(cd.getColumnName());
             System.out.println(cd.getColumnName() + " " + cd.getCdcLogDataType() + " " + cd.getBaseTableColumnType());
             System.out.print("With value: ");
-            System.out.println(change.getAsObject(cd.getColumnName()));
+            System.out.println(cell.getAsObject());
         }
     }
 

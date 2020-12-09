@@ -4,11 +4,11 @@ import com.scylladb.cdc.model.worker.ChangeSchema;
 
 import java.util.Objects;
 
-public class Cell extends Field {
+public class Cell extends AbstractField {
     private final ChangeSchema.ColumnDefinition columnDefinition;
 
-    public Cell(ChangeSchema.ColumnDefinition columnDefinition, ChangeSchema.DataType dataType, Object value) {
-        super(dataType, value);
+    public Cell(ChangeSchema.ColumnDefinition columnDefinition, Object value) {
+        super(value);
         this.columnDefinition = columnDefinition;
     }
 
@@ -20,13 +20,12 @@ public class Cell extends Field {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        if (!super.equals(o)) return false;
         Cell cell = (Cell) o;
-        return Objects.equals(columnDefinition, cell.columnDefinition);
+        return columnDefinition.equals(cell.columnDefinition);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), columnDefinition);
+        return Objects.hash(columnDefinition);
     }
 }

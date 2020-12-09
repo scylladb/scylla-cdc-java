@@ -1,20 +1,9 @@
 package com.scylladb.cdc.model.worker;
 
-import com.datastax.driver.core.Row;
 import com.scylladb.cdc.model.cql.Cell;
-import com.scylladb.cdc.model.cql.Field;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
 
 /*
  * Represents a single CDC log row,
@@ -152,11 +141,12 @@ public interface RawChange {
     ChangeId getId();
 
     default OperationType getOperationType() {
-        return OperationType.parse(getByte("cdc$operation"));
+        Byte operation = getCell("cdc$operation").getByte();
+        return OperationType.parse(operation);
     }
 
     default Long getTTL() {
-        return getLong("cdc$ttl");
+        return getCell("cdc$ttl").getLong();
     }
 
     ChangeSchema getSchema();
@@ -174,91 +164,7 @@ public interface RawChange {
 
     default Cell getCell(String columnName) {
         ChangeSchema.ColumnDefinition columnDefinition = getSchema().getColumnDefinition(columnName);
-        return new Cell(columnDefinition, columnDefinition.getCdcLogDataType(), getAsObject(columnName));
-    }
-
-    default ByteBuffer getBytes(String columnName) {
-        return (ByteBuffer) getAsObject(columnName);
-    }
-
-    default String getString(String columnName) {
-        return (String) getAsObject(columnName);
-    }
-
-    default BigInteger getVarint(String columnName) {
-        return (BigInteger) getAsObject(columnName);
-    }
-
-    default BigDecimal getDecimal(String columnName) {
-        return (BigDecimal) getAsObject(columnName);
-    }
-
-    default UUID getUUID(String columnName) {
-        return (UUID) getAsObject(columnName);
-    }
-
-    default InetAddress getInet(String columnName) {
-        return (InetAddress) getAsObject(columnName);
-    }
-
-    default Float getFloat(String columnName) {
-        return (Float) getAsObject(columnName);
-    }
-
-    default Double getDouble(String columnName) {
-        return (Double) getAsObject(columnName);
-    }
-
-    default Long getLong(String columnName) {
-        return (Long) getAsObject(columnName);
-    }
-
-    default Integer getInt(String columnName) {
-        return (Integer) getAsObject(columnName);
-    }
-
-    default Short getShort(String columnName) {
-        return (Short) getAsObject(columnName);
-    }
-
-    default Byte getByte(String columnName) {
-        return (Byte) getAsObject(columnName);
-    }
-
-    default Boolean getBoolean(String columnName) {
-        return (Boolean) getAsObject(columnName);
-    }
-
-    default Map<Field, Field> getMap(String columnName) {
-        return (Map<Field, Field>) getAsObject(columnName);
-    }
-
-    default Set<Field> getSet(String columnName) {
-        return (Set<Field>) getAsObject(columnName);
-    }
-
-    default List<Field> getList(String columnName) {
-        return (List<Field>) getAsObject(columnName);
-    }
-
-    default Map<String, Field> getUDT(String columnName) {
-        return (Map<String, Field>) getAsObject(columnName);
-    }
-
-    default Date getTimestamp(String columnName) {
-        return (Date) getAsObject(columnName);
-    }
-
-    default Long getTime(String columnName) {
-        return (Long) getAsObject(columnName);
-    }
-
-    default Duration getDuration(String columnName) {
-        return (Duration) getAsObject(columnName);
-    }
-
-    default CqlDate getDate(String columnName) {
-        return (CqlDate) getAsObject(columnName);
+        return new Cell(columnDefinition, getAsObject(columnName));
     }
 
     /*
