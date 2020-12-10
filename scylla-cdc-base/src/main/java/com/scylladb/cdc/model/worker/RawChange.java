@@ -41,21 +41,21 @@ public interface RawChange {
      */
     class Duration {
         // months, days and nanoseconds
-        private final long months;
-        private final long days;
+        private final int months;
+        private final int days;
         private final long nanoseconds;
 
-        public Duration(long months, long days, long nanoseconds) {
+        public Duration(int months, int days, long nanoseconds) {
             this.months = months;
             this.days = days;
             this.nanoseconds = nanoseconds;
         }
 
-        public long getMonths() {
+        public int getMonths() {
             return months;
         }
 
-        public long getDays() {
+        public int getDays() {
             return days;
         }
 

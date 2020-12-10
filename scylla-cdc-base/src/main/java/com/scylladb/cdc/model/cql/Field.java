@@ -21,12 +21,13 @@ public class Field extends AbstractField {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
         Field field = (Field) o;
         return dataType.equals(field.dataType);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(dataType);
+        return Objects.hash(super.hashCode(), dataType);
     }
 }

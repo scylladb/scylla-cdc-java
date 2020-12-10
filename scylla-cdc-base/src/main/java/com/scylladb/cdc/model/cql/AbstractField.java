@@ -92,6 +92,10 @@ public abstract class AbstractField {
         return (Map<String, Field>) value;
     }
 
+    public List<Field> getTuple() {
+        return (List<Field>) value;
+    }
+
     public Date getTimestamp() {
         return (Date) value;
     }
@@ -106,6 +110,19 @@ public abstract class AbstractField {
 
     public RawChange.CqlDate getDate() {
         return (RawChange.CqlDate) value;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AbstractField that = (AbstractField) o;
+        return Objects.equals(value, that.value);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(value);
     }
 
     @Override

@@ -20,12 +20,13 @@ public class Cell extends AbstractField {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
         Cell cell = (Cell) o;
         return columnDefinition.equals(cell.columnDefinition);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(columnDefinition);
+        return Objects.hash(super.hashCode(), columnDefinition);
     }
 }

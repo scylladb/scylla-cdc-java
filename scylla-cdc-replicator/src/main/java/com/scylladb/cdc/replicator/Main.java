@@ -57,6 +57,7 @@ import com.google.common.io.BaseEncoding;
 import com.google.common.reflect.TypeToken;
 
 import com.scylladb.cdc.cql.driver3.Driver3RawChange;
+import com.scylladb.cdc.cql.driver3.Driver3Translator;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
@@ -93,6 +94,7 @@ public class Main {
         private static final String TTL_MARKER_NAME = "using_ttl_bind_marker";
 
         private final Session session;
+        private final Driver3Translator driver3Translator;
         private final ConsistencyLevel cl;
         private final TableMetadata table;
         private final Map<RawChange.OperationType, Operation> preparedOps = new HashMap<>();
@@ -113,12 +115,14 @@ public class Main {
         private static abstract class PreparedOperation implements Operation {
             protected final TableMetadata table;
             protected final PreparedStatement preparedStmt;
+            protected final Driver3Translator driver3Translator;
 
             protected abstract RegularStatement getStatement(TableMetadata t);
 
-            protected PreparedOperation(Session session, TableMetadata t) {
+            protected PreparedOperation(Session session, Driver3Translator d3t, TableMetadata t) {
                 table = t;
                 preparedStmt = session.prepare(getStatement(table));
+                driver3Translator = d3t;
             }
 
             public Statement getStatement(RawChange c, ConsistencyLevel cl) {
@@ -156,7 +160,7 @@ public class Main {
                                     DataType innerType = meta.getType().getTypeArguments().get(0);
                                     TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(innerType).getJavaType();
                                     TreeMap<UUID, Object> sorted = new TreeMap<>();
-                                    Map<UUID, Object> cMap = (Map<UUID, Object>) ((Driver3RawChange)c).TEMPORARY_PORTING_getAsDriverObject(cd.getColumnName());
+                                    Map<UUID, Object> cMap = (Map<UUID, Object>) driver3Translator.translate(c.getCell(cd.getColumnName()));
                                     for (Entry<UUID, Object> e : cMap.entrySet()) {
                                         sorted.put(e.getKey(), e.getValue());
                                     }
@@ -203,9 +207,11 @@ public class Main {
 
         private static class UnpreparedUpdateOp implements Operation {
             private final TableMetadata table;
+            private final Driver3Translator driver3Translator;
 
-            public UnpreparedUpdateOp(TableMetadata t) {
+            public UnpreparedUpdateOp(TableMetadata t, Driver3Translator d3t) {
                 table = t;
+                driver3Translator = d3t;
             }
 
             public Statement getStatement(RawChange c, ConsistencyLevel cl) {
@@ -219,7 +225,7 @@ public class Main {
                 table.getColumns().stream().forEach(c -> {
                     TypeCodec<Object> codec = CodecRegistry.DEFAULT_INSTANCE.codecFor(c.getType());
                     if (primaryColumns.contains(c)) {
-                        builder.where(eq(c.getName(), ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName())));
+                        builder.where(eq(c.getName(), driver3Translator.translate(change.getCell(c.getName()))));
                     } else {
                         Assignment op = null;
                         if (c.getType().isCollection() && !c.getType().isFrozen() && !change.TEMPORARY_PORTING_isDeleted(c.getName())) {
@@ -232,11 +238,11 @@ public class Main {
                             String deletedElementsColumnName = "cdc$deleted_elements_" + c.getName();
                             if (change.getAsObject(deletedElementsColumnName) != null) {
                                 if (c.getType().getName() == DataType.Name.SET) {
-                                    op = removeAll(c.getName(), (Set) ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(deletedElementsColumnName));
+                                    op = removeAll(c.getName(), (Set) driver3Translator.translate(change.getCell(c.getName())));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
-                                    op = removeAll(c.getName(), (Set) ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(deletedElementsColumnName));
+                                    op = removeAll(c.getName(), (Set) driver3Translator.translate(change.getCell(c.getName())));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
-                                    Set<UUID> cSet = (Set<UUID>) ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(deletedElementsColumnName);
+                                    Set<UUID> cSet = (Set<UUID>) driver3Translator.translate(change.getCell(c.getName()));
                                     for (UUID key : cSet) {
                                         builder.with(new ListSetIdxTimeUUIDAssignment(c.getName(), key, null));
                                     }
@@ -246,11 +252,11 @@ public class Main {
                                 }
                             } else {
                                 if (c.getType().getName() == DataType.Name.SET) {
-                                    op = addAll(c.getName(), (Set)((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName()));
+                                    op = addAll(c.getName(), (Set) driver3Translator.translate(change.getCell(c.getName())));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
-                                    op = putAll(c.getName(), (Map)((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName()));
+                                    op = putAll(c.getName(), (Map) driver3Translator.translate(change.getCell(c.getName())));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
-                                    Map<UUID, Object> cMap = (Map<UUID, Object>)((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName());
+                                    Map<UUID, Object> cMap = (Map<UUID, Object>) driver3Translator.translate(change.getCell(c.getName()));
                                     for (Entry<UUID, Object> e : cMap.entrySet()) {
                                         builder.with(new ListSetIdxTimeUUIDAssignment(c.getName(), e.getKey(), e.getValue()));
                                     }
@@ -261,7 +267,7 @@ public class Main {
                             }
                         }
                         if (op == null) {
-                            op = set(c.getName(), ((Driver3RawChange)change).TEMPORARY_PORTING_getAsDriverObject(c.getName()));
+                            op = set(c.getName(), driver3Translator.translate(change.getCell(c.getName())));
                         }
                         builder.with(op);
                     }
@@ -294,8 +300,8 @@ public class Main {
                 return builder;
             }
 
-            public UpdateOp(Session session, TableMetadata table) {
-                super(session, table);
+            public UpdateOp(Session session, Driver3Translator d3t, TableMetadata table) {
+                super(session, d3t, table);
             }
 
             @Override
@@ -315,8 +321,8 @@ public class Main {
                 return builder;
             }
 
-            public InsertOp(Session session, TableMetadata table) {
-                super(session, table);
+            public InsertOp(Session session, Driver3Translator d3t, TableMetadata table) {
+                super(session, d3t, table);
             }
 
             @Override
@@ -336,8 +342,8 @@ public class Main {
                 return builder;
             }
 
-            public RowDeleteOp(Session session, TableMetadata table) {
-                super(session, table);
+            public RowDeleteOp(Session session, Driver3Translator d3t, TableMetadata table) {
+                super(session, d3t, table);
             }
 
             @Override
@@ -356,8 +362,8 @@ public class Main {
                 return builder;
             }
 
-            public PartitionDeleteOp(Session session, TableMetadata table) {
-                super(session, table);
+            public PartitionDeleteOp(Session session, Driver3Translator d3t, TableMetadata table) {
+                super(session, d3t, table);
             }
 
             @Override
@@ -545,12 +551,13 @@ public class Main {
             this.cl = cl;
             table = c.getMetadata().getKeyspaces().stream().filter(k -> k.getName().equals(keyspace))
                     .findAny().get().getTable(tableName);
+            driver3Translator = new Driver3Translator(c.getMetadata());
             preimageQuery = createPreimageQuery(session, table);
             preparedOps.put(RawChange.OperationType.ROW_UPDATE,
-                    hasCollection(table) ? new UnpreparedUpdateOp(table) : new UpdateOp(s, table));
-            preparedOps.put(RawChange.OperationType.ROW_INSERT, new InsertOp(s, table));
-            preparedOps.put(RawChange.OperationType.ROW_DELETE, new RowDeleteOp(s, table));
-            preparedOps.put(RawChange.OperationType.PARTITION_DELETE, new PartitionDeleteOp(s, table));
+                    hasCollection(table) ? new UnpreparedUpdateOp(table, driver3Translator) : new UpdateOp(s, driver3Translator, table));
+            preparedOps.put(RawChange.OperationType.ROW_INSERT, new InsertOp(s, driver3Translator, table));
+            preparedOps.put(RawChange.OperationType.ROW_DELETE, new RowDeleteOp(s, driver3Translator, table));
+            preparedOps.put(RawChange.OperationType.PARTITION_DELETE, new PartitionDeleteOp(s, driver3Translator, table));
             RangeTombstoneState rtState = new RangeTombstoneState(table);
             preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_LEFT_BOUND, new RangeDeleteStartOp(rtState, true));
             preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND, new RangeDeleteStartOp(rtState, false));

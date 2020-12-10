@@ -5,6 +5,7 @@ import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 import com.datastax.driver.core.Duration;
 import com.datastax.driver.core.LocalDate;
 import com.datastax.driver.core.Row;
+import com.datastax.driver.core.TupleValue;
 import com.datastax.driver.core.UDTValue;
 import com.datastax.driver.core.UserType;
 import com.google.common.base.Preconditions;
@@ -15,6 +16,7 @@ import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -113,12 +115,22 @@ public final class Driver3RawChange implements RawChange {
                 translatedMap.put(entry.getKey(), field);
             }
             return translatedMap;
+        } else if (driverObject instanceof TupleValue) {
+            TupleValue driverTuple = (TupleValue) driverObject;
+            List<Field> translatedTuple = new ArrayList<>();
+            int idx = 0;
+            for (ChangeSchema.DataType fieldType : dataType.getTypeArguments()) {
+                Object translatedObject = translateDriverObject(driverTuple.getObject(idx), fieldType);
+                translatedTuple.add(new Field(fieldType, translatedObject));
+                idx++;
+            }
+            return translatedTuple;
         } else if (driverObject instanceof com.datastax.driver.core.Duration) {
             com.datastax.driver.core.Duration driverDuration = (com.datastax.driver.core.Duration) driverObject;
             return new Duration(driverDuration.getMonths(), driverDuration.getDays(), driverDuration.getNanoseconds());
         } else if (driverObject instanceof LocalDate) {
             LocalDate driverDate = (LocalDate) driverObject;
-            return new CqlDate(driverDate.getYear(), driverDate.getMonth(), driverDate.getMonth());
+            return new CqlDate(driverDate.getYear(), driverDate.getMonth(), driverDate.getDay());
         }
 
         // No translation needed, the object is
@@ -143,15 +155,6 @@ public final class Driver3RawChange implements RawChange {
      * Those methods should be removed
      * after the porting process is done.
      */
-
-    @Deprecated
-    public Object TEMPORARY_PORTING_getAsDriverObject(String columnName) {
-        if (row.isNull(columnName)) {
-            return null;
-        } else {
-            return row.getObject(columnName);
-        }
-    }
 
     @Override
     public boolean TEMPORARY_PORTING_isDeleted(String name) {
