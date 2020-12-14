@@ -17,7 +17,7 @@ public final class CDCConsumer {
     private final Set<TableName> tables;
     private MasterThread master;
 
-    public CDCConsumer(Session session, RawChangeConsumer consumer, Set<TableName> tables, int workersCount) {
+    public CDCConsumer(Session session, RawChangeConsumerProvider consumer, Set<TableName> tables, int workersCount) {
         cdcThreadGroup = new ThreadGroup("Scylla-CDC-Threads");
         Preconditions.checkNotNull(consumer);
         Preconditions.checkArgument(workersCount > 0);

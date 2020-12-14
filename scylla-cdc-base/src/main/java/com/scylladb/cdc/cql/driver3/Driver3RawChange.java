@@ -5,6 +5,7 @@ import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 import com.datastax.driver.core.Row;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.StreamId;
+import com.scylladb.cdc.model.worker.ChangeTime;
 import com.scylladb.cdc.model.worker.cql.Field;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeId;
@@ -22,7 +23,7 @@ public final class Driver3RawChange implements RawChange {
     @Override
     public ChangeId getId() {
         return new ChangeId(new StreamId(row.getBytes(quoteIfNecessary("cdc$stream_id"))),
-                row.getUUID(quoteIfNecessary("cdc$time")));
+                new ChangeTime(row.getUUID(quoteIfNecessary("cdc$time"))));
     }
 
     @Override

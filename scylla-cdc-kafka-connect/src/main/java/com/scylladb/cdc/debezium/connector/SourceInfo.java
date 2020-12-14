@@ -44,7 +44,7 @@ public class SourceInfo extends BaseSourceInfo {
                 WINDOW_END, position.getWindowEnd().toString());
         position.getLastConsumedChangeId().ifPresent(changeId -> {
             result.putAll(Collect.hashMapOf(CHANGE_ID_STREAM_ID, Bytes.toHexString(changeId.getStreamId().getValue()),
-                    CHANGE_ID_TIME, changeId.getTime().toString()));
+                    CHANGE_ID_TIME, changeId.getChangeTime().getUUID().toString()));
         });
         return result;
     }

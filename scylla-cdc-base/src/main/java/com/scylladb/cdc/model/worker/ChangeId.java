@@ -8,9 +8,9 @@ import com.scylladb.cdc.model.StreamId;
 
 public final class ChangeId implements Comparable<ChangeId> {
     private final StreamId streamId;
-    private final UUID time;
+    private final ChangeTime time;
 
-    public ChangeId(StreamId streamId, UUID time) {
+    public ChangeId(StreamId streamId, ChangeTime time) {
         this.streamId = Preconditions.checkNotNull(streamId);
         this.time = Preconditions.checkNotNull(time);
     }
@@ -19,7 +19,7 @@ public final class ChangeId implements Comparable<ChangeId> {
         return streamId;
     }
 
-    public UUID getTime() {
+    public ChangeTime getChangeTime() {
         return time;
     }
 

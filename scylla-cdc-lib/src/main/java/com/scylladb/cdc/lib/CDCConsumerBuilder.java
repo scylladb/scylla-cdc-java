@@ -9,11 +9,11 @@ import com.scylladb.cdc.model.worker.RawChangeConsumer;
 
 public final class CDCConsumerBuilder {
     private final Session session;
-    private final RawChangeConsumer consumer;
+    private final RawChangeConsumerProvider consumer;
     private final Set<TableName> tables;
     private int workersCount = getDefaultWorkersCount();
 
-    private CDCConsumerBuilder(Session session, RawChangeConsumer consumer, Set<TableName> tables) {
+    private CDCConsumerBuilder(Session session, RawChangeConsumerProvider consumer, Set<TableName> tables) {
         this.consumer = Preconditions.checkNotNull(consumer);
         Preconditions.checkNotNull(tables);
         Preconditions.checkArgument(!tables.isEmpty());
@@ -21,7 +21,7 @@ public final class CDCConsumerBuilder {
         this.session = Preconditions.checkNotNull(session);
     }
 
-    public static CDCConsumerBuilder builder(Session session, RawChangeConsumer consumer, Set<TableName> tables) {
+    public static CDCConsumerBuilder builder(Session session, RawChangeConsumerProvider consumer, Set<TableName> tables) {
         return new CDCConsumerBuilder(session, consumer, tables);
     }
 

@@ -6,6 +6,7 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.worker.ChangeId;
+import com.scylladb.cdc.model.worker.ChangeTime;
 import com.scylladb.cdc.model.worker.TaskState;
 import io.debezium.config.Configuration;
 import io.debezium.config.Field;
@@ -117,7 +118,7 @@ public class ScyllaConnectorTask extends BaseSourceTask {
                 if (offset.containsKey(SourceInfo.CHANGE_ID_STREAM_ID) && offset.containsKey(SourceInfo.CHANGE_ID_TIME)) {
                     StreamId streamId = new StreamId(Bytes.fromHexString((String) offset.get(SourceInfo.CHANGE_ID_STREAM_ID)));
                     UUID time = UUID.fromString((String) offset.get(SourceInfo.CHANGE_ID_TIME));
-                    changeId = Optional.of(new ChangeId(streamId, time));
+                    changeId = Optional.of(new ChangeId(streamId, new ChangeTime(time)));
                 }
                 TaskState taskState = new TaskState(windowStart, windowEnd, changeId);
                 sourceInfo.setTaskState(taskId, taskState);

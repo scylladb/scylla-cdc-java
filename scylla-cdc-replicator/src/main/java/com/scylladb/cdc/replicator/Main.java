@@ -107,11 +107,8 @@ public class Main {
 
         private static interface Operation {
             Statement getStatement(RawChange c, ConsistencyLevel cl);
-            Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m);
-        }
 
-        private static long timeuuidToTimestamp(UUID from) {
-            return (from.timestamp() - 0x01b21dd213814000L) / 10;
+            Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m);
         }
 
         private static void setBytesUnsafe(Driver3FromLibraryTranslator driver3FromLibraryTranslator, BoundStatement statement, String columnName, Cell cell) {
@@ -144,7 +141,7 @@ public class Main {
 
             public Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m) {
                 BoundStatement stmt = preparedStmt.bind();
-                stmt.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(c.getId().getTime()));
+                stmt.setLong(TIMESTAMP_MARKER_NAME, c.getId().getChangeTime().getTimestamp());
                 bindInternal(stmt, c, m);
                 stmt.setConsistencyLevel(cl);
                 stmt.setIdempotent(true);
@@ -287,9 +284,9 @@ public class Main {
                 });
                 Long ttl = change.getTTL();
                 if (ttl != null) {
-                    builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime()))).and(ttl((int) ((long) ttl)));
+                    builder.using(timestamp(change.getId().getChangeTime().getTimestamp())).and(ttl((int) ((long) ttl)));
                 } else {
-                    builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime())));
+                    builder.using(timestamp(change.getId().getChangeTime().getTimestamp()));
                 }
                 return builder;
             }
@@ -458,7 +455,7 @@ public class Main {
                 }
                 setBytesUnsafe(driver3FromLibraryTranslator, s, prevCol.getName() + "_start", start);
                 setBytesUnsafe(driver3FromLibraryTranslator, s, prevCol.getName() + "_end", end);
-                s.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(change.getId().getTime()));
+                s.setLong(TIMESTAMP_MARKER_NAME, change.getId().getChangeTime().getTimestamp());
                 s.setConsistencyLevel(cl);
                 s.setIdempotent(true);
                 return s;
@@ -724,7 +721,7 @@ public class Main {
             HashSet<TableName> tables = new HashSet<>();
             tables.add(new TableName(keyspace, table));
 
-            CDCConsumer consumer = CDCConsumerBuilder.builder(sSession, new Consumer(mode, dCluster, dSession, keyspace, table, cl), tables).workersCount(1).build();
+            CDCConsumer consumer = CDCConsumerBuilder.builder(sSession, (threadId) -> new Consumer(mode, dCluster, dSession, keyspace, table, cl), tables).workersCount(1).build();
             consumer.start();
 
             try {

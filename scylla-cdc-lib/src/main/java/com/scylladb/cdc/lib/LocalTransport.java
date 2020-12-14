@@ -28,11 +28,11 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
     private final Session session;
     private volatile boolean stopped = true;
     private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
-    private final RawChangeConsumer consumer;
+    private final RawChangeConsumerProvider consumer;
     private volatile int workersCount;
     private Thread[] workerThreads;
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, Session session, int workersCount, RawChangeConsumer consumer) {
+    public LocalTransport(ThreadGroup cdcThreadGroup, Session session, int workersCount, RawChangeConsumerProvider consumer) {
         this.session = Preconditions.checkNotNull(session);
         Preconditions.checkArgument(workersCount > 0);
         this.workersCount = workersCount;
@@ -69,11 +69,12 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
         }
         stop();
         stopped = false;
-        Connectors connectors = new Connectors(this, new Driver3WorkerCQL(session), new TaskAndRawChangeConsumerAdapter(consumer));
         int wCount = Math.min(workersCount, workerConfigurations.size());
         workerThreads = new Thread[wCount];
         Map<TaskId, SortedSet<StreamId>>[] tasks = split(workerConfigurations, wCount);
         for (int i = 0; i < wCount; ++i) {
+            Connectors connectors = new Connectors(this, new Driver3WorkerCQL(session),
+                    new TaskAndRawChangeConsumerAdapter(consumer.getForThread(i)));
             workerThreads[i] = new WorkerThread(workersThreadGroup, i, connectors, tasks[i]);
             workerThreads[i].start();
         }
