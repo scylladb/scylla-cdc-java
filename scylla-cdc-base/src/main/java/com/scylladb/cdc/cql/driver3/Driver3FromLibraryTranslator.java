@@ -28,10 +28,10 @@ import java.util.stream.Collectors;
  * returned by RawChange::getAsObject) into object
  * types returned by Java Driver (version 3).
  */
-public class Driver3Translator {
+public class Driver3FromLibraryTranslator {
     private final Metadata clusterMetadata;
 
-    public Driver3Translator(Metadata clusterMetadata) {
+    public Driver3FromLibraryTranslator(Metadata clusterMetadata) {
         this.clusterMetadata = Preconditions.checkNotNull(clusterMetadata);
     }
 

@@ -22,6 +22,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -56,8 +57,8 @@ import com.google.common.flogger.FluentLogger;
 import com.google.common.io.BaseEncoding;
 import com.google.common.reflect.TypeToken;
 
-import com.scylladb.cdc.cql.driver3.Driver3RawChange;
-import com.scylladb.cdc.cql.driver3.Driver3Translator;
+import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
+import com.scylladb.cdc.cql.driver3.Driver3ToLibraryTranslator;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
@@ -95,7 +96,7 @@ public class Main {
         private static final String TTL_MARKER_NAME = "using_ttl_bind_marker";
 
         private final Session session;
-        private final Driver3Translator driver3Translator;
+        private final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
         private final ConsistencyLevel cl;
         private final TableMetadata table;
         private final Map<RawChange.OperationType, Operation> preparedOps = new HashMap<>();
@@ -113,28 +114,28 @@ public class Main {
             return (from.timestamp() - 0x01b21dd213814000L) / 10;
         }
 
-        private static void setBytesUnsafe(Driver3Translator driver3Translator, BoundStatement statement, String columnName, Cell cell) {
-            TypeCodec<Object> driverCodec = driver3Translator.getTypeCodec(cell.getColumnDefinition().getCdcLogDataType());
-            Object driverObject = driver3Translator.translate(cell);
+        private static void setBytesUnsafe(Driver3FromLibraryTranslator driver3FromLibraryTranslator, BoundStatement statement, String columnName, Cell cell) {
+            TypeCodec<Object> driverCodec = driver3FromLibraryTranslator.getTypeCodec(cell.getColumnDefinition().getCdcLogDataType());
+            Object driverObject = driver3FromLibraryTranslator.translate(cell);
             statement.set(columnName, driverObject, driverCodec);
         }
 
-        private static void setBytesUnsafe(Driver3Translator driver3Translator, BoundStatement statement, String columnName, RawChange change) {
+        private static void setBytesUnsafe(Driver3FromLibraryTranslator driver3FromLibraryTranslator, BoundStatement statement, String columnName, RawChange change) {
             Cell cell = change.getCell(columnName);
-            setBytesUnsafe(driver3Translator, statement, columnName, cell);
+            setBytesUnsafe(driver3FromLibraryTranslator, statement, columnName, cell);
         }
 
         private static abstract class PreparedOperation implements Operation {
             protected final TableMetadata table;
             protected final PreparedStatement preparedStmt;
-            protected final Driver3Translator driver3Translator;
+            protected final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
 
             protected abstract RegularStatement getStatement(TableMetadata t);
 
-            protected PreparedOperation(Session session, Driver3Translator d3t, TableMetadata t) {
+            protected PreparedOperation(Session session, Driver3FromLibraryTranslator d3t, TableMetadata t) {
                 table = t;
                 preparedStmt = session.prepare(getStatement(table));
-                driver3Translator = d3t;
+                driver3FromLibraryTranslator = d3t;
             }
 
             public Statement getStatement(RawChange c, ConsistencyLevel cl) {
@@ -143,7 +144,7 @@ public class Main {
 
             public Statement getStatement(RawChange c, ConsistencyLevel cl, Mode m) {
                 BoundStatement stmt = preparedStmt.bind();
-                stmt.setLong(TIMESTAMP_MARKER_NAME,  timeuuidToTimestamp(c.getId().getTime()));
+                stmt.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(c.getId().getTime()));
                 bindInternal(stmt, c, m);
                 stmt.setConsistencyLevel(cl);
                 stmt.setIdempotent(true);
@@ -153,7 +154,7 @@ public class Main {
             protected void bindTTL(BoundStatement stmt, RawChange c) {
                 Long ttl = c.getTTL();
                 if (ttl != null) {
-                    stmt.setInt(TTL_MARKER_NAME, (int)((long) ttl));
+                    stmt.setInt(TTL_MARKER_NAME, (int) ((long) ttl));
                 } else {
                     stmt.unset(TTL_MARKER_NAME);
                 }
@@ -172,7 +173,7 @@ public class Main {
                                     DataType innerType = meta.getType().getTypeArguments().get(0);
                                     TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(innerType).getJavaType();
                                     TreeMap<UUID, Object> sorted = new TreeMap<>();
-                                    Map<UUID, Object> cMap = (Map<UUID, Object>) driver3Translator.translate(c.getCell(cd.getColumnName()));
+                                    Map<UUID, Object> cMap = (Map<UUID, Object>) driver3FromLibraryTranslator.translate(c.getCell(cd.getColumnName()));
                                     for (Entry<UUID, Object> e : cMap.entrySet()) {
                                         sorted.put(e.getKey(), e.getValue());
                                     }
@@ -182,7 +183,7 @@ public class Main {
                                     }
                                     stmt.setList(cd.getColumnName(), list);
                                 } else {
-                                    setBytesUnsafe(driver3Translator, stmt, cd.getColumnName(), c);
+                                    setBytesUnsafe(driver3FromLibraryTranslator, stmt, cd.getColumnName(), c);
                                 }
                                 break;
                             case PREIMAGE:
@@ -199,7 +200,7 @@ public class Main {
                         .collect(Collectors.toSet());
                 for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
                     if (primaryColumns.contains(cd.getColumnName())) {
-                        setBytesUnsafe(driver3Translator, stmt, cd.getColumnName(), c);
+                        setBytesUnsafe(driver3FromLibraryTranslator, stmt, cd.getColumnName(), c);
                     }
                 }
             }
@@ -209,7 +210,7 @@ public class Main {
                         .collect(Collectors.toSet());
                 for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
                     if (partitionColumns.contains(cd.getColumnName())) {
-                        setBytesUnsafe(driver3Translator, stmt, cd.getColumnName(), c);
+                        setBytesUnsafe(driver3FromLibraryTranslator, stmt, cd.getColumnName(), c);
                     }
                 }
             }
@@ -219,11 +220,11 @@ public class Main {
 
         private static class UnpreparedUpdateOp implements Operation {
             private final TableMetadata table;
-            private final Driver3Translator driver3Translator;
+            private final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
 
-            public UnpreparedUpdateOp(TableMetadata t, Driver3Translator d3t) {
+            public UnpreparedUpdateOp(TableMetadata t, Driver3FromLibraryTranslator d3t) {
                 table = t;
-                driver3Translator = d3t;
+                driver3FromLibraryTranslator = d3t;
             }
 
             public Statement getStatement(RawChange c, ConsistencyLevel cl) {
@@ -237,7 +238,7 @@ public class Main {
                 table.getColumns().stream().forEach(c -> {
                     TypeCodec<Object> codec = CodecRegistry.DEFAULT_INSTANCE.codecFor(c.getType());
                     if (primaryColumns.contains(c)) {
-                        builder.where(eq(c.getName(), driver3Translator.translate(change.getCell(c.getName()))));
+                        builder.where(eq(c.getName(), driver3FromLibraryTranslator.translate(change.getCell(c.getName()))));
                     } else {
                         Assignment op = null;
                         if (c.getType().isCollection() && !c.getType().isFrozen() && !change.TEMPORARY_PORTING_isDeleted(c.getName())) {
@@ -250,11 +251,11 @@ public class Main {
                             String deletedElementsColumnName = "cdc$deleted_elements_" + c.getName();
                             if (change.getAsObject(deletedElementsColumnName) != null) {
                                 if (c.getType().getName() == DataType.Name.SET) {
-                                    op = removeAll(c.getName(), (Set) driver3Translator.translate(change.getCell(c.getName())));
+                                    op = removeAll(c.getName(), (Set) driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
-                                    op = removeAll(c.getName(), (Set) driver3Translator.translate(change.getCell(c.getName())));
+                                    op = removeAll(c.getName(), (Set) driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
-                                    Set<UUID> cSet = (Set<UUID>) driver3Translator.translate(change.getCell(c.getName()));
+                                    Set<UUID> cSet = (Set<UUID>) driver3FromLibraryTranslator.translate(change.getCell(c.getName()));
                                     for (UUID key : cSet) {
                                         builder.with(new ListSetIdxTimeUUIDAssignment(c.getName(), key, null));
                                     }
@@ -264,11 +265,11 @@ public class Main {
                                 }
                             } else {
                                 if (c.getType().getName() == DataType.Name.SET) {
-                                    op = addAll(c.getName(), (Set) driver3Translator.translate(change.getCell(c.getName())));
+                                    op = addAll(c.getName(), (Set) driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
                                 } else if (c.getType().getName() == DataType.Name.MAP) {
-                                    op = putAll(c.getName(), (Map) driver3Translator.translate(change.getCell(c.getName())));
+                                    op = putAll(c.getName(), (Map) driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
                                 } else if (c.getType().getName() == DataType.Name.LIST) {
-                                    Map<UUID, Object> cMap = (Map<UUID, Object>) driver3Translator.translate(change.getCell(c.getName()));
+                                    Map<UUID, Object> cMap = (Map<UUID, Object>) driver3FromLibraryTranslator.translate(change.getCell(c.getName()));
                                     for (Entry<UUID, Object> e : cMap.entrySet()) {
                                         builder.with(new ListSetIdxTimeUUIDAssignment(c.getName(), e.getKey(), e.getValue()));
                                     }
@@ -279,14 +280,14 @@ public class Main {
                             }
                         }
                         if (op == null) {
-                            op = set(c.getName(), driver3Translator.translate(change.getCell(c.getName())));
+                            op = set(c.getName(), driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
                         }
                         builder.with(op);
                     }
                 });
                 Long ttl = change.getTTL();
                 if (ttl != null) {
-                    builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime()))).and(ttl((int)((long)ttl)));
+                    builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime()))).and(ttl((int) ((long) ttl)));
                 } else {
                     builder.using(timestamp(timeuuidToTimestamp(change.getId().getTime())));
                 }
@@ -312,7 +313,7 @@ public class Main {
                 return builder;
             }
 
-            public UpdateOp(Session session, Driver3Translator d3t, TableMetadata table) {
+            public UpdateOp(Session session, Driver3FromLibraryTranslator d3t, TableMetadata table) {
                 super(session, d3t, table);
             }
 
@@ -333,7 +334,7 @@ public class Main {
                 return builder;
             }
 
-            public InsertOp(Session session, Driver3Translator d3t, TableMetadata table) {
+            public InsertOp(Session session, Driver3FromLibraryTranslator d3t, TableMetadata table) {
                 super(session, d3t, table);
             }
 
@@ -354,7 +355,7 @@ public class Main {
                 return builder;
             }
 
-            public RowDeleteOp(Session session, Driver3Translator d3t, TableMetadata table) {
+            public RowDeleteOp(Session session, Driver3FromLibraryTranslator d3t, TableMetadata table) {
                 super(session, d3t, table);
             }
 
@@ -374,7 +375,7 @@ public class Main {
                 return builder;
             }
 
-            public PartitionDeleteOp(Session session, Driver3Translator d3t, TableMetadata table) {
+            public PartitionDeleteOp(Session session, Driver3FromLibraryTranslator d3t, TableMetadata table) {
                 super(session, d3t, table);
             }
 
@@ -410,7 +411,7 @@ public class Main {
             private final TableMetadata table;
             private final RangeTombstoneState state;
             private final Map<Integer, Map<Boolean, PreparedStatement>> stmts = new HashMap<>();
-            private final Driver3Translator driver3Translator;
+            private final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
 
             private static PreparedStatement prepare(Session s, TableMetadata t, int prefixSize, boolean startInclusive,
                                                      boolean endInclusive) {
@@ -426,10 +427,10 @@ public class Main {
                 return s.prepare(builder);
             }
 
-            public RangeDeleteEndOp(Session session, TableMetadata t, Driver3Translator driver3Translator, RangeTombstoneState state, boolean inclusive) {
+            public RangeDeleteEndOp(Session session, TableMetadata t, Driver3FromLibraryTranslator driver3FromLibraryTranslator, RangeTombstoneState state, boolean inclusive) {
                 table = t;
                 this.state = state;
-                this.driver3Translator = driver3Translator;
+                this.driver3FromLibraryTranslator = driver3FromLibraryTranslator;
                 for (int i = t.getPartitionKey().size(); i < t.getPrimaryKey().size(); ++i) {
                     Map<Boolean, PreparedStatement> map = new HashMap<>();
                     map.put(true, prepare(session, t, i, true, inclusive));
@@ -438,7 +439,7 @@ public class Main {
                 }
             }
 
-            private static Statement bind(TableMetadata table, Driver3Translator driver3Translator, PreparedStatement stmt, RawChange change, PrimaryKeyValue startVal, ConsistencyLevel cl) {
+            private static Statement bind(TableMetadata table, Driver3FromLibraryTranslator driver3FromLibraryTranslator, PreparedStatement stmt, RawChange change, PrimaryKeyValue startVal, ConsistencyLevel cl) {
                 BoundStatement s = stmt.bind();
                 Iterator<ColumnMetadata> keyIt = table.getPrimaryKey().iterator();
                 ColumnMetadata prevCol = keyIt.next();
@@ -450,13 +451,13 @@ public class Main {
                     if (newStart.getAsObject() == null) {
                         break;
                     }
-                    setBytesUnsafe(driver3Translator, s, prevCol.getName(), end);
+                    setBytesUnsafe(driver3FromLibraryTranslator, s, prevCol.getName(), end);
                     end = change.getCell(col.getName());
                     prevCol = col;
                     start = newStart;
                 }
-                setBytesUnsafe(driver3Translator, s, prevCol.getName() + "_start", start);
-                setBytesUnsafe(driver3Translator, s, prevCol.getName() + "_end", end);
+                setBytesUnsafe(driver3FromLibraryTranslator, s, prevCol.getName() + "_start", start);
+                setBytesUnsafe(driver3FromLibraryTranslator, s, prevCol.getName() + "_end", end);
                 s.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(change.getId().getTime()));
                 s.setConsistencyLevel(cl);
                 s.setIdempotent(true);
@@ -476,7 +477,7 @@ public class Main {
                     throw new IllegalStateException("Got range deletion end but no start in stream " + BaseEncoding.base16().encode(streamId, 0, 16));
                 }
                 try {
-                    return bind(table, driver3Translator, stmts.get(start.val.prefixSize).get(start.inclusive), c, start.val, cl);
+                    return bind(table, driver3FromLibraryTranslator, stmts.get(start.val.prefixSize).get(start.inclusive), c, start.val, cl);
                 } finally {
                     state.clear(streamId);
                 }
@@ -525,7 +526,7 @@ public class Main {
 
                 @Override
                 public boolean equals(Object o) {
-                    return o instanceof Key && Arrays.equals(val, ((Key)o).val);
+                    return o instanceof Key && Arrays.equals(val, ((Key) o).val);
                 }
 
                 @Override
@@ -569,18 +570,18 @@ public class Main {
             this.cl = cl;
             table = c.getMetadata().getKeyspaces().stream().filter(k -> k.getName().equals(keyspace))
                     .findAny().get().getTable(tableName);
-            driver3Translator = new Driver3Translator(c.getMetadata());
+            driver3FromLibraryTranslator = new Driver3FromLibraryTranslator(c.getMetadata());
             preimageQuery = createPreimageQuery(session, table);
             preparedOps.put(RawChange.OperationType.ROW_UPDATE,
-                    hasCollection(table) ? new UnpreparedUpdateOp(table, driver3Translator) : new UpdateOp(s, driver3Translator, table));
-            preparedOps.put(RawChange.OperationType.ROW_INSERT, new InsertOp(s, driver3Translator, table));
-            preparedOps.put(RawChange.OperationType.ROW_DELETE, new RowDeleteOp(s, driver3Translator, table));
-            preparedOps.put(RawChange.OperationType.PARTITION_DELETE, new PartitionDeleteOp(s, driver3Translator, table));
+                    hasCollection(table) ? new UnpreparedUpdateOp(table, driver3FromLibraryTranslator) : new UpdateOp(s, driver3FromLibraryTranslator, table));
+            preparedOps.put(RawChange.OperationType.ROW_INSERT, new InsertOp(s, driver3FromLibraryTranslator, table));
+            preparedOps.put(RawChange.OperationType.ROW_DELETE, new RowDeleteOp(s, driver3FromLibraryTranslator, table));
+            preparedOps.put(RawChange.OperationType.PARTITION_DELETE, new PartitionDeleteOp(s, driver3FromLibraryTranslator, table));
             RangeTombstoneState rtState = new RangeTombstoneState(table);
             preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_LEFT_BOUND, new RangeDeleteStartOp(rtState, true));
             preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND, new RangeDeleteStartOp(rtState, false));
-            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, driver3Translator, rtState, true));
-            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, driver3Translator, rtState, false));
+            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, driver3FromLibraryTranslator, rtState, true));
+            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, driver3FromLibraryTranslator, rtState, false));
         }
 
         private static boolean hasCollection(TableMetadata t) {
@@ -638,25 +639,6 @@ public class Main {
             }
         }
 
-        private static String print(ByteBuffer b) {
-            byte[] bytes = new byte[b.remaining()];
-            b.duplicate().get(bytes, 0, bytes.length);
-            return BaseEncoding.base16().encode(bytes, 0, bytes.length);
-        }
-
-        private static boolean equal(ByteBuffer a, ByteBuffer b) {
-            if (a == null && b != null) {
-                return false;
-            }
-            if (a != null && b == null) {
-                return false;
-            }
-            if (a == null && b == null) {
-                return true;
-            }
-            return a.equals(b);
-        }
-
         private CompletableFuture<Void> checkPreimage(RawChange c, ResultSet rs) {
             if (rs.getAvailableWithoutFetching() == 0) {
                 if (rs.isFullyFetched()) {
@@ -675,7 +657,16 @@ public class Main {
             Row expectedRow = rs.one();
             for (Definition d : expectedRow.getColumnDefinitions()) {
                 try {
-                    // TODO - compare expectedRow with c at column d
+                    Cell libraryCell = c.getCell(d.getName());
+                    Object libraryObject = libraryCell.getAsObject();
+                    Object expectedLibraryObject = Driver3ToLibraryTranslator.translate(expectedRow.getObject(d.getName()), libraryCell.getColumnDefinition().getCdcLogDataType());
+
+                    boolean consistent = Objects.equals(libraryObject, expectedLibraryObject);
+                    if (!consistent) {
+                        System.out.println("Inconsistency detected.\n Wrong values for column "
+                                + d.getName() + " expected " + expectedLibraryObject + " but got " + libraryObject);
+                        break;
+                    }
                 } catch (Exception e) {
                     System.out.println("Inconsistency detected.\nException.");
                     e.printStackTrace();
@@ -694,7 +685,7 @@ public class Main {
                             .collect(Collectors.toSet());
                     for (ChangeSchema.ColumnDefinition cd : change.getSchema().getAllColumnDefinitions()) {
                         if (primaryColumns.contains(cd.getColumnName())) {
-                            setBytesUnsafe(driver3Translator, stmt, cd.getColumnName(), change);
+                            setBytesUnsafe(driver3FromLibraryTranslator, stmt, cd.getColumnName(), change);
                         }
                     }
                     stmt.setConsistencyLevel(ConsistencyLevel.ALL);
@@ -712,9 +703,12 @@ public class Main {
             logger.atInfo().log("Replicator consuming change: %s", change.getId());
 
             switch (mode) {
-                case DELTA: return consumeDelta(change);
-                case POSTIMAGE: return consumePostimage(change);
-                case PREIMAGE: return consumePreimage(change);
+                case DELTA:
+                    return consumeDelta(change);
+                case POSTIMAGE:
+                    return consumePostimage(change);
+                case PREIMAGE:
+                    return consumePreimage(change);
             }
             throw new IllegalStateException("Unknown mode " + mode);
         }
