@@ -596,7 +596,7 @@ public class Main {
             }
             Statement stmt = op.getStatement(change, cl);
             if (stmt == null) {
-                return FutureUtils.completed(null);
+                return CompletableFuture.completedFuture(null);
             }
             return FutureUtils.convert(session.executeAsync(stmt), "Consume delta " + operationType);
         }
@@ -611,7 +611,7 @@ public class Main {
                 case ROW_UPDATE:
                 case ROW_INSERT:
                     nextPostimageOperation.put(streamid, preparedOps.get(operationType));
-                    return FutureUtils.completed(null);
+                    return CompletableFuture.completedFuture(null);
 
                 case ROW_DELETE:
                 case PARTITION_DELETE:
@@ -630,7 +630,7 @@ public class Main {
                             return FutureUtils.convert(session.executeAsync(stmt), "Consume postimage");
                         }
                     }
-                    return FutureUtils.completed(null);
+                    return CompletableFuture.completedFuture(null);
 
                 default:
                     System.err.println("Unsupported operation: " + operationType);
@@ -665,10 +665,10 @@ public class Main {
                     for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
                         if (!primaryColumns.contains(cd.getColumnName()) && c.getAsObject(cd.getColumnName()) != null) {
                             System.out.println("Inconsistency detected.\nNo row in target.");
-                            return FutureUtils.completed(null);
+                            return CompletableFuture.completedFuture(null);
                         }
                     }
-                    return FutureUtils.completed(null);
+                    return CompletableFuture.completedFuture(null);
                 }
                 return FutureUtils.transformDeferred(rs.fetchMoreResults(), r -> checkPreimage(c, r));
             }
@@ -682,7 +682,7 @@ public class Main {
                     break;
                 }
             }
-            return FutureUtils.completed(null);
+            return CompletableFuture.completedFuture(null);
         }
 
         private CompletableFuture<Void> consumePreimage(RawChange change) {
