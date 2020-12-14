@@ -1,4 +1,4 @@
-package com.scylladb.cdc.model.cql;
+package com.scylladb.cdc.model.worker.cql;
 
 import com.scylladb.cdc.model.worker.ChangeSchema;
 

@@ -62,7 +62,7 @@ import com.scylladb.cdc.cql.driver3.Driver3ToLibraryTranslator;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.cql.Cell;
+import com.scylladb.cdc.model.worker.cql.Cell;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;

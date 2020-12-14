@@ -1,6 +1,4 @@
-package com.scylladb.cdc.model.cql;
-
-import com.scylladb.cdc.model.worker.RawChange;
+package com.scylladb.cdc.model.worker.cql;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -104,12 +102,12 @@ public abstract class AbstractField {
         return (Long) value;
     }
 
-    public RawChange.Duration getDuration() {
-        return (RawChange.Duration) value;
+    public CqlDuration getDuration() {
+        return (CqlDuration) value;
     }
 
-    public RawChange.CqlDate getDate() {
-        return (RawChange.CqlDate) value;
+    public CqlDate getDate() {
+        return (CqlDate) value;
     }
 
     @Override

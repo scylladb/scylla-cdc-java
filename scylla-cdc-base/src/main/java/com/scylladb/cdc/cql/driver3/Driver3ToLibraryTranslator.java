@@ -1,11 +1,13 @@
 package com.scylladb.cdc.cql.driver3;
 
+import com.datastax.driver.core.Duration;
 import com.datastax.driver.core.LocalDate;
 import com.datastax.driver.core.TupleValue;
 import com.datastax.driver.core.UDTValue;
-import com.scylladb.cdc.model.cql.Field;
+import com.scylladb.cdc.model.worker.cql.CqlDate;
+import com.scylladb.cdc.model.worker.cql.CqlDuration;
+import com.scylladb.cdc.model.worker.cql.Field;
 import com.scylladb.cdc.model.worker.ChangeSchema;
-import com.scylladb.cdc.model.worker.RawChange;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -86,12 +88,12 @@ public class Driver3ToLibraryTranslator {
                 idx++;
             }
             return translatedTuple;
-        } else if (driverObject instanceof com.datastax.driver.core.Duration) {
-            com.datastax.driver.core.Duration driverDuration = (com.datastax.driver.core.Duration) driverObject;
-            return new RawChange.Duration(driverDuration.getMonths(), driverDuration.getDays(), driverDuration.getNanoseconds());
+        } else if (driverObject instanceof Duration) {
+            Duration driverDuration = (Duration) driverObject;
+            return new CqlDuration(driverDuration.getMonths(), driverDuration.getDays(), driverDuration.getNanoseconds());
         } else if (driverObject instanceof LocalDate) {
             LocalDate driverDate = (LocalDate) driverObject;
-            return new RawChange.CqlDate(driverDate.getYear(), driverDate.getMonth(), driverDate.getDay());
+            return new CqlDate(driverDate.getYear(), driverDate.getMonth(), driverDate.getDay());
         }
 
         // No translation needed, the object is

@@ -11,10 +11,11 @@ import com.datastax.driver.core.TypeCodec;
 import com.datastax.driver.core.UDTValue;
 import com.datastax.driver.core.UserType;
 import com.google.common.base.Preconditions;
-import com.scylladb.cdc.model.cql.Cell;
-import com.scylladb.cdc.model.cql.Field;
+import com.scylladb.cdc.model.worker.cql.Cell;
+import com.scylladb.cdc.model.worker.cql.CqlDate;
+import com.scylladb.cdc.model.worker.cql.CqlDuration;
+import com.scylladb.cdc.model.worker.cql.Field;
 import com.scylladb.cdc.model.worker.ChangeSchema;
-import com.scylladb.cdc.model.worker.RawChange;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -94,11 +95,11 @@ public class Driver3FromLibraryTranslator {
                 return driverTupleValue;
             }
             case DURATION: {
-                RawChange.Duration libraryDuration = (RawChange.Duration) libraryObject;
+                CqlDuration libraryDuration = (CqlDuration) libraryObject;
                 return Duration.newInstance(libraryDuration.getMonths(), libraryDuration.getDays(), libraryDuration.getNanoseconds());
             }
             case DATE: {
-                RawChange.CqlDate libraryDate = (RawChange.CqlDate) libraryObject;
+                CqlDate libraryDate = (CqlDate) libraryObject;
                 return LocalDate.fromYearMonthDay(libraryDate.getYear(), libraryDate.getMonth(), libraryDate.getDay());
             }
             default:

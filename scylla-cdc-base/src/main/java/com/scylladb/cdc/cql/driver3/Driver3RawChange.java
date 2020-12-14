@@ -2,27 +2,13 @@ package com.scylladb.cdc.cql.driver3;
 
 import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 
-import com.datastax.driver.core.Duration;
-import com.datastax.driver.core.LocalDate;
 import com.datastax.driver.core.Row;
-import com.datastax.driver.core.TupleValue;
-import com.datastax.driver.core.UDTValue;
-import com.datastax.driver.core.UserType;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.StreamId;
-import com.scylladb.cdc.model.cql.Field;
+import com.scylladb.cdc.model.worker.cql.Field;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
-
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public final class Driver3RawChange implements RawChange {
     private final Row row;
