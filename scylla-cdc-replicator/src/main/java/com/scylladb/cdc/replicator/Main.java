@@ -61,6 +61,7 @@ import com.scylladb.cdc.cql.driver3.Driver3Translator;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.cql.Cell;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;
@@ -110,6 +111,17 @@ public class Main {
 
         private static long timeuuidToTimestamp(UUID from) {
             return (from.timestamp() - 0x01b21dd213814000L) / 10;
+        }
+
+        private static void setBytesUnsafe(Driver3Translator driver3Translator, BoundStatement statement, String columnName, Cell cell) {
+            TypeCodec<Object> driverCodec = driver3Translator.getTypeCodec(cell.getColumnDefinition().getCdcLogDataType());
+            Object driverObject = driver3Translator.translate(cell);
+            statement.set(columnName, driverObject, driverCodec);
+        }
+
+        private static void setBytesUnsafe(Driver3Translator driver3Translator, BoundStatement statement, String columnName, RawChange change) {
+            Cell cell = change.getCell(columnName);
+            setBytesUnsafe(driver3Translator, statement, columnName, cell);
         }
 
         private static abstract class PreparedOperation implements Operation {
@@ -170,7 +182,7 @@ public class Main {
                                     }
                                     stmt.setList(cd.getColumnName(), list);
                                 } else {
-                                    stmt.setBytesUnsafe(cd.getColumnName(), c.getAsBytes(cd.getColumnName()));
+                                    setBytesUnsafe(driver3Translator, stmt, cd.getColumnName(), c);
                                 }
                                 break;
                             case PREIMAGE:
@@ -187,7 +199,7 @@ public class Main {
                         .collect(Collectors.toSet());
                 for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
                     if (primaryColumns.contains(cd.getColumnName())) {
-                        stmt.setBytesUnsafe(cd.getColumnName(), c.getAsBytes(cd.getColumnName()));
+                        setBytesUnsafe(driver3Translator, stmt, cd.getColumnName(), c);
                     }
                 }
             }
@@ -197,7 +209,7 @@ public class Main {
                         .collect(Collectors.toSet());
                 for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
                     if (partitionColumns.contains(cd.getColumnName())) {
-                        stmt.setBytesUnsafe(cd.getColumnName(), c.getAsBytes(cd.getColumnName()));
+                        setBytesUnsafe(driver3Translator, stmt, cd.getColumnName(), c);
                     }
                 }
             }
@@ -398,6 +410,7 @@ public class Main {
             private final TableMetadata table;
             private final RangeTombstoneState state;
             private final Map<Integer, Map<Boolean, PreparedStatement>> stmts = new HashMap<>();
+            private final Driver3Translator driver3Translator;
 
             private static PreparedStatement prepare(Session s, TableMetadata t, int prefixSize, boolean startInclusive,
                                                      boolean endInclusive) {
@@ -413,9 +426,10 @@ public class Main {
                 return s.prepare(builder);
             }
 
-            public RangeDeleteEndOp(Session session, TableMetadata t, RangeTombstoneState state, boolean inclusive) {
+            public RangeDeleteEndOp(Session session, TableMetadata t, Driver3Translator driver3Translator, RangeTombstoneState state, boolean inclusive) {
                 table = t;
                 this.state = state;
+                this.driver3Translator = driver3Translator;
                 for (int i = t.getPartitionKey().size(); i < t.getPrimaryKey().size(); ++i) {
                     Map<Boolean, PreparedStatement> map = new HashMap<>();
                     map.put(true, prepare(session, t, i, true, inclusive));
@@ -424,25 +438,25 @@ public class Main {
                 }
             }
 
-            private static Statement bind(TableMetadata table, PreparedStatement stmt, RawChange change, PrimaryKeyValue startVal, ConsistencyLevel cl) {
+            private static Statement bind(TableMetadata table, Driver3Translator driver3Translator, PreparedStatement stmt, RawChange change, PrimaryKeyValue startVal, ConsistencyLevel cl) {
                 BoundStatement s = stmt.bind();
                 Iterator<ColumnMetadata> keyIt = table.getPrimaryKey().iterator();
                 ColumnMetadata prevCol = keyIt.next();
-                ByteBuffer end = change.getAsBytes(prevCol.getName());
-                byte[] start = startVal.values.get(prevCol.getName());
+                Cell end = change.getCell(prevCol.getName());
+                Cell start = startVal.change.getCell(prevCol.getName());
                 while (keyIt.hasNext()) {
                     ColumnMetadata col = keyIt.next();
-                    byte[] newStart = startVal.values.get(col.getName());
-                    if (newStart == null) {
+                    Cell newStart = startVal.change.getCell(col.getName());
+                    if (newStart.getAsObject() == null) {
                         break;
                     }
-                    s.setBytesUnsafe(prevCol.getName(), end);
-                    end = change.getAsBytes(col.getName());
+                    setBytesUnsafe(driver3Translator, s, prevCol.getName(), end);
+                    end = change.getCell(col.getName());
                     prevCol = col;
                     start = newStart;
                 }
-                s.setBytesUnsafe(prevCol.getName() + "_start", ByteBuffer.wrap(start));
-                s.setBytesUnsafe(prevCol.getName() + "_end", end);
+                setBytesUnsafe(driver3Translator, s, prevCol.getName() + "_start", start);
+                setBytesUnsafe(driver3Translator, s, prevCol.getName() + "_end", end);
                 s.setLong(TIMESTAMP_MARKER_NAME, timeuuidToTimestamp(change.getId().getTime()));
                 s.setConsistencyLevel(cl);
                 s.setIdempotent(true);
@@ -462,7 +476,7 @@ public class Main {
                     throw new IllegalStateException("Got range deletion end but no start in stream " + BaseEncoding.base16().encode(streamId, 0, 16));
                 }
                 try {
-                    return bind(table, stmts.get(start.val.values.size()).get(start.inclusive), c, start.val, cl);
+                    return bind(table, driver3Translator, stmts.get(start.val.prefixSize).get(start.inclusive), c, start.val, cl);
                 } finally {
                     state.clear(streamId);
                 }
@@ -481,17 +495,21 @@ public class Main {
         }
 
         private static class PrimaryKeyValue {
-            public final Map<String, byte[]> values = new HashMap<>();
+            public final RawChange change;
+            public final int prefixSize;
 
             public PrimaryKeyValue(TableMetadata table, RawChange change) {
+                this.change = change;
+                int prefixSize = 0;
                 for (ColumnMetadata col : table.getPrimaryKey()) {
-                    ByteBuffer buf = change.getAsBytes(col.getName());
-                    if (buf != null) {
-                        byte[] bytes = new byte[buf.remaining()];
-                        buf.get(bytes);
-                        values.put(col.getName(), bytes);
+                    Object colValue = change.getAsObject(col.getName());
+                    if (colValue != null) {
+                        prefixSize++;
+                    } else {
+                        break;
                     }
                 }
+                this.prefixSize = prefixSize;
             }
 
         }
@@ -561,8 +579,8 @@ public class Main {
             RangeTombstoneState rtState = new RangeTombstoneState(table);
             preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_LEFT_BOUND, new RangeDeleteStartOp(rtState, true));
             preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND, new RangeDeleteStartOp(rtState, false));
-            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, rtState, true));
-            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, rtState, false));
+            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, driver3Translator, rtState, true));
+            preparedOps.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOp(s, table, driver3Translator, rtState, false));
         }
 
         private static boolean hasCollection(TableMetadata t) {
@@ -657,13 +675,7 @@ public class Main {
             Row expectedRow = rs.one();
             for (Definition d : expectedRow.getColumnDefinitions()) {
                 try {
-                    ByteBuffer expectedColumn = expectedRow.getBytesUnsafe(d.getName());
-                    ByteBuffer column = c.getAsBytes(d.getName());
-                    if (!equal(expectedColumn, column)) {
-                        System.out.println("Inconsistency detected.\n Wrong values for column "
-                                + d.getName() + " expected " + print(expectedColumn) + " but got " + print(column));
-                        break;
-                    }
+                    // TODO - compare expectedRow with c at column d
                 } catch (Exception e) {
                     System.out.println("Inconsistency detected.\nException.");
                     e.printStackTrace();
@@ -682,7 +694,7 @@ public class Main {
                             .collect(Collectors.toSet());
                     for (ChangeSchema.ColumnDefinition cd : change.getSchema().getAllColumnDefinitions()) {
                         if (primaryColumns.contains(cd.getColumnName())) {
-                            stmt.setBytesUnsafe(cd.getColumnName(), change.getAsBytes(cd.getColumnName()));
+                            setBytesUnsafe(driver3Translator, stmt, cd.getColumnName(), change);
                         }
                     }
                     stmt.setConsistencyLevel(ConsistencyLevel.ALL);

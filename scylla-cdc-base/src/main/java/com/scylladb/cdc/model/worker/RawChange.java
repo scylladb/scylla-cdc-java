@@ -156,12 +156,6 @@ public interface RawChange {
      */
     Object getAsObject(String columnName);
 
-    /*
-     * Gets the value of column as ByteBuffer.
-     * (As it was returned by a driver)
-     */
-    ByteBuffer getAsBytes(String columnName);
-
     default Cell getCell(String columnName) {
         ChangeSchema.ColumnDefinition columnDefinition = getSchema().getColumnDefinition(columnName);
         return new Cell(columnDefinition, getAsObject(columnName));

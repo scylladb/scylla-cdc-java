@@ -108,6 +108,11 @@ public class Driver3Translator {
         }
     }
 
+    public TypeCodec<Object> getTypeCodec(ChangeSchema.DataType libraryDataType) {
+        DataType driverDataType = getDriverDataType(libraryDataType);
+        return getTypeCodec(driverDataType);
+    }
+
     private TypeCodec<Object> getTypeCodec(DataType driverDataType) {
         return CodecRegistry.DEFAULT_INSTANCE.codecFor(driverDataType);
     }

@@ -138,15 +138,6 @@ public final class Driver3RawChange implements RawChange {
         return driverObject;
     }
 
-    @Override
-    public ByteBuffer getAsBytes(String columnName) {
-        if (row.isNull(columnName)) {
-            return null;
-        } else {
-            return row.getBytesUnsafe(columnName);
-        }
-    }
-
     /*
      * What follows are temporary methods
      * used for porting the replicator
