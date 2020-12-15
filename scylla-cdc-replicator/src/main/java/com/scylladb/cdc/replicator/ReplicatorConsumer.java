@@ -27,11 +27,11 @@ import com.scylladb.cdc.replicator.operations.PartitionDeleteOperationHandler;
 import com.scylladb.cdc.replicator.operations.PreparedUpdateOperationHandler;
 import com.scylladb.cdc.replicator.operations.RangeDeleteEndOperationHandler;
 import com.scylladb.cdc.replicator.operations.RangeDeleteStartOperationHandler;
+import com.scylladb.cdc.replicator.operations.RangeDeleteState;
 import com.scylladb.cdc.replicator.operations.RowDeleteOperationHandler;
 import com.scylladb.cdc.replicator.operations.UnpreparedUpdateOperationHandler;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -69,78 +69,6 @@ public class ReplicatorConsumer implements RawChangeConsumer {
         setBytesUnsafe(driver3FromLibraryTranslator, statement, columnName, cell);
     }
 
-    public static class PrimaryKeyValue {
-        public final RawChange change;
-        public final int prefixSize;
-
-        public PrimaryKeyValue(TableMetadata table, RawChange change) {
-            this.change = change;
-            int prefixSize = 0;
-            for (ColumnMetadata col : table.getPrimaryKey()) {
-                Object colValue = change.getAsObject(col.getName());
-                if (colValue != null) {
-                    prefixSize++;
-                } else {
-                    break;
-                }
-            }
-            this.prefixSize = prefixSize;
-        }
-
-    }
-
-    public static class RangeTombstoneState {
-
-        public static class DeletionStart {
-            public final PrimaryKeyValue val;
-            public final boolean inclusive;
-
-            public DeletionStart(PrimaryKeyValue v, boolean i) {
-                val = v;
-                inclusive = i;
-            }
-        }
-
-        private static class Key {
-            public final byte[] val;
-
-            public Key(byte[] v) {
-                val = v;
-            }
-
-            @Override
-            public boolean equals(Object o) {
-                return o instanceof Key && Arrays.equals(val, ((Key) o).val);
-            }
-
-            @Override
-            public int hashCode() {
-                return Arrays.hashCode(val);
-            }
-        }
-
-        private final TableMetadata table;
-        private final ConcurrentHashMap<Key, DeletionStart> state = new ConcurrentHashMap<>();
-
-        public RangeTombstoneState(TableMetadata table) {
-            this.table = table;
-        }
-
-        public void addStart(RawChange c, boolean inclusive) {
-            byte[] bytes = new byte[16];
-            c.getId().getStreamId().getValue().duplicate().get(bytes, 0, 16);
-            state.put(new Key(bytes), new DeletionStart(new PrimaryKeyValue(table, c), inclusive));
-        }
-
-        public DeletionStart getStart(byte[] streamId) {
-            return state.get(new Key(streamId));
-        }
-
-        public void clear(byte[] streamId) {
-            state.remove(new Key(streamId));
-        }
-    }
-
     private static PreparedStatement createPreimageQuery(Session s, TableMetadata t) {
         Select builder = QueryBuilder.select().all().from(t);
         t.getPrimaryKey().stream().forEach(c -> builder.where(eq(c.getName(), bindMarker(c.getName()))));
@@ -152,24 +80,23 @@ public class ReplicatorConsumer implements RawChangeConsumer {
         mode = m;
         session = s;
         this.cl = cl;
-        table = c.getMetadata().getKeyspaces().stream().filter(k -> k.getName().equals(keyspace))
-                .findAny().get().getTable(tableName);
+        table = c.getMetadata().getKeyspace(keyspace).getTable(tableName);
         driver3FromLibraryTranslator = new Driver3FromLibraryTranslator(c.getMetadata());
         preimageQuery = createPreimageQuery(session, table);
         operationHandlers.put(RawChange.OperationType.ROW_UPDATE,
-                hasCollection(table) ? new UnpreparedUpdateOperationHandler(table, driver3FromLibraryTranslator) : new PreparedUpdateOperationHandler(s, driver3FromLibraryTranslator, table));
+                hasCollection() ? new UnpreparedUpdateOperationHandler(table, driver3FromLibraryTranslator) : new PreparedUpdateOperationHandler(s, driver3FromLibraryTranslator, table));
         operationHandlers.put(RawChange.OperationType.ROW_INSERT, new InsertOperationHandler(s, driver3FromLibraryTranslator, table));
         operationHandlers.put(RawChange.OperationType.ROW_DELETE, new RowDeleteOperationHandler(s, driver3FromLibraryTranslator, table));
         operationHandlers.put(RawChange.OperationType.PARTITION_DELETE, new PartitionDeleteOperationHandler(s, driver3FromLibraryTranslator, table));
-        RangeTombstoneState rtState = new RangeTombstoneState(table);
-        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_LEFT_BOUND, new RangeDeleteStartOperationHandler(rtState, true));
-        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND, new RangeDeleteStartOperationHandler(rtState, false));
-        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOperationHandler(s, table, driver3FromLibraryTranslator, rtState, true));
-        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOperationHandler(s, table, driver3FromLibraryTranslator, rtState, false));
+        RangeDeleteState rangeDeleteState = new RangeDeleteState(table);
+        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_LEFT_BOUND, new RangeDeleteStartOperationHandler(rangeDeleteState, true));
+        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND, new RangeDeleteStartOperationHandler(rangeDeleteState, false));
+        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOperationHandler(s, table, driver3FromLibraryTranslator, rangeDeleteState, true));
+        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOperationHandler(s, table, driver3FromLibraryTranslator, rangeDeleteState, false));
     }
 
-    private static boolean hasCollection(TableMetadata t) {
-        return t.getColumns().stream().anyMatch(c -> c.getType().isCollection() && !c.getType().isFrozen());
+    private boolean hasCollection() {
+        return table.getColumns().stream().anyMatch(c -> c.getType().isCollection() && !c.getType().isFrozen());
     }
 
     private CompletableFuture<Void> consumeDelta(RawChange change) {

@@ -25,7 +25,7 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
 public class RangeDeleteEndOperationHandler implements CdcOperationHandler {
     private final TableMetadata table;
-    private final ReplicatorConsumer.RangeTombstoneState state;
+    private final RangeDeleteState state;
     private final Map<Integer, Map<Boolean, PreparedStatement>> stmts = new HashMap<>();
     private final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
 
@@ -43,7 +43,7 @@ public class RangeDeleteEndOperationHandler implements CdcOperationHandler {
         return s.prepare(builder);
     }
 
-    public RangeDeleteEndOperationHandler(Session session, TableMetadata t, Driver3FromLibraryTranslator driver3FromLibraryTranslator, ReplicatorConsumer.RangeTombstoneState state, boolean inclusive) {
+    public RangeDeleteEndOperationHandler(Session session, TableMetadata t, Driver3FromLibraryTranslator driver3FromLibraryTranslator, RangeDeleteState state, boolean inclusive) {
         table = t;
         this.state = state;
         this.driver3FromLibraryTranslator = driver3FromLibraryTranslator;
@@ -55,7 +55,7 @@ public class RangeDeleteEndOperationHandler implements CdcOperationHandler {
         }
     }
 
-    private static Statement bind(TableMetadata table, Driver3FromLibraryTranslator driver3FromLibraryTranslator, PreparedStatement stmt, RawChange change, ReplicatorConsumer.PrimaryKeyValue startVal, ConsistencyLevel cl) {
+    private static Statement bind(TableMetadata table, Driver3FromLibraryTranslator driver3FromLibraryTranslator, PreparedStatement stmt, RawChange change, RangeDeleteState.PrimaryKeyValue startVal, ConsistencyLevel cl) {
         BoundStatement s = stmt.bind();
         Iterator<ColumnMetadata> keyIt = table.getPrimaryKey().iterator();
         ColumnMetadata prevCol = keyIt.next();
@@ -84,7 +84,7 @@ public class RangeDeleteEndOperationHandler implements CdcOperationHandler {
     public Statement getStatement(RawChange c, ConsistencyLevel cl, Main.Mode m) {
         byte[] streamId = new byte[16];
         c.getId().getStreamId().getValue().duplicate().get(streamId, 0, 16);
-        ReplicatorConsumer.RangeTombstoneState.DeletionStart start = state.getStart(streamId);
+        RangeDeleteState.DeletionStart start = state.getStart(streamId);
         if (start == null) {
             throw new IllegalStateException("Got range deletion end but no start in stream " + BaseEncoding.base16().encode(streamId, 0, 16));
         }
