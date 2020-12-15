@@ -58,15 +58,9 @@ public interface RawChange {
         return new Cell(columnDefinition, getAsObject(columnName));
     }
 
-    /*
-     * What follows are temporary methods
-     * used for porting the replicator
-     * from old library to new library.
-     *
-     * Those methods should be removed
-     * after the porting process is done.
-     */
-
-    @Deprecated
-    boolean TEMPORARY_PORTING_isDeleted(String name);
+    default boolean getIsDeleted(String columnName) {
+        String deletedColumnName = "cdc$deleted_" + columnName;
+        Boolean value = getCell(deletedColumnName).getBoolean();
+        return value != null && value;
+    }
 }

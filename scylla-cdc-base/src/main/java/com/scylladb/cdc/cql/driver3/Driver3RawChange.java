@@ -41,19 +41,4 @@ public final class Driver3RawChange implements RawChange {
             return Driver3ToLibraryTranslator.translate(row.getObject(columnName), columnDefinition.getCdcLogDataType());
         }
     }
-
-    /*
-     * What follows are temporary methods
-     * used for porting the replicator
-     * from old library to new library.
-     *
-     * Those methods should be removed
-     * after the porting process is done.
-     */
-
-    @Override
-    public boolean TEMPORARY_PORTING_isDeleted(String name) {
-        String deletionColumnName = "cdc$deleted_" + name;
-        return !row.isNull(deletionColumnName) && row.getBool(deletionColumnName);
-    }
 }
