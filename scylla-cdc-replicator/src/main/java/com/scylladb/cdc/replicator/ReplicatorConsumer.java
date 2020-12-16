@@ -46,8 +46,6 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.bindMarker;
 public class ReplicatorConsumer implements RawChangeConsumer {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
-    public static final String TIMESTAMP_MARKER_NAME = "using_timestamp_bind_marker";
-
     private final Session session;
     private final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
     private final ConsistencyLevel cl;
@@ -106,7 +104,7 @@ public class ReplicatorConsumer implements RawChangeConsumer {
             System.err.println("Unsupported operation: " + operationType);
             throw new UnsupportedOperationException(operationType.toString());
         }
-        Statement stmt = op.getStatement(change, cl, Main.Mode.DELTA);
+        Statement stmt = op.getStatement(change, cl);
         if (stmt == null) {
             return CompletableFuture.completedFuture(null);
         }
@@ -137,7 +135,7 @@ public class ReplicatorConsumer implements RawChangeConsumer {
             case POST_IMAGE:
                 CdcOperationHandler op = nextPostimageOperation.remove(streamid);
                 if (op != null) {
-                    Statement stmt = op.getStatement(change, cl, mode);
+                    Statement stmt = op.getStatement(change, cl);
                     if (stmt != null) {
                         return FutureUtils.convert(session.executeAsync(stmt), "Consume postimage");
                     }

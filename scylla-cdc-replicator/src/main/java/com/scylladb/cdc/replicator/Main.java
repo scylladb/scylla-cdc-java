@@ -3,7 +3,6 @@ package com.scylladb.cdc.replicator;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.Session;
-import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
@@ -15,14 +14,11 @@ import sun.misc.Signal;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 public class Main {
-    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
-
     public enum Mode {
         DELTA, PREIMAGE, POSTIMAGE;
 
@@ -97,7 +93,7 @@ public class Main {
         }
     }
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         Namespace ns = parseArguments(args);
         replicateChanges(Mode.fromString(ns.getString("mode")), ns.getString("source"),
                 ns.getString("destination"), ns.getString("keyspace"), ns.getString("table"),

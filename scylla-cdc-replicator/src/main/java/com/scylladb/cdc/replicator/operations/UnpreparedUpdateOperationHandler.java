@@ -11,7 +11,6 @@ import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.Update;
 import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.RawChange;
-import com.scylladb.cdc.replicator.Main;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -22,7 +21,6 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
-import static com.datastax.driver.core.querybuilder.QueryBuilder.putAll;
 
 public class UnpreparedUpdateOperationHandler implements CdcOperationHandler {
     private final TableMetadata table;
@@ -34,7 +32,7 @@ public class UnpreparedUpdateOperationHandler implements CdcOperationHandler {
     }
 
     @Override
-    public Statement getStatement(RawChange change, ConsistencyLevel cl, Main.Mode m) {
+    public Statement getStatement(RawChange change, ConsistencyLevel cl) {
         Update builder = QueryBuilder.update(table);
         Set<ColumnMetadata> primaryColumns = new HashSet<>(table.getPrimaryKey());
         table.getColumns().stream().forEach(c -> {

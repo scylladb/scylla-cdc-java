@@ -10,7 +10,6 @@ import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.cql.Cell;
-import com.scylladb.cdc.replicator.Main;
 
 import java.util.Iterator;
 
@@ -31,7 +30,7 @@ public class RangeDeleteEndOperationHandler implements CdcOperationHandler {
     }
 
     @Override
-    public Statement getStatement(RawChange c, ConsistencyLevel cl, Main.Mode m) {
+    public Statement getStatement(RawChange c, ConsistencyLevel cl) {
         StreamId streamId = c.getId().getStreamId();
 
         RangeDeleteState.DeletionStart start = state.getStart(streamId);

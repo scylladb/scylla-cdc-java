@@ -8,8 +8,6 @@ import com.datastax.driver.core.querybuilder.Insert;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.RawChange;
-import com.scylladb.cdc.replicator.Main;
-import com.scylladb.cdc.replicator.operations.PreparedCdcOperationHandler;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
@@ -28,9 +26,9 @@ public class InsertOperationHandler extends PreparedCdcOperationHandler {
     }
 
     @Override
-    protected void bindInternal(BoundStatement stmt, RawChange c, Main.Mode m) {
+    protected void bindInternal(BoundStatement stmt, RawChange c) {
         bindTTL(stmt, c);
-        bindAllNonCDCColumns(stmt, c, m);
+        bindAllNonCDCColumns(stmt, c);
     }
 
 }

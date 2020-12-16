@@ -9,7 +9,6 @@ import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.Update;
 import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.RawChange;
-import com.scylladb.cdc.replicator.Main;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -38,9 +37,9 @@ public class PreparedUpdateOperationHandler extends PreparedCdcOperationHandler 
     }
 
     @Override
-    protected void bindInternal(BoundStatement stmt, RawChange c, Main.Mode m) {
+    protected void bindInternal(BoundStatement stmt, RawChange c) {
         bindTTL(stmt, c);
-        bindAllNonCDCColumns(stmt, c, m);
+        bindAllNonCDCColumns(stmt, c);
     }
 
 }

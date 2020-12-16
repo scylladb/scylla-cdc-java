@@ -3,7 +3,6 @@ package com.scylladb.cdc.replicator.operations;
 import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.Statement;
 import com.scylladb.cdc.model.worker.RawChange;
-import com.scylladb.cdc.replicator.Main;
 
 public class RangeDeleteStartOperationHandler implements CdcOperationHandler {
     private final RangeDeleteState state;
@@ -15,7 +14,7 @@ public class RangeDeleteStartOperationHandler implements CdcOperationHandler {
     }
 
     @Override
-    public Statement getStatement(RawChange c, ConsistencyLevel cl, Main.Mode m) {
+    public Statement getStatement(RawChange c, ConsistencyLevel cl) {
         state.addStart(c, inclusive);
         return null;
     }
