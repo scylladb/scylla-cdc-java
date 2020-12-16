@@ -88,11 +88,11 @@ public class ReplicatorConsumer implements RawChangeConsumer {
         operationHandlers.put(RawChange.OperationType.ROW_INSERT, new InsertOperationHandler(s, driver3FromLibraryTranslator, table));
         operationHandlers.put(RawChange.OperationType.ROW_DELETE, new RowDeleteOperationHandler(s, driver3FromLibraryTranslator, table));
         operationHandlers.put(RawChange.OperationType.PARTITION_DELETE, new PartitionDeleteOperationHandler(s, driver3FromLibraryTranslator, table));
-        RangeDeleteState rangeDeleteState = new RangeDeleteState(table);
+        RangeDeleteState rangeDeleteState = new RangeDeleteState();
         operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_LEFT_BOUND, new RangeDeleteStartOperationHandler(rangeDeleteState, true));
         operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND, new RangeDeleteStartOperationHandler(rangeDeleteState, false));
-        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOperationHandler(s, table, driver3FromLibraryTranslator, rangeDeleteState, true));
-        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOperationHandler(s, table, driver3FromLibraryTranslator, rangeDeleteState, false));
+        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOperationHandler(table, driver3FromLibraryTranslator, rangeDeleteState, true));
+        operationHandlers.put(RawChange.OperationType.ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND, new RangeDeleteEndOperationHandler(table, driver3FromLibraryTranslator, rangeDeleteState, false));
     }
 
     private boolean hasCollection() {
