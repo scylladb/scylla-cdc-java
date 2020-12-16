@@ -257,6 +257,8 @@ public class ChangeSchema {
         return result.orElseThrow(() -> new IllegalArgumentException("Column name " + columnName + " is not present in change schema."));
     }
 
+    // TODO - add getTableName() here.
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

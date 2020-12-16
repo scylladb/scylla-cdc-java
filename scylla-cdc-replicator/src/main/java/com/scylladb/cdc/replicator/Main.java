@@ -13,7 +13,11 @@ import net.sourceforge.argparse4j.inf.ArgumentParserException;
 import net.sourceforge.argparse4j.inf.Namespace;
 import sun.misc.Signal;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 public class Main {
@@ -35,24 +39,39 @@ public class Main {
         }
     }
 
-    private static void replicateChanges(Mode mode, String source, String destination, String keyspace, String table,
+    private static void replicateChanges(Mode mode, String source, String destination, String keyspace, String tables,
                                          ConsistencyLevel cl) {
         try (Cluster sCluster = Cluster.builder().addContactPoint(source).build();
              Session sSession = sCluster.connect();
              Cluster dCluster = Cluster.builder().addContactPoint(destination).build();
              Session dSession = dCluster.connect()) {
 
-            HashSet<TableName> tables = new HashSet<>();
-            tables.add(new TableName(keyspace, table));
+            List<CDCConsumer> startedConsumers = new ArrayList<>();
+            String[] parsedTables = tables.split(",");
 
-            CDCConsumer consumer = CDCConsumerBuilder.builder(sSession, (threadId) -> new ReplicatorConsumer(mode, dCluster, dSession, keyspace, table, cl), tables).workersCount(1).build();
-            consumer.start();
+            // TODO - currently building a separate CDCConsumer per each table.
+            // Should be able to construct a single CDCConsumer and ReplicatorConsumer
+            // to "multiplex" - maybe there should be a helper class that does the multiplexing?
+            // and the ReplicatorConsumer doesn't have to do it manually.
+            //
+            // ConsumerMultiplexer((tableName) -> new ReplicatorConsumer(...))
+            for (String table : parsedTables) {
+                Set<TableName> cdcTableSet = Collections.singleton(new TableName(keyspace, table));
+
+                CDCConsumer consumer = CDCConsumerBuilder.builder(sSession, (threadId) -> new ReplicatorConsumer(mode, dCluster, dSession, keyspace, table, cl), cdcTableSet).workersCount(1).build();
+                consumer.start();
+
+                startedConsumers.add(consumer);
+            }
 
             try {
                 CountDownLatch terminationLatch = new CountDownLatch(1);
                 Signal.handle(new Signal("INT"), signal -> terminationLatch.countDown());
                 terminationLatch.await();
-                consumer.stop();
+
+                for (CDCConsumer consumer : startedConsumers) {
+                    consumer.stop();
+                }
             } catch (InterruptedException e) {
                 // Ignore exception.
             }
@@ -63,7 +82,7 @@ public class Main {
         ArgumentParser parser = ArgumentParsers.newFor("CDCReplicator").build().defaultHelp(true);
         parser.addArgument("-m", "--mode").setDefault("delta").help("Mode of operation. Can be delta, preimage or postimage. Default is delta");
         parser.addArgument("-k", "--keyspace").help("Keyspace name");
-        parser.addArgument("-t", "--table").help("Table name");
+        parser.addArgument("-t", "--table").help("Table names, provided as a comma delimited string");
         parser.addArgument("-s", "--source").help("Address of a node in source cluster");
         parser.addArgument("-d", "--destination").help("Address of a node in destination cluster");
         parser.addArgument("-cl", "--consistency-level").setDefault("quorum")
