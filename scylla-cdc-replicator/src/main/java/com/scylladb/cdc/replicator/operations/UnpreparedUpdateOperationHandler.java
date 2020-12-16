@@ -13,9 +13,12 @@ import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.replicator.Main;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
@@ -72,7 +75,24 @@ public class UnpreparedUpdateOperationHandler implements CdcOperationHandler {
                     }
                 }
                 if (op == null) {
-                    op = set(c.getName(), driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
+                    if (c.getType().getName() == DataType.Name.LIST && !c.getType().isFrozen()) {
+                        Map<UUID, Object> cMap = (Map<UUID, Object>) driver3FromLibraryTranslator.translate(change.getCell(c.getName()));
+                        if (cMap == null) {
+                            op = set(c.getName(), null);
+                        } else {
+                            TreeMap<UUID, Object> sorted = new TreeMap<>();
+                            for (Map.Entry<UUID, Object> e : cMap.entrySet()) {
+                                sorted.put(e.getKey(), e.getValue());
+                            }
+                            List<Object> list = new ArrayList<>();
+                            for (Map.Entry<UUID, Object> e : sorted.entrySet()) {
+                                list.add(e.getValue());
+                            }
+                            op = set(c.getName(), list);
+                        }
+                    } else {
+                        op = set(c.getName(), driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
+                    }
                 }
                 builder.with(op);
             }
@@ -83,6 +103,7 @@ public class UnpreparedUpdateOperationHandler implements CdcOperationHandler {
         } else {
             builder.using(timestamp(change.getId().getChangeTime().getTimestamp()));
         }
+        builder.setConsistencyLevel(cl);
         return builder;
     }
 

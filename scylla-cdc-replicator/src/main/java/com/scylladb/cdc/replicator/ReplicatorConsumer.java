@@ -211,7 +211,7 @@ public class ReplicatorConsumer implements RawChangeConsumer {
 
     @Override
     public CompletableFuture<Void> consume(RawChange change) {
-        logger.atInfo().log("Replicator consuming change: %s", change.getId());
+        logger.atInfo().log("Replicator consuming change: %s, %s", change.getId(), change.getOperationType());
 
         switch (mode) {
             case DELTA:

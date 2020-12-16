@@ -73,6 +73,11 @@ public abstract class PreparedCdcOperationHandler implements CdcOperationHandler
                             TypeToken<Object> type = CodecRegistry.DEFAULT_INSTANCE.codecFor(innerType).getJavaType();
                             TreeMap<UUID, Object> sorted = new TreeMap<>();
                             Map<UUID, Object> cMap = (Map<UUID, Object>) driver3FromLibraryTranslator.translate(c.getCell(cd.getColumnName()));
+                            if (cMap == null) {
+                                stmt.setToNull(cd.getColumnName());
+                                break;
+                            }
+
                             for (Map.Entry<UUID, Object> e : cMap.entrySet()) {
                                 sorted.put(e.getKey(), e.getValue());
                             }
