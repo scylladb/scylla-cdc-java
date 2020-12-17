@@ -1,9 +1,10 @@
 package com.scylladb.cdc.replicator.operations;
 
 import com.datastax.driver.core.ConsistencyLevel;
-import com.datastax.driver.core.Statement;
 import com.scylladb.cdc.model.worker.RawChange;
 
+import java.util.concurrent.CompletableFuture;
+
 public interface CdcOperationHandler {
-    Statement getStatement(RawChange c, ConsistencyLevel cl);
+    CompletableFuture<Void> handle(RawChange change, ConsistencyLevel cl);
 }

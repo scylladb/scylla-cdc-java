@@ -19,47 +19,47 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 public class Main {
-    public enum Mode {
-        DELTA, PREIMAGE, POSTIMAGE;
+    public static void main(String[] args) {
+        // Parse command-line arguments.
+        Namespace parsedArguments = parseArguments(args);
+        Mode replicatorMode = Mode.fromString(parsedArguments.getString("mode"));
+        String source = parsedArguments.getString("source");
+        String destination = parsedArguments.getString("destination");
+        String keyspace = parsedArguments.getString("keyspace");
+        String table = parsedArguments.getString("table");
+        ConsistencyLevel consistencyLevel = ConsistencyLevel.valueOf(parsedArguments.getString("consistency_level").toUpperCase());
 
-        public static Mode fromString(String mode) {
-            if ("delta".equals(mode)) {
-                return DELTA;
-            } else if ("preimage".equals(mode)) {
-                return PREIMAGE;
-            } else if ("postimage".equals(mode)) {
-                return POSTIMAGE;
-            } else {
-                throw new IllegalStateException("Wrong mode " + mode);
-            }
-        }
+        // Start replicating changes from source cluster to destination cluster
+        // of selected tables.
+        startReplicator(replicatorMode, source, destination, keyspace, table, consistencyLevel);
     }
 
-    private static void replicateChanges(Mode mode, String source, String destination, String keyspace, String tables,
-                                         ConsistencyLevel cl) {
-        try (Cluster sCluster = Cluster.builder().addContactPoint(source).build();
-             Session sSession = sCluster.connect();
-             Cluster dCluster = Cluster.builder().addContactPoint(destination).build();
-             Session dSession = dCluster.connect()) {
+    private static void startReplicator(Mode mode, String source, String destination, String keyspace, String tables,
+                                        ConsistencyLevel consistencyLevel) {
+        // Connect to source and destination clusters.
+        try (Cluster sourceCluster = Cluster.builder().addContactPoint(source).build();
+             Session sourceSession = sourceCluster.connect();
+             Cluster destinationCluster = Cluster.builder().addContactPoint(destination).build();
+             Session destinationSession = destinationCluster.connect()) {
 
+            // Start a CDCConsumer for each replicated table,
+            // which will read the RawChanges and apply them
+            // onto the destination cluster.
             List<CDCConsumer> startedConsumers = new ArrayList<>();
-            String[] parsedTables = tables.split(",");
+            String[] tablesToReplicate = tables.split(",");
 
-            // TODO - currently building a separate CDCConsumer per each table.
-            // Should be able to construct a single CDCConsumer and ReplicatorConsumer
-            // to "multiplex" - maybe there should be a helper class that does the multiplexing?
-            // and the ReplicatorConsumer doesn't have to do it manually.
-            //
-            // ConsumerMultiplexer((tableName) -> new ReplicatorConsumer(...))
-            for (String table : parsedTables) {
+            for (String table : tablesToReplicate) {
                 Set<TableName> cdcTableSet = Collections.singleton(new TableName(keyspace, table));
 
-                CDCConsumer consumer = CDCConsumerBuilder.builder(sSession, (threadId) -> new ReplicatorConsumer(mode, dCluster, dSession, keyspace, table, cl), cdcTableSet).workersCount(1).build();
+                CDCConsumer consumer = CDCConsumerBuilder.builder(sourceSession, (threadId) ->
+                        new ReplicatorConsumer(mode, destinationCluster, destinationSession,
+                                keyspace, table, consistencyLevel), cdcTableSet).workersCount(1).build();
                 consumer.start();
 
                 startedConsumers.add(consumer);
             }
 
+            // Wait for SIGINT and gracefully terminate CDCConsumers.
             try {
                 CountDownLatch terminationLatch = new CountDownLatch(1);
                 Signal.handle(new Signal("INT"), signal -> terminationLatch.countDown());
@@ -77,10 +77,10 @@ public class Main {
     private static Namespace parseArguments(String[] args) {
         ArgumentParser parser = ArgumentParsers.newFor("CDCReplicator").build().defaultHelp(true);
         parser.addArgument("-m", "--mode").setDefault("delta").help("Mode of operation. Can be delta, preimage or postimage. Default is delta");
-        parser.addArgument("-k", "--keyspace").help("Keyspace name");
-        parser.addArgument("-t", "--table").help("Table names, provided as a comma delimited string");
-        parser.addArgument("-s", "--source").help("Address of a node in source cluster");
-        parser.addArgument("-d", "--destination").help("Address of a node in destination cluster");
+        parser.addArgument("-k", "--keyspace").required(true).help("Keyspace name");
+        parser.addArgument("-t", "--table").required(true).help("Table names, provided as a comma delimited string");
+        parser.addArgument("-s", "--source").required(true).help("Address of a node in source cluster");
+        parser.addArgument("-d", "--destination").required(true).help("Address of a node in destination cluster");
         parser.addArgument("-cl", "--consistency-level").setDefault("quorum")
                 .help("Consistency level of writes. QUORUM by default");
 
@@ -93,11 +93,25 @@ public class Main {
         }
     }
 
-    public static void main(String[] args) {
-        Namespace ns = parseArguments(args);
-        replicateChanges(Mode.fromString(ns.getString("mode")), ns.getString("source"),
-                ns.getString("destination"), ns.getString("keyspace"), ns.getString("table"),
-                ConsistencyLevel.valueOf(ns.getString("consistency_level").toUpperCase()));
-    }
+    public enum Mode {
+        DELTA, PRE_IMAGE, POST_IMAGE;
 
+        public static Mode fromString(String mode) {
+            switch (mode.toLowerCase()) {
+                case "delta":
+                    return DELTA;
+
+                case "pre_image":
+                case "preimage":
+                    return PRE_IMAGE;
+
+                case "post_image":
+                case "postimage":
+                    return POST_IMAGE;
+
+                default:
+                    throw new IllegalStateException("Unknown mode: " + mode);
+            }
+        }
+    }
 }

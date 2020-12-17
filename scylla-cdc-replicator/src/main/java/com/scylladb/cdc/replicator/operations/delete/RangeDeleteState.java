@@ -1,4 +1,4 @@
-package com.scylladb.cdc.replicator.operations;
+package com.scylladb.cdc.replicator.operations.delete;
 
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.worker.RawChange;

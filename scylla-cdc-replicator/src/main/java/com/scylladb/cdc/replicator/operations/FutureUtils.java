@@ -1,4 +1,4 @@
-package com.scylladb.cdc.replicator;
+package com.scylladb.cdc.replicator.operations;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;

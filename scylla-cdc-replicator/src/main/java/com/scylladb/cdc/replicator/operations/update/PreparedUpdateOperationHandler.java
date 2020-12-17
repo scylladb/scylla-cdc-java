@@ -1,4 +1,4 @@
-package com.scylladb.cdc.replicator.operations;
+package com.scylladb.cdc.replicator.operations.update;
 
 import com.datastax.driver.core.BoundStatement;
 import com.datastax.driver.core.ColumnMetadata;
@@ -9,13 +9,14 @@ import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.Update;
 import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.RawChange;
+import com.scylladb.cdc.replicator.operations.ExecutingPreparedStatementHandler;
 
 import java.util.HashSet;
 import java.util.Set;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
-public class PreparedUpdateOperationHandler extends PreparedCdcOperationHandler {
+public class PreparedUpdateOperationHandler extends ExecutingPreparedStatementHandler {
 
     protected RegularStatement getStatement(TableMetadata t) {
         Update builder = QueryBuilder.update(t);

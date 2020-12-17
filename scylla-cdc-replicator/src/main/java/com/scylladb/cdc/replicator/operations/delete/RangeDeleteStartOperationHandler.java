@@ -1,8 +1,10 @@
-package com.scylladb.cdc.replicator.operations;
+package com.scylladb.cdc.replicator.operations.delete;
 
 import com.datastax.driver.core.ConsistencyLevel;
-import com.datastax.driver.core.Statement;
 import com.scylladb.cdc.model.worker.RawChange;
+import com.scylladb.cdc.replicator.operations.CdcOperationHandler;
+
+import java.util.concurrent.CompletableFuture;
 
 public class RangeDeleteStartOperationHandler implements CdcOperationHandler {
     private final RangeDeleteState state;
@@ -14,9 +16,9 @@ public class RangeDeleteStartOperationHandler implements CdcOperationHandler {
     }
 
     @Override
-    public Statement getStatement(RawChange c, ConsistencyLevel cl) {
-        state.addStart(c, inclusive);
-        return null;
+    public CompletableFuture<Void> handle(RawChange change, ConsistencyLevel cl) {
+        state.addStart(change, inclusive);
+        return CompletableFuture.completedFuture(null);
     }
 
 }

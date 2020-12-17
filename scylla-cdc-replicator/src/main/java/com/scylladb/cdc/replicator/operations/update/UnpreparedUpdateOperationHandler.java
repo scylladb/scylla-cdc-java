@@ -1,8 +1,9 @@
-package com.scylladb.cdc.replicator.operations;
+package com.scylladb.cdc.replicator.operations.update;
 
 import com.datastax.driver.core.ColumnMetadata;
 import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.DataType;
+import com.datastax.driver.core.Session;
 import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.TableMetadata;
 import com.datastax.driver.core.querybuilder.Assignment;
@@ -11,6 +12,7 @@ import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.Update;
 import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.RawChange;
+import com.scylladb.cdc.replicator.operations.ExecutingStatementHandler;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -22,11 +24,12 @@ import java.util.UUID;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
-public class UnpreparedUpdateOperationHandler implements CdcOperationHandler {
+public class UnpreparedUpdateOperationHandler extends ExecutingStatementHandler {
     private final TableMetadata table;
     private final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
 
-    public UnpreparedUpdateOperationHandler(TableMetadata t, Driver3FromLibraryTranslator d3t) {
+    public UnpreparedUpdateOperationHandler(Session session, TableMetadata t, Driver3FromLibraryTranslator d3t) {
+        super(session);
         table = t;
         driver3FromLibraryTranslator = d3t;
     }

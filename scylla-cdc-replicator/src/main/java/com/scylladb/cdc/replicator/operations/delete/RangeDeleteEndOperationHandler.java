@@ -1,7 +1,8 @@
-package com.scylladb.cdc.replicator.operations;
+package com.scylladb.cdc.replicator.operations.delete;
 
 import com.datastax.driver.core.ColumnMetadata;
 import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.Session;
 import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.TableMetadata;
 import com.datastax.driver.core.querybuilder.Delete;
@@ -10,19 +11,21 @@ import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.cql.Cell;
+import com.scylladb.cdc.replicator.operations.ExecutingStatementHandler;
 
 import java.util.Iterator;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
-public class RangeDeleteEndOperationHandler implements CdcOperationHandler {
+public class RangeDeleteEndOperationHandler extends ExecutingStatementHandler {
     private final TableMetadata table;
     private final RangeDeleteState state;
     private final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
     private final boolean endInclusive;
 
-    public RangeDeleteEndOperationHandler(TableMetadata tableMetadata, Driver3FromLibraryTranslator driver3FromLibraryTranslator,
+    public RangeDeleteEndOperationHandler(Session session, TableMetadata tableMetadata, Driver3FromLibraryTranslator driver3FromLibraryTranslator,
                                           RangeDeleteState state, boolean endInclusive) {
+        super(session);
         this.table = tableMetadata;
         this.state = state;
         this.driver3FromLibraryTranslator = driver3FromLibraryTranslator;

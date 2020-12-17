@@ -9,9 +9,11 @@ import com.datastax.driver.core.RegularStatement;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.TableMetadata;
+import com.datastax.driver.core.TypeCodec;
 import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
+import com.scylladb.cdc.model.worker.cql.Cell;
 import com.scylladb.cdc.replicator.ReplicatorConsumer;
 
 import java.util.ArrayList;
@@ -22,7 +24,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-public abstract class PreparedCdcOperationHandler implements CdcOperationHandler {
+public abstract class ExecutingPreparedStatementHandler extends ExecutingStatementHandler {
     protected final TableMetadata table;
     protected final PreparedStatement preparedStmt;
     protected final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
@@ -32,7 +34,9 @@ public abstract class PreparedCdcOperationHandler implements CdcOperationHandler
 
     protected abstract RegularStatement getStatement(TableMetadata t);
 
-    protected PreparedCdcOperationHandler(Session session, Driver3FromLibraryTranslator d3t, TableMetadata t) {
+    protected ExecutingPreparedStatementHandler(Session session, Driver3FromLibraryTranslator d3t, TableMetadata t) {
+        super(session);
+
         table = t;
         preparedStmt = session.prepare(getStatement(table));
         driver3FromLibraryTranslator = d3t;
@@ -59,7 +63,7 @@ public abstract class PreparedCdcOperationHandler implements CdcOperationHandler
 
     protected void bindAllNonCDCColumns(BoundStatement stmt, RawChange c) {
         for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
-            if (c.getAsObject(cd.getColumnName()) == null && !c.getIsDeleted(cd.getColumnName())) {
+            if (c.getAsObject(cd.getColumnName()) == null && !c.getIsDeleted(cd.getColumnName()) && c.getOperationType() != RawChange.OperationType.PRE_IMAGE && c.getOperationType() != RawChange.OperationType.POST_IMAGE) {
                 stmt.unset(cd.getColumnName());
             } else {
                 ColumnMetadata meta = table.getColumn(cd.getColumnName());
@@ -68,7 +72,6 @@ public abstract class PreparedCdcOperationHandler implements CdcOperationHandler
                     Map<UUID, Object> cMap = (Map<UUID, Object>) driver3FromLibraryTranslator.translate(c.getCell(cd.getColumnName()));
                     if (cMap == null) {
                         stmt.setToNull(cd.getColumnName());
-                        break;
                     } else {
                         for (Map.Entry<UUID, Object> e : cMap.entrySet()) {
                             sorted.put(e.getKey(), e.getValue());
@@ -80,30 +83,42 @@ public abstract class PreparedCdcOperationHandler implements CdcOperationHandler
                         stmt.setList(cd.getColumnName(), list);
                     }
                 } else {
-                    ReplicatorConsumer.setBytesUnsafe(driver3FromLibraryTranslator, stmt, cd.getColumnName(), c);
+                    bindColumn(stmt, c, cd.getColumnName());
                 }
             }
         }
     }
 
     protected void bindPrimaryKeyColumns(BoundStatement stmt, RawChange c) {
-        Set<String> primaryColumns = table.getPrimaryKey().stream().map(ColumnMetadata::getName)
-                .collect(Collectors.toSet());
         for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
-            if (primaryColumns.contains(cd.getColumnName())) {
-                ReplicatorConsumer.setBytesUnsafe(driver3FromLibraryTranslator, stmt, cd.getColumnName(), c);
+            ChangeSchema.ColumnType columnType = cd.getBaseTableColumnType();
+
+            boolean isPrimaryKey = columnType == ChangeSchema.ColumnType.PARTITION_KEY
+                    || columnType == ChangeSchema.ColumnType.CLUSTERING_KEY;
+            if (!isPrimaryKey) {
+                continue;
             }
+
+            bindColumn(stmt, c, cd.getColumnName());
         }
     }
 
     protected void bindPartitionKeyColumns(BoundStatement stmt, RawChange c) {
-        Set<String> partitionColumns = table.getPartitionKey().stream().map(ColumnMetadata::getName)
-                .collect(Collectors.toSet());
         for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
-            if (partitionColumns.contains(cd.getColumnName())) {
-                ReplicatorConsumer.setBytesUnsafe(driver3FromLibraryTranslator, stmt, cd.getColumnName(), c);
+            ChangeSchema.ColumnType columnType = cd.getBaseTableColumnType();
+            if (columnType != ChangeSchema.ColumnType.PARTITION_KEY) {
+                continue;
             }
+
+            bindColumn(stmt, c, cd.getColumnName());
         }
+    }
+
+    protected void bindColumn(BoundStatement statement, RawChange change, String columnName) {
+        Cell cell = change.getCell(columnName);
+        TypeCodec<Object> driverCodec = driver3FromLibraryTranslator.getTypeCodec(cell.getColumnDefinition().getCdcLogDataType());
+        Object driverObject = driver3FromLibraryTranslator.translate(cell);
+        statement.set(columnName, driverObject, driverCodec);
     }
 
     protected abstract void bindInternal(BoundStatement stmt, RawChange c);
