@@ -7,18 +7,23 @@ import com.scylladb.cdc.replicator.operations.CdcOperationHandler;
 import java.util.concurrent.CompletableFuture;
 
 public class RangeDeleteStartOperationHandler implements CdcOperationHandler {
-    private final RangeDeleteState state;
-    private final boolean inclusive;
-
-    public RangeDeleteStartOperationHandler(RangeDeleteState rtState, boolean inclusive) {
-        state = rtState;
-        this.inclusive = inclusive;
-    }
+    private final RangeDeleteState rangeDeleteState;
+    private final boolean isInclusive;
 
     @Override
-    public CompletableFuture<Void> handle(RawChange change, ConsistencyLevel cl) {
-        state.addStart(change, inclusive);
+    public CompletableFuture<Void> handle(RawChange change, ConsistencyLevel consistencyLevel) {
+        // We encountered a row range delete start, however
+        // without range end we cannot perform this operation yet.
+        // Therefore store it in RangeDeleteState from which
+        // it will be accessed by a RangeDeleteEndOperationHandler
+        // and only then the DELETE performed.
+        rangeDeleteState.addStart(change, isInclusive);
+
         return CompletableFuture.completedFuture(null);
     }
 
+    public RangeDeleteStartOperationHandler(RangeDeleteState rangeDeleteState, boolean isInclusive) {
+        this.rangeDeleteState = rangeDeleteState;
+        this.isInclusive = isInclusive;
+    }
 }

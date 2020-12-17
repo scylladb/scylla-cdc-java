@@ -18,68 +18,103 @@ import java.util.Iterator;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
 public class RangeDeleteEndOperationHandler extends ExecutingStatementHandler {
-    private final TableMetadata table;
+    private final TableMetadata tableMetadata;
     private final RangeDeleteState state;
     private final Driver3FromLibraryTranslator driver3FromLibraryTranslator;
-    private final boolean endInclusive;
-
-    public RangeDeleteEndOperationHandler(Session session, TableMetadata tableMetadata, Driver3FromLibraryTranslator driver3FromLibraryTranslator,
-                                          RangeDeleteState state, boolean endInclusive) {
-        super(session);
-        this.table = tableMetadata;
-        this.state = state;
-        this.driver3FromLibraryTranslator = driver3FromLibraryTranslator;
-        this.endInclusive = endInclusive;
-    }
+    private final boolean isEndInclusive;
 
     @Override
-    public Statement getStatement(RawChange c, ConsistencyLevel cl) {
-        StreamId streamId = c.getId().getStreamId();
+    public Statement getStatement(RawChange change, ConsistencyLevel consistencyLevel) {
+        // Build a DELETE statement:
+        //
+        // DELETE FROM table
+        // USING TIMESTAMP ?
+        // WHERE pk1 = ? AND pk2 = ? ... AND ck1 = ? AND ck2 = ? ... [AND ck_n [> | >=] ?] [AND ck_n [< | <=] ?]
 
-        RangeDeleteState.DeletionStart start = state.getStart(streamId);
+        StreamId streamId = change.getId().getStreamId();
+
+        // Find a matching row range delete start, which
+        // was added by RangeDeleteStartOperationHandler.
+        RangeDeleteState.DeletionStart start = state.consumeStart(streamId);
         if (start == null) {
             throw new IllegalStateException("Got range deletion end but no start in stream " + streamId);
         }
 
-        Delete builder = QueryBuilder.delete().from(table);
-        Iterator<ColumnMetadata> keyIt = table.getPrimaryKey().iterator();
-        ColumnMetadata prevCol = keyIt.next();
-        Cell startCell = start.change.getCell(prevCol.getName());
-        Cell endCell = c.getCell(prevCol.getName());
+        Delete builder = QueryBuilder.delete().from(tableMetadata);
 
-        while (keyIt.hasNext()) {
-            ColumnMetadata nextCol = keyIt.next();
-            Cell newStartCell = start.change.getCell(nextCol.getName());
-            Cell newEndCell = c.getCell(nextCol.getName());
+        // Iterate over primary key columns. The while loop
+        // will add those restrictions:
+        //
+        // WHERE pk_i = ?
+        // WHERE ck_i = ?
+        //
+        // When we exit the loop, we will finally add the
+        // range restriction: WHERE ck_n [> | >=] ? AND ck_n [< | <=] ?
+        //
+        Iterator<ColumnMetadata> columnIterator = tableMetadata.getPrimaryKey().iterator();
+        ColumnMetadata currentColumn = columnIterator.next();
+        Cell startCell = start.change.getCell(currentColumn.getName());
+        Cell endCell = change.getCell(currentColumn.getName());
+
+        while (columnIterator.hasNext()) {
+            ColumnMetadata nextColumn = columnIterator.next();
+            Cell newStartCell = start.change.getCell(nextColumn.getName());
+            Cell newEndCell = change.getCell(nextColumn.getName());
 
             if (newStartCell.getAsObject() == null && newEndCell.getAsObject() == null) {
+                // For example:
+                // DELETE FROM table WHERE pk1 = 5 AND pk2 = 3 AND ck1 = 6 AND ck2 > 7 AND ck2 < 15
+                //
+                // results in the following start and end range bounds:
+                //
+                //         pk1 |  pk2 |  ck1 |  ck2 |  ck3
+                //        -----|------|------|------|-----
+                // start:    1 |    3 |    6 |    7 | NULL
+                // end:      1 |    3 |    6 |   15 | NULL
+                //
+                // So if the next column is NULL, we know that the current column
+                // has a range. Therefore break, as this loop only handles
+                // equality constraints.
                 break;
             }
 
-            builder.where(eq(prevCol.getName(), driver3FromLibraryTranslator.translate(startCell)));
+            // WHERE pk_i = ?
+            // WHERE ck_i = ?
+            builder.where(eq(currentColumn.getName(), driver3FromLibraryTranslator.translate(startCell)));
 
             startCell = newStartCell;
             endCell = newEndCell;
-            prevCol = nextCol;
+            currentColumn = nextColumn;
         }
 
+        // We exited the loop, so the current column
+        // has a range restriction: WHERE ck_n [> | >=] ? AND ck_n [< | <=] ?
+        //
+        // Half-open ranges are represented by NULL, so don't add
+        // a restriction in such a case.
         if (startCell.getAsObject() != null) {
-            builder.where(start.isInclusive ? gte(prevCol.getName(), driver3FromLibraryTranslator.translate(startCell))
-                    : gt(prevCol.getName(), driver3FromLibraryTranslator.translate(startCell)));
+            builder.where(start.isInclusive ? gte(currentColumn.getName(), driver3FromLibraryTranslator.translate(startCell))
+                    : gt(currentColumn.getName(), driver3FromLibraryTranslator.translate(startCell)));
         }
         if (endCell.getAsObject() != null) {
-            builder.where(endInclusive ? lte(prevCol.getName(), driver3FromLibraryTranslator.translate(endCell))
-                    : lt(prevCol.getName(), driver3FromLibraryTranslator.translate(endCell)));
+            builder.where(isEndInclusive ? lte(currentColumn.getName(), driver3FromLibraryTranslator.translate(endCell))
+                    : lt(currentColumn.getName(), driver3FromLibraryTranslator.translate(endCell)));
         }
-        Long ttl = c.getTTL();
-        if (ttl != null) {
-            builder.using(timestamp(c.getId().getChangeTime().getTimestamp())).and(ttl((int) ((long) ttl)));
-        } else {
-            builder.using(timestamp(c.getId().getChangeTime().getTimestamp()));
-        }
-        builder.setConsistencyLevel(cl);
+
+        // USING TIMESTAMP ?
+        builder.using(timestamp(change.getId().getChangeTime().getTimestamp()));
+
+        builder.setConsistencyLevel(consistencyLevel);
         builder.setIdempotent(true);
         return builder;
     }
 
+    public RangeDeleteEndOperationHandler(Session session, TableMetadata tableMetadata, Driver3FromLibraryTranslator driver3FromLibraryTranslator,
+                                          RangeDeleteState state, boolean isEndInclusive) {
+        super(session);
+        this.tableMetadata = tableMetadata;
+        this.state = state;
+        this.driver3FromLibraryTranslator = driver3FromLibraryTranslator;
+        this.isEndInclusive = isEndInclusive;
+    }
 }

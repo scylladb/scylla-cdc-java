@@ -18,14 +18,24 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
 public class PreparedUpdateOperationHandler extends ExecutingPreparedStatementHandler {
 
-    protected RegularStatement getStatement(TableMetadata t) {
-        Update builder = QueryBuilder.update(t);
-        Set<ColumnMetadata> primaryColumns = new HashSet<>(t.getPrimaryKey());
-        t.getColumns().stream().forEach(c -> {
-            if (primaryColumns.contains(c)) {
-                builder.where(eq(c.getName(), bindMarker(c.getName())));
+    protected RegularStatement getStatement(TableMetadata tableMetadata) {
+        // Build an UPDATE prepared statement:
+        //
+        // UPDATE table
+        // USING TIMESTAMP ? AND TTL ?
+        // SET v1 = ? AND v2 = ? AND v3 = ? ...
+        // WHERE pk1 = ? AND pk2 = ? ... AND ck1 = ? AND ck2 = ? ...
+
+        Update builder = QueryBuilder.update(tableMetadata);
+        Set<ColumnMetadata> primaryColumns = new HashSet<>(tableMetadata.getPrimaryKey());
+        tableMetadata.getColumns().forEach(column -> {
+            if (primaryColumns.contains(column)) {
+                // SET v_i = ?
+                builder.where(eq(column.getName(), bindMarker(column.getName())));
             } else {
-                builder.with(set(c.getName(), bindMarker(c.getName())));
+                // WHERE pk_i = ?
+                // WHERE ck_i = ?
+                builder.with(set(column.getName(), bindMarker(column.getName())));
             }
         });
 
@@ -33,14 +43,24 @@ public class PreparedUpdateOperationHandler extends ExecutingPreparedStatementHa
         return builder;
     }
 
-    public PreparedUpdateOperationHandler(Session session, Driver3FromLibraryTranslator d3t, TableMetadata table) {
-        super(session, d3t, table);
-    }
-
     @Override
-    protected void bindInternal(BoundStatement stmt, RawChange c) {
-        bindTTL(stmt, c);
-        bindAllNonCDCColumns(stmt, c);
+    protected void bindInternal(BoundStatement statement, RawChange change) {
+        // We prepared an UPDATE statement with all columns, so
+        // we can easily bind all values from change.
+        //
+        // If the change does not specify all column values,
+        // the bound statement will have those values
+        // unset - not modifying already present cells
+        // in the destination table (protocol v4 guarantee).
+        bindAllNonCDCColumns(statement, change);
+
+        bindTTL(statement, change);
+
+        // The TIMESTAMP value is set by ExecutingPreparedStatementHandler.
     }
 
+    public PreparedUpdateOperationHandler(Session session, Driver3FromLibraryTranslator driver3FromLibraryTranslator,
+                                          TableMetadata tableMetadata) {
+        super(session, driver3FromLibraryTranslator, tableMetadata);
+    }
 }

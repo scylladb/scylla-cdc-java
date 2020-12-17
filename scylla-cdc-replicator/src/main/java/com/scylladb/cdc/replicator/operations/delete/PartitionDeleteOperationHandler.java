@@ -14,20 +14,29 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
 public class PartitionDeleteOperationHandler extends ExecutingPreparedStatementHandler {
 
-    protected RegularStatement getStatement(TableMetadata t) {
-        Delete builder = QueryBuilder.delete().from(t);
-        t.getPartitionKey().stream().forEach(c -> builder.where(eq(c.getName(), bindMarker(c.getName()))));
+    protected RegularStatement getStatement(TableMetadata tableMetadata) {
+        // Build a DELETE prepared statement:
+        //
+        // DELETE FROM table WHERE pk1 = ? AND pk2 = ? AND pk3 = ? ... USING TIMESTAMP ?
+
+        Delete builder = QueryBuilder.delete().from(tableMetadata);
+        tableMetadata.getPartitionKey().forEach(c -> builder.where(eq(c.getName(), bindMarker(c.getName()))));
         builder.using(timestamp(bindMarker(TIMESTAMP_MARKER_NAME)));
         return builder;
     }
 
-    public PartitionDeleteOperationHandler(Session session, Driver3FromLibraryTranslator d3t, TableMetadata table) {
-        super(session, d3t, table);
-    }
-
     @Override
-    protected void bindInternal(BoundStatement stmt, RawChange c) {
-        bindPartitionKeyColumns(stmt, c);
+    protected void bindInternal(BoundStatement statement, RawChange change) {
+        // This is a partition delete operation, so
+        // only partition key columns have to be bound.
+        bindPartitionKeyColumns(statement, change);
+
+        // There is no need to bind the TTL value for DELETEs.
+        // The TIMESTAMP value is set by ExecutingPreparedStatementHandler.
     }
 
+    public PartitionDeleteOperationHandler(Session destinationSession, Driver3FromLibraryTranslator driver3FromLibraryTranslator,
+                                           TableMetadata tableMetadata) {
+        super(destinationSession, driver3FromLibraryTranslator, tableMetadata);
+    }
 }

@@ -14,20 +14,30 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
 public class RowDeleteOperationHandler extends ExecutingPreparedStatementHandler {
 
-    protected RegularStatement getStatement(TableMetadata t) {
-        Delete builder = QueryBuilder.delete().from(t);
-        t.getPrimaryKey().stream().forEach(c -> builder.where(eq(c.getName(), bindMarker(c.getName()))));
+    protected RegularStatement getStatement(TableMetadata tableMetadata) {
+        // Build a DELETE prepared statement:
+        //
+        // DELETE FROM table WHERE pk1 = ? AND pk2 = ? ... AND ck1 = ? AND ck2 = ? ... USING TIMESTAMP ?
+
+        Delete builder = QueryBuilder.delete().from(tableMetadata);
+        tableMetadata.getPrimaryKey().forEach(c -> builder.where(eq(c.getName(), bindMarker(c.getName()))));
         builder.using(timestamp(bindMarker(TIMESTAMP_MARKER_NAME)));
         return builder;
     }
 
-    public RowDeleteOperationHandler(Session session, Driver3FromLibraryTranslator d3t, TableMetadata table) {
-        super(session, d3t, table);
-    }
-
     @Override
-    protected void bindInternal(BoundStatement stmt, RawChange c) {
-        bindPrimaryKeyColumns(stmt, c);
+    protected void bindInternal(BoundStatement statement, RawChange change) {
+        // As this is a row delete operation, the whole primary key
+        // (partition key, clustering key) is known due to the fact
+        // that deleted row has to be uniquely identified.
+        bindPrimaryKeyColumns(statement, change);
+
+        // There is no need to bind the TTL value for DELETEs.
+        // The TIMESTAMP value is set by ExecutingPreparedStatementHandler.
     }
 
+    public RowDeleteOperationHandler(Session session, Driver3FromLibraryTranslator driver3FromLibraryTranslator,
+                                     TableMetadata tableMetadata) {
+        super(session, driver3FromLibraryTranslator, tableMetadata);
+    }
 }
