@@ -5,8 +5,10 @@
     <parent>
         <groupId>com.scylladb</groupId>
         <artifactId>scylla-cdc</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>scylla-cdc-base</artifactId>
+    <name>Java Library for Scylla CDC - base</name>
+    <description>A library for reading the Scylla CDC log.</description>
     <packaging>jar</packaging>
 </project>
