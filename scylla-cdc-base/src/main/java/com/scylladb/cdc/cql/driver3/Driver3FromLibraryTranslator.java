@@ -118,7 +118,7 @@ public class Driver3FromLibraryTranslator {
         return CodecRegistry.DEFAULT_INSTANCE.codecFor(driverDataType);
     }
 
-    private DataType getDriverDataType(ChangeSchema.DataType libraryDataType) {
+    public DataType getDriverDataType(ChangeSchema.DataType libraryDataType) {
         switch (libraryDataType.getCqlType()) {
             case ASCII:
                 return DataType.ascii();

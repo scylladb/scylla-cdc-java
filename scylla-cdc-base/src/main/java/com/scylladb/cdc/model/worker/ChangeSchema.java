@@ -1,13 +1,12 @@
 package com.scylladb.cdc.model.worker;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
 public class ChangeSchema {
     public enum CqlType {
@@ -128,6 +127,10 @@ public class ChangeSchema {
                     "Unexpected value of UdtType for this CQL type: " + cqlType.name());
         }
 
+        public static DataType list(DataType valueType) {
+            return new DataType(CqlType.LIST, ImmutableList.of(valueType));
+        }
+
         public CqlType getCqlType() {
             return cqlType;
         }
@@ -181,6 +184,7 @@ public class ChangeSchema {
         }
     }
 
+    // FIXME: misnomer: this should be named ColumnKind
     public enum ColumnType {
         REGULAR, PARTITION_KEY, CLUSTERING_KEY
     }
@@ -189,11 +193,13 @@ public class ChangeSchema {
         private final String columnName;
         private final DataType cdcLogDataType;
         private final ColumnType baseTableColumnType;
+        private final boolean baseIsNonfrozenList;
 
-        public ColumnDefinition(String columnName, DataType cdcLogDataType, ColumnType baseTableColumnType) {
+        public ColumnDefinition(String columnName, DataType cdcLogDataType, ColumnType baseTableColumnType, boolean baseIsNonfrozenList) {
             this.columnName = columnName;
             this.cdcLogDataType = cdcLogDataType;
             this.baseTableColumnType = baseTableColumnType;
+            this.baseIsNonfrozenList = baseIsNonfrozenList;
         }
 
         public boolean isCdcColumn() {
@@ -213,6 +219,15 @@ public class ChangeSchema {
                 throw new IllegalStateException("Cannot get base table column type for CDC columns.");
             }
             return baseTableColumnType;
+        }
+
+        public boolean baseIsNonfrozenList() {
+            if (isCdcColumn()) {
+                // TODO: actually, this may make sense for cdc$deleted_ and cdc$deleted_elements_ columns as well
+                // but ensure that whoever constructs `ColumnDefinition` passes a correct value
+                throw new IllegalStateException("Cannot get base table column type for CDC columns.");
+            }
+            return baseIsNonfrozenList;
         }
 
         @Override
