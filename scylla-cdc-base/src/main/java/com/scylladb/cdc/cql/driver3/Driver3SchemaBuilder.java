@@ -1,5 +1,9 @@
 package com.scylladb.cdc.cql.driver3;
 
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import com.datastax.driver.core.ColumnDefinitions;
 import com.datastax.driver.core.ColumnMetadata;
 import com.datastax.driver.core.DataType;
@@ -13,12 +17,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-
 public class Driver3SchemaBuilder {
     private static final String SCYLLA_CDC_LOG_SUFFIX = "_scylla_cdc_log";
 
@@ -27,6 +25,7 @@ public class Driver3SchemaBuilder {
     private String tableName;
     private String baseTableName;
     private Metadata metadata;
+    private TableMetadata baseTableMetadata;
 
     private Set<String> baseTablePartitionKeyColumnNames;
     private Set<String> baseTableClusteringKeyColumnNames;
@@ -68,8 +67,11 @@ public class Driver3SchemaBuilder {
          * be a situation when someone drops the table and quickly recreates it (with
          * different schema) and this operation took place between call a) and b).
          * In such case, this code is not correct!
+         *
+         * Ideally, the server should send the corresponding base table metadata together with the CDC log table metadata,
+         * and we'll be able to drop this hack. See Scylla issue #7824.
          */
-        TableMetadata baseTableMetadata = metadata.getKeyspace(keyspace).getTable(baseTableName);
+        TableMetadata baseTableMetadata = baseTableMetadata();
         baseTablePartitionKeyColumnNames = baseTableMetadata.getPartitionKey().stream().map(ColumnMetadata::getName).collect(Collectors.toSet());
         baseTableClusteringKeyColumnNames = baseTableMetadata.getClusteringColumns().stream().map(ColumnMetadata::getName).collect(Collectors.toSet());
     }
@@ -89,12 +91,46 @@ public class Driver3SchemaBuilder {
         String columnName = driverDefinition.getName();
         ChangeSchema.DataType dataType = translateColumnDataType(driverDefinition.getType());
         ChangeSchema.ColumnType baseTableColumnType = ChangeSchema.ColumnType.REGULAR;
+        boolean baseIsNonfrozenList = false;
         if (baseTablePartitionKeyColumnNames.contains(columnName)) {
             baseTableColumnType = ChangeSchema.ColumnType.PARTITION_KEY;
         } else if (baseTableClusteringKeyColumnNames.contains(columnName)) {
             baseTableColumnType = ChangeSchema.ColumnType.CLUSTERING_KEY;
+        } else {
+            /* Calculate whether corresponding base column is a non-frozen list.
+             *
+             * See comment in `generatePrimaryKeyColumns` about us racing with schema changes.
+             * Luckily, it's not possible to change the type of a column that is a non-frozen list,
+             * and after removing such a column, it's not possible to re-add a column of the same name
+             * (true for all non-frozen types; see https://docs.scylladb.com/getting-started/ddl/#alter-table-statement).
+             * Also we're considering removing altering column types altogether (https://github.com/scylladb/scylla/issues/4550).
+             *
+             * Still, it's possible to drop a table and create a new with different schema, so the base table metadata
+             * could potentially come from the old schema. Also, it's possible to delete or rename a column.
+             * For deleted columns, stale base table metadata is not a problem, but it would be a problem if OUR metadata is stale
+             * and base table metadata is newer (so we have a column, but the base doesn't) - can this happen?
+             *
+             */
+            TableMetadata baseTableMetadata = baseTableMetadata();
+            // TODO: this sets it only for value columns (and not e.g. for `cdc$deleted_` columns), but maybe it's enough?
+            ColumnMetadata baseColumnMetadata = baseTableMetadata.getColumn(columnName);
+            if (baseColumnMetadata != null) {
+                DataType baseType = baseColumnMetadata.getType();
+                baseIsNonfrozenList = baseType.getName() == DataType.Name.LIST && !baseType.isFrozen();
+
+                // some sanity checking:
+                if (baseIsNonfrozenList && (
+                        dataType.getCqlType() != ChangeSchema.CqlType.MAP ||
+                        dataType.getTypeArguments().get(0).getCqlType() != ChangeSchema.CqlType.TIMEUUID ||
+                        !new Driver3FromLibraryTranslator(metadata).getDriverDataType(dataType.getTypeArguments().get(1)).equals(baseType.getTypeArguments().get(0)))) {
+                    throw new IllegalStateException(
+                            String.format("expected CDC value column type map<timeuuid, %s> for base column type list<%s>, got map<%s, %s>",
+                                    dataType.getTypeArguments().get(1).getCqlType().toString(), baseType.getTypeArguments().get(0).toString(),
+                                    dataType.getTypeArguments().get(0).getCqlType().toString(), dataType.getTypeArguments().get(1).getCqlType().toString()));
+                }
+            }
         }
-        return new ChangeSchema.ColumnDefinition(columnName, dataType, baseTableColumnType);
+        return new ChangeSchema.ColumnDefinition(columnName, dataType, baseTableColumnType, baseIsNonfrozenList);
     }
 
     private ChangeSchema.DataType translateColumnDataType(DataType driverType) {
@@ -175,5 +211,14 @@ public class Driver3SchemaBuilder {
             default:
                 throw new RuntimeException(String.format("Data type %s is currently not supported.", driverType.getName()));
         }
+    }
+
+    private TableMetadata baseTableMetadata() {
+        if (baseTableMetadata == null) {
+            Preconditions.checkNotNull(metadata);
+            baseTableMetadata = metadata.getKeyspace(keyspace).getTable(baseTableName);
+        }
+
+        return baseTableMetadata;
     }
 }

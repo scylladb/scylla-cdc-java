@@ -1,14 +1,5 @@
 package com.scylladb.cdc.cql.driver3;
 
-import com.datastax.driver.core.Duration;
-import com.datastax.driver.core.LocalDate;
-import com.datastax.driver.core.TupleValue;
-import com.datastax.driver.core.UDTValue;
-import com.scylladb.cdc.model.worker.cql.CqlDate;
-import com.scylladb.cdc.model.worker.cql.CqlDuration;
-import com.scylladb.cdc.model.worker.cql.Field;
-import com.scylladb.cdc.model.worker.ChangeSchema;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -17,12 +8,25 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.datastax.driver.core.Duration;
+import com.datastax.driver.core.LocalDate;
+import com.datastax.driver.core.TupleValue;
+import com.datastax.driver.core.UDTValue;
+import com.scylladb.cdc.model.worker.ChangeSchema;
+import com.scylladb.cdc.model.worker.cql.CqlDate;
+import com.scylladb.cdc.model.worker.cql.CqlDuration;
+import com.scylladb.cdc.model.worker.cql.Field;
+
 public class Driver3ToLibraryTranslator {
     public static Object translate(Object driverObject, ChangeSchema.DataType dataType) {
         // Some types returned by getObject() are
         // some classes of Java Driver. We should
         // translate them into a non-Java-Driver-specific
         // types. (for example UDTValue)
+
+        // TODO: this takes ChangeSchema.DataType, but we sometimes want to translate objects
+        // that don't come from changes (i.e. not from CDC log tables), but from base table reads,
+        // e.g. in preimage mode. So perhaps it should take a more general DataType type...
 
         if (driverObject == null) {
             return null;

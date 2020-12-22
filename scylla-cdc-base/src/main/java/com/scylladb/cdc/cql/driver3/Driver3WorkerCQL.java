@@ -29,8 +29,8 @@ import com.google.common.util.concurrent.Futures;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeSchema;
+import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 
 public final class Driver3WorkerCQL implements WorkerCQL {
@@ -124,6 +124,11 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                     schema = new Driver3SchemaBuilder()
                             .withClusterMetadata(session.getCluster().getMetadata())
                             .withRow(row).build();
+                } else {
+                    // TODO: the schema might have changed
+                    // is there some hash/digest that we can use to check that?
+                    // it wouldn't be nice if we had to update `schema` on each query/page (expensive)
+                    // See Scylla issue #7824.
                 }
                 fut.complete(Optional.of(new Driver3RawChange(row, schema)));
             }

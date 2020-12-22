@@ -1,5 +1,14 @@
 package com.scylladb.cdc.replicator.operations.preimage;
 
+import static com.datastax.driver.core.querybuilder.QueryBuilder.bindMarker;
+import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
+
+import java.util.ArrayList;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
 import com.datastax.driver.core.BoundStatement;
 import com.datastax.driver.core.ColumnDefinitions;
 import com.datastax.driver.core.ColumnMetadata;
@@ -17,17 +26,9 @@ import com.scylladb.cdc.cql.driver3.Driver3ToLibraryTranslator;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.cql.Cell;
-import com.scylladb.cdc.replicator.operations.FutureUtils;
-import com.scylladb.cdc.replicator.ReplicatorConsumer;
+import com.scylladb.cdc.model.worker.cql.Field;
 import com.scylladb.cdc.replicator.operations.CdcOperationHandler;
-
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import static com.datastax.driver.core.querybuilder.QueryBuilder.bindMarker;
-import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
+import com.scylladb.cdc.replicator.operations.FutureUtils;
 
 public class PreImageOperationHandler implements CdcOperationHandler {
     private final Session session;
@@ -87,8 +88,9 @@ public class PreImageOperationHandler implements CdcOperationHandler {
         for (ColumnDefinitions.Definition d : expectedRow.getColumnDefinitions()) {
             try {
                 Cell libraryCell = c.getCell(d.getName());
-                Object libraryObject = libraryCell.getAsObject();
-                Object expectedLibraryObject = Driver3ToLibraryTranslator.translate(expectedRow.getObject(d.getName()), libraryCell.getColumnDefinition().getCdcLogDataType());
+                Object libraryObject = asObject(libraryCell);
+                ChangeSchema.DataType baseType = calculateBaseType(libraryCell.getColumnDefinition());
+                Object expectedLibraryObject = Driver3ToLibraryTranslator.translate(expectedRow.getObject(d.getName()), baseType);
 
                 boolean consistent = Objects.equals(libraryObject, expectedLibraryObject);
                 if (!consistent) {
@@ -104,4 +106,25 @@ public class PreImageOperationHandler implements CdcOperationHandler {
         }
         return CompletableFuture.completedFuture(null);
     }
+
+    /* Casts the given preimage cell to a value as if it would appear in a standard CQL read from the base table. */
+    private static Object asObject(Cell preimageCell) {
+        if (preimageCell.getColumnDefinition().baseIsNonfrozenList()) {
+            // The keys (timeuuids) define the order of values in a non-frozen list
+            // and we store our maps in a way that preserves the order of keys returned by the driver.
+            // To get the list as it appears in a CQL base table read, we simply drop all keys:
+            return new ArrayList<Field>(preimageCell.getMap().values());
+        }
+        return preimageCell.getAsObject();
+    }
+
+    // hack: we're using ChangeSchema.DataType to represent base table types
+    private static ChangeSchema.DataType calculateBaseType(ChangeSchema.ColumnDefinition colDef) {
+        ChangeSchema.DataType logType = colDef.getCdcLogDataType();
+        if (colDef.baseIsNonfrozenList()) {
+            return ChangeSchema.DataType.list(logType.getTypeArguments().get(1));
+        }
+        return logType;
+    }
+
 }
