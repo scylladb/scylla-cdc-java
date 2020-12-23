@@ -65,13 +65,17 @@ The consumer is started as a single-thread CDC consumer and reads the CDC log fo
 
 **Next steps: you can see the entire code of this example and read more about how to use the library in the [Printer example application](scylla-cdc-printer).**
 
-## License
-
-The library is licensed under Apache License 2.0. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 or in the LICENSE.txt file in the repository.
-
 ## Useful links
 
 - [Scylla Docs - Change Data Capture (CDC)](https://docs.scylladb.com/using-scylla/cdc/)
 - [Scylla University - Change Data Capture (CDC)](https://university.scylladb.com/courses/scylla-operations/lessons/change-data-capture-cdc/)
 - [ScyllaDB YouTube - Change Data Capture in Scylla](https://www.youtube.com/watch?v=392Nbfrq7Dg)
 - [ScyllaDB Blog - Using Change Data Capture (CDC) in Scylla](https://www.scylladb.com/2020/07/23/using-change-data-capture-cdc-in-scylla/)
+
+## Contact
+
+Use the [GitHub Issues](https://github.com/scylladb/scylla-cdc-java/issues) to report bugs or errors. You can also join [ScyllaDB-Users Slack channel](http://slack.scylladb.com/) and discuss on `#cdc` channel.
+
+## License
+
+The library is licensed under Apache License 2.0. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 or in the LICENSE.txt file in the repository.
