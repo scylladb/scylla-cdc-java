@@ -220,7 +220,7 @@ public class Main {
     // Parsing the command-line arguments:
 
     private static Namespace parseArguments(String[] args) {
-        ArgumentParser parser = ArgumentParsers.newFor("Printer").build().defaultHelp(true);
+        ArgumentParser parser = ArgumentParsers.newFor("./scylla-cdc-printer").build().defaultHelp(true);
         parser.addArgument("-k", "--keyspace").required(true).help("Keyspace name");
         parser.addArgument("-t", "--table").required(true).help("Table name");
         parser.addArgument("-s", "--source").required(true)

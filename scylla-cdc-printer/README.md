@@ -4,6 +4,29 @@
 
 Printer is an example application that uses the scylla-cdc-java library to print all changes from CDC log for a given table.
 
+## Installation and usage
+```bash
+git clone https://github.com/scylladb/scylla-cdc-java.git
+cd scylla-cdc-java
+mvn clean install
+cd scylla-cdc-printer
+./scylla-cdc-printer -k KEYSPACE -t TABLE -s SOURCE
+```
+
+Command-line arguments:
+```
+usage: ./scylla-cdc-printer [-h] -k KEYSPACE -t TABLE -s SOURCE
+
+named arguments:
+  -h, --help             show this help message and exit
+  -k KEYSPACE, --keyspace KEYSPACE
+                         Keyspace name
+  -t TABLE, --table TABLE
+                         Table name
+  -s SOURCE, --source SOURCE
+                         Address of a node in source cluster (default: 127.0.0.1)
+```
+
 ## Do it yourself!
 
 Let's go through the Printer code and learn how to use the library. You can see the final code [here](src/main/java/com/scylladb/cdc/printer/Main.java).

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+export JAVA_PROGRAM_ARGS=`echo "$@"`
+mvn exec:java -q -Dexec.mainClass="com.scylladb.cdc.replicator.Main" -Dexec.args="$JAVA_PROGRAM_ARGS"

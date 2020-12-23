@@ -75,7 +75,7 @@ public class Main {
     }
 
     private static Namespace parseArguments(String[] args) {
-        ArgumentParser parser = ArgumentParsers.newFor("CDCReplicator").build().defaultHelp(true);
+        ArgumentParser parser = ArgumentParsers.newFor("./scylla-cdc-replicator").build().defaultHelp(true);
         parser.addArgument("-m", "--mode").setDefault("delta").help("Mode of operation. Can be delta, preimage or postimage. Default is delta");
         parser.addArgument("-k", "--keyspace").required(true).help("Keyspace name");
         parser.addArgument("-t", "--table").required(true).help("Table names, provided as a comma delimited string");
