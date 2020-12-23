@@ -45,9 +45,10 @@ public class ReplicatorConsumer implements RawChangeConsumer {
         Driver3FromLibraryTranslator driver3FromLibraryTranslator = new Driver3FromLibraryTranslator(destinationCluster.getMetadata());
 
         // The ReplicatorConsumer will consume RawChanges from the CDC log.
-        // For each change it executes a handler based on its operation type.
-        // Most of the handlers read the change and execute it on a destination
-        // cluster (subclasses of ExecutingStatementHandler) - replicating the change.
+        // For each change it executes a handler based on the operation type.
+        // Most of the handlers process the change and execute it on a destination
+        // cluster - replicating the change. (see subclasses of ExecutingStatementHandler,
+        // such as InsertOperationHandler, PreparedUpdateOperationHandler).
         operationHandlers.put(RawChange.OperationType.PRE_IMAGE, new NoOpOperationHandler());
         operationHandlers.put(RawChange.OperationType.ROW_UPDATE, new PreparedUpdateOperationHandler(destinationSession, driver3FromLibraryTranslator, sourceTableMetadata));
         operationHandlers.put(RawChange.OperationType.ROW_INSERT, new InsertOperationHandler(destinationSession, driver3FromLibraryTranslator, sourceTableMetadata));
@@ -76,10 +77,8 @@ public class ReplicatorConsumer implements RawChangeConsumer {
         //
         // UPDATE ks.t SET v = v + [1, 2] WHERE pk = 0 AND ck = 0;
         //
-        // that cannot be handled by a prepared statement: CDC log contains only the added elements,
-        // not the final result of the operation.
-        //
-        // Therefore, in such case do not use prepared statements.
+        // that necessitates use of [scylla_timeuuid_list_index(...)]=,
+        // therefore use a different code path:
         boolean hasNonFrozenCollection = sourceTableMetadata.getColumns().stream().anyMatch(c -> c.getType().isCollection() && !c.getType().isFrozen());
         if (hasNonFrozenCollection) {
             operationHandlers.put(RawChange.OperationType.ROW_UPDATE, new UnpreparedUpdateOperationHandler(destinationSession, sourceTableMetadata, driver3FromLibraryTranslator));

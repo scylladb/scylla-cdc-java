@@ -1,5 +1,7 @@
 package com.scylladb.cdc.model.worker.cql;
 
+import com.sun.org.apache.xerces.internal.impl.dv.util.HexBin;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.InetAddress;
@@ -125,6 +127,9 @@ public abstract class AbstractField {
 
     @Override
     public String toString() {
+        if (value != null && value instanceof ByteBuffer) {
+            return HexBin.encode(((ByteBuffer) value).array()).toLowerCase();
+        }
         return Objects.toString(value);
     }
 }
