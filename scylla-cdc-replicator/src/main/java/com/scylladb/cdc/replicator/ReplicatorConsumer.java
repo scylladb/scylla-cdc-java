@@ -107,7 +107,7 @@ public class ReplicatorConsumer implements RawChangeConsumer {
 
     @Override
     public CompletableFuture<Void> consume(RawChange change) {
-        logger.atInfo().log("Replicator consuming change: %s, %s", change.getId(), change.getOperationType());
+        logger.atFine().log("Replicator consuming change: %s, %s", change.getId(), change.getOperationType());
 
         // Get the proper handler for change.
         RawChange.OperationType operationType = change.getOperationType();
