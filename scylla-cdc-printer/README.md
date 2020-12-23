@@ -2,7 +2,7 @@
 
 ## Overview
 
-Printer is an example application that uses the scylla-cdc-java library to print all changes from CDC log for a given table.
+Printer is an example application that uses the scylla-cdc-java library to print all changes from CDC log for a given table. It is meant as a beginner's introduction to the basic features of the library. See [Do it youself! section](#do-it-yourself) to read more about how to use the library.
 
 ## Installation and usage
 ```bash
@@ -173,4 +173,6 @@ Cell cell = change.getCell(columnName);
 Object cellValue = cell.getAsObject();
 ```
 
-You can read the full source code of Printer [here](src/main/java/com/scylladb/cdc/printer/Main.java).
+You can read the full source code of Printer [here](src/main/java/com/scylladb/cdc/printer/Main.java). 
+
+If you want to learn more about advanced use-cases of the library, see the [Replicator example project](https://github.com/scylladb/scylla-cdc-java/tree/master/scylla-cdc-replicator).
