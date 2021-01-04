@@ -2,12 +2,19 @@ package com.scylladb.cdc.debezium.connector;
 
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.ChangeSchema;
+import com.scylladb.cdc.model.worker.cql.Cell;
+import com.scylladb.cdc.model.worker.cql.CqlDate;
+import com.scylladb.cdc.model.worker.cql.CqlDuration;
 import io.debezium.data.Envelope;
 import io.debezium.pipeline.AbstractChangeRecordEmitter;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.util.Clock;
 import org.apache.kafka.connect.data.Struct;
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.TimeZone;
 
 public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<ScyllaCollectionSchema> {
 
@@ -88,8 +95,7 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
 
     private void fillStructWithChange(ScyllaCollectionSchema schema, Struct keyStruct, Struct valueStruct, RawChange change) {
         for (ChangeSchema.ColumnDefinition cdef : change.getSchema().getNonCdcColumnDefinitions()) {
-            ChangeSchema.DataType type = cdef.getCdcLogDataType();
-            Object value = change.getCell(cdef.getColumnName()).getInt();
+            Object value = translateCellToKafka(change.getCell(cdef.getColumnName()));
 
             if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) {
                 valueStruct.put(cdef.getColumnName(), value);
@@ -103,5 +109,48 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
                 }
             }
         }
+    }
+
+    private Object translateCellToKafka(Cell cell) {
+       ChangeSchema.DataType dataType = cell.getColumnDefinition().getCdcLogDataType();
+
+       if (cell.getAsObject() == null) {
+           return null;
+       }
+
+       if (dataType.getCqlType() == ChangeSchema.CqlType.DECIMAL) {
+           return cell.getDecimal().toString();
+       }
+
+       if (dataType.getCqlType() == ChangeSchema.CqlType.UUID) {
+           return cell.getUUID().toString();
+       }
+
+       if (dataType.getCqlType() == ChangeSchema.CqlType.TIMEUUID) {
+           return cell.getUUID().toString();
+       }
+
+       if (dataType.getCqlType() == ChangeSchema.CqlType.VARINT) {
+           return cell.getVarint().toString();
+       }
+
+       if (dataType.getCqlType() == ChangeSchema.CqlType.INET) {
+           return cell.getInet().getHostAddress();
+       }
+
+       if (dataType.getCqlType() == ChangeSchema.CqlType.DATE) {
+           CqlDate cqlDate = cell.getDate();
+           Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+           calendar.clear();
+           // Months start from 0 in Calendar:
+           calendar.set(cqlDate.getYear(), cqlDate.getMonth() - 1, cqlDate.getDay());
+           return Date.from(calendar.toInstant());
+       }
+
+       if (dataType.getCqlType() == ChangeSchema.CqlType.DURATION) {
+           return cell.getDuration().toString();
+       }
+
+       return cell.getAsObject();
     }
 }

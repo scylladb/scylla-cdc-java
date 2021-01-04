@@ -6,8 +6,10 @@ import io.debezium.pipeline.txmetadata.TransactionMonitor;
 import io.debezium.schema.DataCollectionSchema;
 import io.debezium.schema.DatabaseSchema;
 import io.debezium.util.SchemaNameAdjuster;
+import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Timestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,60 +39,15 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
     }
 
     private ScyllaCollectionSchema computeDataCollectionSchema(CollectionId collectionId) {
-        // TODO - refactor this code
-        // TODO - support more data types
-
         ChangeSchema changeSchema = changeSchemas.get(collectionId);
 
         if (changeSchema == null) {
             return null;
         }
 
-        Map<String, Schema> cellSchemas = new HashMap<>();
-        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getAllColumnDefinitions()) {
-            if (cdef.getColumnName().startsWith("cdc$")) continue;
-            if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY
-                    || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
-
-            Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
-            if (cdef.getCdcLogDataType().getCqlType() == ChangeSchema.CqlType.INT) {
-                columnSchema = Schema.OPTIONAL_INT32_SCHEMA;
-            }
-            Schema cellSchema = SchemaBuilder.struct()
-                    .field(CELL_VALUE, columnSchema).optional().build();
-            cellSchemas.put(cdef.getColumnName(), cellSchema);
-        }
-
-        SchemaBuilder keySchemaBuilder = SchemaBuilder.struct()
-                .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Key"));
-        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getAllColumnDefinitions()) {
-            if (cdef.getColumnName().startsWith("cdc$")) continue;
-            if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY
-                    && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
-
-            Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
-            if (cdef.getCdcLogDataType().getCqlType() == ChangeSchema.CqlType.INT) {
-                columnSchema = Schema.OPTIONAL_INT32_SCHEMA;
-            }
-            keySchemaBuilder = keySchemaBuilder.field(cdef.getColumnName(), columnSchema);
-        }
-
-        final Schema keySchema = keySchemaBuilder.build();
-
-        SchemaBuilder afterSchemaBuilder = SchemaBuilder.struct();
-        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getAllColumnDefinitions()) {
-            if (cdef.getColumnName().startsWith("cdc$")) continue;
-            if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) {
-                afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), cellSchemas.get(cdef.getColumnName()));
-            } else {
-                Schema columnSchema = Schema.OPTIONAL_STRING_SCHEMA;
-                if (cdef.getCdcLogDataType().getCqlType() == ChangeSchema.CqlType.INT) {
-                    columnSchema = Schema.OPTIONAL_INT32_SCHEMA;
-                }
-                afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), columnSchema);
-            }
-        }
-        Schema afterSchema = afterSchemaBuilder.optional().build();
+        Map<String, Schema> cellSchemas = computeCellSchemas(changeSchema);
+        Schema keySchema = computeKeySchema(changeSchema, collectionId);
+        Schema afterSchema = computeAfterSchema(changeSchema, cellSchemas);
         Schema beforeSchema = afterSchema;
 
         final Schema valueSchema = SchemaBuilder.struct()
@@ -106,6 +63,106 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         final Envelope envelope = Envelope.fromSchema(valueSchema);
 
         return new ScyllaCollectionSchema(collectionId, keySchema, valueSchema, beforeSchema, afterSchema, cellSchemas, envelope);
+    }
+
+    private Map<String, Schema> computeCellSchemas(ChangeSchema changeSchema) {
+        Map<String, Schema> cellSchemas = new HashMap<>();
+        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
+            if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY
+                    || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
+
+            Schema columnSchema = computeColumnSchema(cdef);
+            Schema cellSchema = SchemaBuilder.struct()
+                    .field(CELL_VALUE, columnSchema).optional().build();
+            cellSchemas.put(cdef.getColumnName(), cellSchema);
+        }
+        return cellSchemas;
+    }
+
+    private Schema computeKeySchema(ChangeSchema changeSchema, CollectionId collectionId) {
+        SchemaBuilder keySchemaBuilder = SchemaBuilder.struct()
+                .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Key"));
+        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
+            if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY
+                    && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
+
+            Schema columnSchema = computeColumnSchema(cdef);
+            keySchemaBuilder = keySchemaBuilder.field(cdef.getColumnName(), columnSchema);
+        }
+
+        return keySchemaBuilder.build();
+    }
+
+    private Schema computeAfterSchema(ChangeSchema changeSchema, Map<String, Schema> cellSchemas) {
+        SchemaBuilder afterSchemaBuilder = SchemaBuilder.struct();
+        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
+            if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) {
+                afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), cellSchemas.get(cdef.getColumnName()));
+            } else {
+                Schema columnSchema = computeColumnSchema(cdef);
+                afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), columnSchema);
+            }
+        }
+        return afterSchemaBuilder.optional().build();
+    }
+
+    private Schema computeColumnSchema(ChangeSchema.ColumnDefinition cdef) {
+        switch (cdef.getCdcLogDataType().getCqlType()) {
+            case ASCII:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case BIGINT:
+                return Schema.OPTIONAL_INT64_SCHEMA;
+            case BLOB:
+                return Schema.OPTIONAL_BYTES_SCHEMA;
+            case BOOLEAN:
+                return Schema.OPTIONAL_BOOLEAN_SCHEMA;
+            case COUNTER:
+                return Schema.OPTIONAL_INT64_SCHEMA;
+            case DECIMAL:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case DOUBLE:
+                return Schema.OPTIONAL_FLOAT64_SCHEMA;
+            case FLOAT:
+                return Schema.OPTIONAL_FLOAT32_SCHEMA;
+            case INT:
+                return Schema.OPTIONAL_INT32_SCHEMA;
+            case TEXT:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case TIMESTAMP:
+                return Timestamp.builder().optional().build();
+            case UUID:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case VARCHAR:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case VARINT:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case TIMEUUID:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case INET:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case DATE:
+                return Date.builder().optional().build();
+            case TIME:
+                // Using OPTIONAL_INT64_SCHEMA instead
+                // of Time from Kafka Connect, because
+                // Time from Kafka Connect has millisecond
+                // precision (stored int32), while CQL TIME is
+                // microsecond precision (stored int64).
+                return Schema.OPTIONAL_INT64_SCHEMA;
+            case SMALLINT:
+                return Schema.OPTIONAL_INT16_SCHEMA;
+            case TINYINT:
+                return Schema.OPTIONAL_INT8_SCHEMA;
+            case DURATION:
+                return Schema.OPTIONAL_STRING_SCHEMA;
+            case LIST:
+            case MAP:
+            case SET:
+            case UDT:
+            case TUPLE:
+            default:
+                throw new UnsupportedOperationException();
+        }
     }
 
     public ScyllaCollectionSchema updateChangeSchema(CollectionId collectionId, ChangeSchema changeSchema) {
