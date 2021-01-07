@@ -9,19 +9,26 @@ import com.datastax.driver.core.TableMetadata;
 import com.datastax.driver.core.querybuilder.Assignment;
 import com.datastax.driver.core.querybuilder.ListSetIdxTimeUUIDAssignment;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.core.querybuilder.UdtSetFieldAssignment;
 import com.datastax.driver.core.querybuilder.Update;
 import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.RawChange;
+import com.scylladb.cdc.model.worker.cql.AbstractField;
+import com.scylladb.cdc.model.worker.cql.Field;
 import com.scylladb.cdc.replicator.operations.ExecutingStatementHandler;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
+import static com.datastax.driver.core.DataType.Name.UDT;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.*;
 
 public class UnpreparedUpdateOperationHandler extends ExecutingStatementHandler {
@@ -43,8 +50,10 @@ public class UnpreparedUpdateOperationHandler extends ExecutingStatementHandler 
                 builder.where(eq(c.getName(), driver3FromLibraryTranslator.translate(change.getCell(c.getName()))));
             } else {
                 Assignment op = null;
-                if (c.getType().isCollection() && !c.getType().isFrozen() && !change.getIsDeleted(c.getName())) {
-                    String deletedElementsColumnName = "cdc$deleted_elements_" + c.getName();
+                boolean isNonFrozenCollection = c.getType().isCollection() && !c.getType().isFrozen();
+                boolean isNonFrozenUDT = c.getType().getName() == UDT && !c.getType().isFrozen();
+                String deletedElementsColumnName = "cdc$deleted_elements_" + c.getName();
+                if (isNonFrozenCollection && !change.getIsDeleted(c.getName())) {
                     if (change.getAsObject(deletedElementsColumnName) != null) {
                         if (c.getType().getName() == DataType.Name.SET) {
                             op = removeAll(c.getName(), (Set) driver3FromLibraryTranslator.translate(change.getCell(deletedElementsColumnName)));
@@ -74,6 +83,27 @@ public class UnpreparedUpdateOperationHandler extends ExecutingStatementHandler 
                             throw new IllegalStateException();
                         }
                     }
+                } else if (isNonFrozenUDT && !change.getIsDeleted(c.getName())) {
+                    Map<String, Field> libraryUdt = change.getCell(c.getName()).getUDT();
+                    Set<Field> deletedElements = change.getCell(deletedElementsColumnName).getSet();
+                    if (deletedElements == null) {
+                        deletedElements = Collections.emptySet();
+                    }
+                    Set<Short> deletedIdx = deletedElements.stream().map(AbstractField::getShort).collect(Collectors.toCollection(HashSet<Short>::new));
+                    Set<Map.Entry<String, Field>> udtFields = libraryUdt.entrySet();
+                    Iterator<Map.Entry<String, Field>> udtFieldsIterator = udtFields.iterator();
+                    for (int idx = 0; udtFieldsIterator.hasNext(); idx++) {
+                        Map.Entry<String, Field> field = udtFieldsIterator.next();
+
+                        Object fieldValue = driver3FromLibraryTranslator.translate(field.getValue().getAsObject(),
+                                field.getValue().getDataType());
+                        if (fieldValue == null && !deletedIdx.contains((short)idx)) {
+                            continue;
+                        }
+
+                        builder.with(new UdtSetFieldAssignment(c.getName(), field.getKey(), fieldValue));
+                    }
+                    return;
                 }
                 if (op == null) {
                     if (c.getType().getName() == DataType.Name.LIST && !c.getType().isFrozen()) {

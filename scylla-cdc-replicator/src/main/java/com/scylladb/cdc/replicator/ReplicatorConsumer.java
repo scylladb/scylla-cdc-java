@@ -2,6 +2,7 @@ package com.scylladb.cdc.replicator;
 
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.DataType;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.TableMetadata;
 import com.google.common.flogger.FluentLogger;
@@ -79,7 +80,8 @@ public class ReplicatorConsumer implements RawChangeConsumer {
         //
         // that necessitates use of [scylla_timeuuid_list_index(...)]=,
         // therefore use a different code path:
-        boolean hasNonFrozenCollection = sourceTableMetadata.getColumns().stream().anyMatch(c -> c.getType().isCollection() && !c.getType().isFrozen());
+        boolean hasNonFrozenCollection = sourceTableMetadata.getColumns().stream()
+                .anyMatch(c -> (c.getType().isCollection() || c.getType().getName() == DataType.Name.UDT) && !c.getType().isFrozen());
         if (hasNonFrozenCollection) {
             operationHandlers.put(RawChange.OperationType.ROW_UPDATE, new UnpreparedUpdateOperationHandler(destinationSession, sourceTableMetadata, driver3FromLibraryTranslator));
         }
