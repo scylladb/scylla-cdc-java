@@ -96,7 +96,7 @@ public class Driver3FromLibraryTranslator {
             }
             case DURATION: {
                 CqlDuration libraryDuration = (CqlDuration) libraryObject;
-                return Duration.newInstance(libraryDuration.getMonths(), libraryDuration.getDays(), libraryDuration.getNanoseconds());
+                return Duration.newInstance((int) libraryDuration.getMonths(), (int) libraryDuration.getDays(), libraryDuration.getNanoseconds());
             }
             case DATE: {
                 CqlDate libraryDate = (CqlDate) libraryObject;

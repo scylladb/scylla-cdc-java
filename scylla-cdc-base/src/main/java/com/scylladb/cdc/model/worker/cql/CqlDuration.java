@@ -6,21 +6,21 @@ import java.util.Objects;
  * Represents CQL type DURATION
  */
 public class CqlDuration {
-    private final int months;
-    private final int days;
+    private final long months;
+    private final long days;
     private final long nanoseconds;
 
-    public CqlDuration(int months, int days, long nanoseconds) {
+    public CqlDuration(long months, long days, long nanoseconds) {
         this.months = months;
         this.days = days;
         this.nanoseconds = nanoseconds;
     }
 
-    public int getMonths() {
+    public long getMonths() {
         return months;
     }
 
-    public int getDays() {
+    public long getDays() {
         return days;
     }
 
@@ -45,6 +45,33 @@ public class CqlDuration {
 
     @Override
     public String toString() {
-        return String.format("Duration(%d, %d, %d)", months, days, nanoseconds);
+        StringBuilder sb = new StringBuilder();
+
+        if (months < 0 || days < 0 || nanoseconds < 0) {
+            sb.append('-');
+        }
+
+        long monthRemainder = appendUnit(sb, Math.abs(months), 12, "y");
+        appendUnit(sb, monthRemainder, 1, "mo");
+
+        appendUnit(sb, Math.abs(days), 1, "d");
+
+        long nanosecondRemainder = appendUnit(sb, Math.abs(nanoseconds), 3600000000000L, "h");
+        nanosecondRemainder = appendUnit(sb, nanosecondRemainder, 60000000000L, "m");
+        nanosecondRemainder = appendUnit(sb, nanosecondRemainder, 1000000000, "s");
+        nanosecondRemainder = appendUnit(sb, nanosecondRemainder, 1000000, "ms");
+        nanosecondRemainder = appendUnit(sb, nanosecondRemainder, 1000, "us");
+        appendUnit(sb, nanosecondRemainder, 1, "ns");
+
+        return sb.toString();
+    }
+
+    private long appendUnit(StringBuilder sb, long count, long unitFactor, String unitName) {
+        if (count == 0 || count < unitFactor) {
+            return count;
+        }
+
+        sb.append(count / unitFactor).append(unitName);
+        return count % unitFactor;
     }
 }
