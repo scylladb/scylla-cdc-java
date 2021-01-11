@@ -70,6 +70,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
             if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY
                     || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
+            if (!isSupportedColumnSchema(cdef)) continue;
 
             Schema columnSchema = computeColumnSchema(cdef);
             Schema cellSchema = SchemaBuilder.struct()
@@ -85,6 +86,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
             if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY
                     && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
+            if (!isSupportedColumnSchema(cdef)) continue;
 
             Schema columnSchema = computeColumnSchema(cdef);
             keySchemaBuilder = keySchemaBuilder.field(cdef.getColumnName(), columnSchema);
@@ -96,6 +98,8 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
     private Schema computeAfterSchema(ChangeSchema changeSchema, Map<String, Schema> cellSchemas) {
         SchemaBuilder afterSchemaBuilder = SchemaBuilder.struct();
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
+            if (!isSupportedColumnSchema(cdef)) continue;
+
             if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) {
                 afterSchemaBuilder = afterSchemaBuilder.field(cdef.getColumnName(), cellSchemas.get(cdef.getColumnName()));
             } else {
@@ -163,6 +167,13 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
             default:
                 throw new UnsupportedOperationException();
         }
+    }
+
+    protected static boolean isSupportedColumnSchema(ChangeSchema.ColumnDefinition cdef) {
+        ChangeSchema.CqlType type = cdef.getCdcLogDataType().getCqlType();
+        return type != ChangeSchema.CqlType.LIST && type != ChangeSchema.CqlType.MAP &&
+               type != ChangeSchema.CqlType.SET && type != ChangeSchema.CqlType.UDT &&
+               type != ChangeSchema.CqlType.TUPLE;
     }
 
     public ScyllaCollectionSchema updateChangeSchema(CollectionId collectionId, ChangeSchema changeSchema) {

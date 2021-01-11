@@ -37,15 +37,16 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
 
     @Override
     protected Envelope.Operation getOperation() {
-        byte cdcOperation = this.change.getCell("cdc$operation").getByte();
-        if (cdcOperation == 2) {
-            return Envelope.Operation.CREATE;
-        } else if (cdcOperation == 1) {
-            return Envelope.Operation.UPDATE;
-        } else if (cdcOperation == 3) {
-            return Envelope.Operation.DELETE;
-        } else {
-            throw new RuntimeException(String.format("Unsupported operation type: %d.", cdcOperation));
+        RawChange.OperationType operationType = this.change.getOperationType();
+        switch (operationType) {
+            case ROW_UPDATE:
+                return Envelope.Operation.UPDATE;
+            case ROW_INSERT:
+                return Envelope.Operation.CREATE;
+            case ROW_DELETE:
+                return Envelope.Operation.DELETE;
+            default:
+                throw new RuntimeException(String.format("Unsupported operation type: %s.", operationType));
         }
     }
 
@@ -95,6 +96,8 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
 
     private void fillStructWithChange(ScyllaCollectionSchema schema, Struct keyStruct, Struct valueStruct, RawChange change) {
         for (ChangeSchema.ColumnDefinition cdef : change.getSchema().getNonCdcColumnDefinitions()) {
+            if (!ScyllaSchema.isSupportedColumnSchema(cdef)) continue;
+
             Object value = translateCellToKafka(change.getCell(cdef.getColumnName()));
 
             if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY || cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY) {
