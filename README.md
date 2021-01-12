@@ -10,6 +10,11 @@ The repository contains two example applications that use the library:
 - [Printer](scylla-cdc-printer): connects to the Scylla cluster and prints all changes from CDC log for a selected table.
 - [Replicator](scylla-cdc-replicator): replicates a table from a source Scylla cluster to a destination Scylla cluster by reading the CDC log.
 
+## Scylla CDC Source Connector
+[Scylla CDC Source Connector](scylla-cdc-kafka-connect) is a source connector capturing row-level changes in the tables of a Scylla cluster. It is a Debezium connector, compatible with Kafka Connect (with Kafka 2.6.0+) and built on top of scylla-cdc-java library.
+
+Read [here](scylla-cdc-kafka-connect) more about the Connector and how to install and configure it.
+
 ## Installation
 
 The latest release of scylla-cdc-java is available on Maven Central. You can integrate it in your application by using the following Maven dependencies:
