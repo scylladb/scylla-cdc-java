@@ -45,13 +45,13 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
             return null;
         }
 
-        Map<String, Schema> cellSchemas = computeCellSchemas(changeSchema);
+        Map<String, Schema> cellSchemas = computeCellSchemas(changeSchema, collectionId);
         Schema keySchema = computeKeySchema(changeSchema, collectionId);
-        Schema afterSchema = computeAfterSchema(changeSchema, cellSchemas);
-        Schema beforeSchema = afterSchema;
+        Schema beforeSchema = computeBeforeSchema(changeSchema, cellSchemas, collectionId);
+        Schema afterSchema = computeAfterSchema(changeSchema, cellSchemas, collectionId);
 
         final Schema valueSchema = SchemaBuilder.struct()
-                .name(adjuster.adjust(Envelope.schemaName(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name)))
+                .name(adjuster.adjust(Envelope.schemaName(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Value")))
                 .field(Envelope.FieldName.SOURCE, sourceSchema)
                 .field(Envelope.FieldName.BEFORE, beforeSchema)
                 .field(Envelope.FieldName.AFTER, afterSchema)
@@ -65,7 +65,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         return new ScyllaCollectionSchema(collectionId, keySchema, valueSchema, beforeSchema, afterSchema, cellSchemas, envelope);
     }
 
-    private Map<String, Schema> computeCellSchemas(ChangeSchema changeSchema) {
+    private Map<String, Schema> computeCellSchemas(ChangeSchema changeSchema, CollectionId collectionId) {
         Map<String, Schema> cellSchemas = new HashMap<>();
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
             if (cdef.getBaseTableColumnType() == ChangeSchema.ColumnType.PARTITION_KEY
@@ -74,6 +74,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
 
             Schema columnSchema = computeColumnSchema(cdef);
             Schema cellSchema = SchemaBuilder.struct()
+                    .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + "." + cdef.getColumnName() + ".Cell"))
                     .field(CELL_VALUE, columnSchema).optional().build();
             cellSchemas.put(cdef.getColumnName(), cellSchema);
         }
@@ -95,8 +96,9 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         return keySchemaBuilder.build();
     }
 
-    private Schema computeAfterSchema(ChangeSchema changeSchema, Map<String, Schema> cellSchemas) {
-        SchemaBuilder afterSchemaBuilder = SchemaBuilder.struct();
+    private Schema computeAfterSchema(ChangeSchema changeSchema, Map<String, Schema> cellSchemas, CollectionId collectionId) {
+        SchemaBuilder afterSchemaBuilder = SchemaBuilder.struct()
+                .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".After"));
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
             if (!isSupportedColumnSchema(cdef)) continue;
 
@@ -108,6 +110,22 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
             }
         }
         return afterSchemaBuilder.optional().build();
+    }
+
+    private Schema computeBeforeSchema(ChangeSchema changeSchema, Map<String, Schema> cellSchemas, CollectionId collectionId) {
+        SchemaBuilder beforeSchemaBuilder = SchemaBuilder.struct()
+                .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Before"));
+        for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
+            if (!isSupportedColumnSchema(cdef)) continue;
+
+            if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) {
+                beforeSchemaBuilder = beforeSchemaBuilder.field(cdef.getColumnName(), cellSchemas.get(cdef.getColumnName()));
+            } else {
+                Schema columnSchema = computeColumnSchema(cdef);
+                beforeSchemaBuilder = beforeSchemaBuilder.field(cdef.getColumnName(), columnSchema);
+            }
+        }
+        return beforeSchemaBuilder.optional().build();
     }
 
     private Schema computeColumnSchema(ChangeSchema.ColumnDefinition cdef) {
