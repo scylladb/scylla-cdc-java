@@ -15,10 +15,9 @@ import java.util.List;
 public class ScyllaConnectorConfig extends CommonConnectorConfig {
 
     public static final Field WORKER_CONFIG = Field.create("scylla.worker.config")
-            .withDisplayName("Worker config")
+            .withDescription("Internal use only")
             .withType(ConfigDef.Type.STRING)
-            .withWidth(ConfigDef.Width.LONG)
-            .withImportance(ConfigDef.Importance.HIGH);
+            .withInvisibleRecommender();
 
     public static final Field LOGICAL_NAME = Field.create("scylla.name")
             .withDisplayName("Namespace")
@@ -26,30 +25,34 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
             .withWidth(ConfigDef.Width.MEDIUM)
             .withImportance(ConfigDef.Importance.HIGH)
             .withValidation(Field::isRequired)
-            .withDescription("Unique name that identifies the Scylla cluster");
+            .withDescription("Unique name that identifies the Scylla cluster and "
+                    + "that is used as a prefix for all schemas and topics. "
+                    + "Each distinct Scylla installation should have a separate namespace and be monitored by "
+                    + "at most one Debezium connector.");
 
     public static final Field CLUSTER_IP_ADDRESSES = Field.create("scylla.cluster.ip.addresses")
-            .withDisplayName("List of IP addresses of some nodes in the Scylla cluster that the connector" +
-                    "will use to open initial connections to the cluster. Provided as a comma-separated list of pairs <IP>:<PORT>")
-            .withType(ConfigDef.Type.STRING)
+            .withDisplayName("Hosts")
+            .withType(ConfigDef.Type.LIST)
             .withWidth(ConfigDef.Width.LONG)
             .withImportance(ConfigDef.Importance.HIGH)
             .withValidation(Field::isRequired)
-            .withDescription("List of IP addresses of some nodes in the Scylla cluster");
+            .withDescription("List of IP addresses of nodes in the Scylla cluster that the connector " +
+                    "will use to open initial connections to the cluster. " +
+                    "In the form of a comma-separated list of pairs <IP>:<PORT>");
 
     public static final Field TABLE_NAMES = Field.create("scylla.table.names")
-            .withDisplayName("List of CDC-enabled table names for connector to read. " +
-                    "Provided as a comma-separated list of pairs <keyspace name>.<table name>")
-            .withType(ConfigDef.Type.STRING)
-            .withWidth(ConfigDef.Width.MEDIUM)
+            .withDisplayName("Table names")
+            .withType(ConfigDef.Type.LIST)
+            .withWidth(ConfigDef.Width.LONG)
             .withImportance(ConfigDef.Importance.HIGH)
             .withValidation(Field::isRequired)
-            .withDescription("List of table names to read");
+            .withDescription("List of CDC-enabled table names for connector to read. " +
+                    "Provided as a comma-separated list of pairs <keyspace name>.<table name>");
 
     private static final ConfigDefinition CONFIG_DEFINITION =
             CommonConnectorConfig.CONFIG_DEFINITION.edit()
                     .name("Scylla")
-                    .type(WORKER_CONFIG, LOGICAL_NAME, CLUSTER_IP_ADDRESSES)
+                    .type(LOGICAL_NAME, CLUSTER_IP_ADDRESSES)
                     .events(TABLE_NAMES)
                     .create();
 
