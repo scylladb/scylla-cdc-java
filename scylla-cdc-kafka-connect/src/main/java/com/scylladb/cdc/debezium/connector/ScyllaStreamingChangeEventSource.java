@@ -41,10 +41,8 @@ public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSou
     @Override
     public void execute(ChangeEventSourceContext context) throws InterruptedException {
         List<InetSocketAddress> contactPoints = configuration.getContactPoints();
-        List<InetAddress> contactHosts = contactPoints.stream().map(InetSocketAddress::getAddress).collect(Collectors.toList());
-        int contactPort = contactPoints.stream().map(InetSocketAddress::getPort).findFirst().get();
 
-        Cluster cluster = Cluster.builder().addContactPoints(contactHosts).withPort(contactPort).build();
+        Cluster cluster = Cluster.builder().addContactPointsWithPorts(contactPoints).build();
 
         Session session = cluster.connect();
         Driver3WorkerCQL cql = new Driver3WorkerCQL(session);

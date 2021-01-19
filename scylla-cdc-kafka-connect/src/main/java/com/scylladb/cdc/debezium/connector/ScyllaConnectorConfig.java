@@ -1,16 +1,17 @@
 package com.scylladb.cdc.debezium.connector;
 
+import com.scylladb.cdc.model.TableName;
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.config.ConfigDefinition;
 import io.debezium.config.Configuration;
 import io.debezium.config.Field;
 import io.debezium.connector.SourceInfoStructMaker;
 import io.debezium.heartbeat.Heartbeat;
-import jdk.jfr.consumer.RecordedObject;
 import org.apache.kafka.common.config.ConfigDef;
 
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.Set;
 
 public class ScyllaConnectorConfig extends CommonConnectorConfig {
 
@@ -35,7 +36,7 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
             .withType(ConfigDef.Type.LIST)
             .withWidth(ConfigDef.Width.LONG)
             .withImportance(ConfigDef.Importance.HIGH)
-            .withValidation(Field::isRequired)
+            .withValidation(ConfigSerializerUtil::validateClusterIpAddresses)
             .withDescription("List of IP addresses of nodes in the Scylla cluster that the connector " +
                     "will use to open initial connections to the cluster. " +
                     "In the form of a comma-separated list of pairs <IP>:<PORT>");
@@ -45,18 +46,34 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
             .withType(ConfigDef.Type.LIST)
             .withWidth(ConfigDef.Width.LONG)
             .withImportance(ConfigDef.Importance.HIGH)
-            .withValidation(Field::isRequired)
+            .withValidation(ConfigSerializerUtil::validateTableNames)
             .withDescription("List of CDC-enabled table names for connector to read. " +
                     "Provided as a comma-separated list of pairs <keyspace name>.<table name>");
+
+    /*
+     * Scylla CDC Source Connector relies on heartbeats to move the offset,
+     * because the offset determines if the generation ended, therefore HEARTBEAT_INTERVAL
+     * should be positive (0 would disable heartbeats) and a default value is changed
+     * (previously 0).
+     */
+    private static final Field CUSTOM_HEARTBEAT_INTERVAL = Heartbeat.HEARTBEAT_INTERVAL
+            .withDescription("Length of an interval in milli-seconds in in which the connector periodically sends heartbeat messages "
+                    + "to a heartbeat topic. In Scylla CDC Source Connector, a heartbeat message is used to record the last read " +
+                    "CDC log row.")
+            .withDefault(30000)
+            .withValidation(Field::isRequired, Field::isPositiveInteger);
 
     private static final ConfigDefinition CONFIG_DEFINITION =
             CommonConnectorConfig.CONFIG_DEFINITION.edit()
                     .name("Scylla")
                     .type(LOGICAL_NAME, CLUSTER_IP_ADDRESSES)
                     .events(TABLE_NAMES)
+                    .excluding(Heartbeat.HEARTBEAT_INTERVAL).events(CUSTOM_HEARTBEAT_INTERVAL)
                     .create();
 
-    public static Field.Set ALL_FIELDS = Field.setOf(CONFIG_DEFINITION.all());
+    protected static Field.Set ALL_FIELDS = Field.setOf(CONFIG_DEFINITION.all());
+
+    protected static Field.Set EXPOSED_FIELDS = ALL_FIELDS;
 
     private final Configuration config;
 
@@ -71,6 +88,10 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
 
     public List<InetSocketAddress> getContactPoints() {
         return ConfigSerializerUtil.deserializeClusterIpAddresses(config.getString(ScyllaConnectorConfig.CLUSTER_IP_ADDRESSES));
+    }
+
+    public Set<TableName> getTableNames() {
+        return ConfigSerializerUtil.deserializeTableNames(config.getString(ScyllaConnectorConfig.TABLE_NAMES));
     }
 
     @Override
