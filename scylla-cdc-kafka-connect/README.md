@@ -8,6 +8,13 @@ The connector reads the CDC log for selected tables and produces Kafka messages 
 
 Scylla CDC Source Connector seamlessly handles schema changes and topology changes (adding, removing nodes from Scylla cluster). The connector is fault-tolerant, retrying reading data from Scylla in case of failure. It periodically saves the current position in Scylla CDC log using Kafka Connect offset tracking (configurable by `offset.flush.interval.ms` parameter). If the connector is stopped, it is able to resume reading from previously saved offset. Scylla CDC Source Connector has at-least-once semantics.
 
+The following features are currently *not* supported:
+- Partition deletes - those changes are ignored
+- Row range deletes - those changes are ignored
+- Collection types (`LIST`, `SET`, `MAP`) and `UDT` - columns with those types are omitted from generated messages
+- Authentication and authorization
+- Preimage and postimage - changes only contain those columns that were modified, not the entire row before/after change. More information [here](#cell-representation)
+
 ## Connector installation
 
 ### Building 
