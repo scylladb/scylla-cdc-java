@@ -56,11 +56,7 @@ public class ScyllaConnector extends SourceConnector {
         this.config = config;
 
         // TODO - properly close the session
-        List<InetSocketAddress> contactPoints = connectorConfig.getContactPoints();
-        List<InetAddress> contactHosts = contactPoints.stream().map(InetSocketAddress::getAddress).collect(Collectors.toList());
-        int contactPort = contactPoints.stream().map(InetSocketAddress::getPort).findFirst().get();
-
-        Cluster cluster = Cluster.builder().addContactPoints(contactHosts).withPort(contactPort).build();
+        Cluster cluster = new ScyllaClusterBuilder(connectorConfig).build();
         Session session = cluster.connect();
         Driver3MasterCQL cql = new Driver3MasterCQL(session);
         this.masterTransport = new ScyllaMasterTransport(context(), new SourceInfo(connectorConfig));
@@ -105,30 +101,35 @@ public class ScyllaConnector extends SourceConnector {
         ConfigValue clusterIpAddressesConfig = results.get(ScyllaConnectorConfig.CLUSTER_IP_ADDRESSES.name());
         ConfigValue tableNamesConfig = results.get(ScyllaConnectorConfig.TABLE_NAMES.name());
 
-        // Do a trial connection:
-        if (clusterIpAddressesConfig.errorMessages().isEmpty()
-                && tableNamesConfig.errorMessages().isEmpty()
-                && results.get(ScyllaConnectorConfig.LOGICAL_NAME.name()).errorMessages().isEmpty()) {
+        ConfigValue userConfig = results.get(ScyllaConnectorConfig.USER.name());
+        ConfigValue passwordConfig = results.get(ScyllaConnectorConfig.PASSWORD.name());
+
+        // Do a trial connection if no errors:
+        boolean noErrors = results.values().stream().allMatch(c -> c.errorMessages().isEmpty());
+        if (noErrors) {
             final ScyllaConnectorConfig connectorConfig = new ScyllaConnectorConfig(config);
 
-            List<InetSocketAddress> contactPoints = connectorConfig.getContactPoints();
-            Set<TableName> tableNames = connectorConfig.getTableNames();
+            if (connectorConfig.getUser() == null && connectorConfig.getPassword() != null) {
+                userConfig.addErrorMessage("Username is not set while password was set.");
+            } else if (connectorConfig.getUser() != null && connectorConfig.getPassword() == null) {
+                passwordConfig.addErrorMessage("Password is not set while username was set.");
+            }
 
-            try (Cluster cluster = Cluster.builder().addContactPointsWithPorts(contactPoints).build();
+            try (Cluster cluster = new ScyllaClusterBuilder(connectorConfig).build();
                  Session session = cluster.connect()) {
-
+                Set<TableName> tableNames = connectorConfig.getTableNames();
                 Metadata metadata = session.getCluster().getMetadata();
                 for (TableName tableName : tableNames) {
                     KeyspaceMetadata keyspaceMetadata = metadata.getKeyspace(tableName.keyspace);
                     if (keyspaceMetadata == null) {
-                        tableNamesConfig.addErrorMessage("Did not found table '" + tableName.keyspace + "."
+                        tableNamesConfig.addErrorMessage("Did not find table '" + tableName.keyspace + "."
                                 + tableName.name + "' in Scylla cluster - missing keyspace '" + tableName.keyspace + "'.");
                         continue;
                     }
 
                     TableMetadata tableMetadata = keyspaceMetadata.getTable(tableName.name);
                     if (tableMetadata == null) {
-                        tableNamesConfig.addErrorMessage("Did not found table '" + tableName.keyspace + "."
+                        tableNamesConfig.addErrorMessage("Did not find table '" + tableName.keyspace + "."
                                 + tableName.name + "' in Scylla cluster.");
                         continue;
                     }
@@ -139,6 +140,9 @@ public class ScyllaConnector extends SourceConnector {
                     }
                 }
             } catch (Exception ex) {
+                // TODO - catch specific exceptions, for example authentication error
+                // should add error message to user, password fields instead of
+                // clusterIpAddressesConfig.
                 clusterIpAddressesConfig.addErrorMessage("Unable to connect to Scylla cluster: " + ex.getMessage());
             }
         }

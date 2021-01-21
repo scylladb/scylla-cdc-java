@@ -1,6 +1,7 @@
 package com.scylladb.cdc.debezium.connector;
 
 import com.datastax.driver.core.Cluster;
+import com.datastax.driver.core.ProtocolVersion;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.utils.Bytes;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
@@ -40,10 +41,7 @@ public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSou
 
     @Override
     public void execute(ChangeEventSourceContext context) throws InterruptedException {
-        List<InetSocketAddress> contactPoints = configuration.getContactPoints();
-
-        Cluster cluster = Cluster.builder().addContactPointsWithPorts(contactPoints).build();
-
+        Cluster cluster = new ScyllaClusterBuilder(configuration).build();
         Session session = cluster.connect();
         Driver3WorkerCQL cql = new Driver3WorkerCQL(session);
         ScyllaWorkerTransport workerTransport = new ScyllaWorkerTransport(context, offsetContext, dispatcher);

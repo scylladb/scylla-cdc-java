@@ -50,6 +50,20 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
             .withDescription("List of CDC-enabled table names for connector to read. " +
                     "Provided as a comma-separated list of pairs <keyspace name>.<table name>");
 
+    public static final Field USER = Field.create("scylla.user")
+            .withDisplayName("User")
+            .withType(ConfigDef.Type.STRING)
+            .withWidth(ConfigDef.Width.SHORT)
+            .withImportance(ConfigDef.Importance.HIGH)
+            .withDescription("The username to connect to Scylla with. If not set, no authorization is done.");
+
+    public static final Field PASSWORD = Field.create("scylla.password")
+            .withDisplayName("Password")
+            .withType(ConfigDef.Type.PASSWORD)
+            .withWidth(ConfigDef.Width.SHORT)
+            .withImportance(ConfigDef.Importance.HIGH)
+            .withDescription("The password to connect to Scylla with. If not set, no authorization is done.");
+
     /*
      * Scylla CDC Source Connector relies on heartbeats to move the offset,
      * because the offset determines if the generation ended, therefore HEARTBEAT_INTERVAL
@@ -66,7 +80,7 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
     private static final ConfigDefinition CONFIG_DEFINITION =
             CommonConnectorConfig.CONFIG_DEFINITION.edit()
                     .name("Scylla")
-                    .type(LOGICAL_NAME, CLUSTER_IP_ADDRESSES)
+                    .type(CLUSTER_IP_ADDRESSES, USER, PASSWORD, LOGICAL_NAME)
                     .events(TABLE_NAMES)
                     .excluding(Heartbeat.HEARTBEAT_INTERVAL).events(CUSTOM_HEARTBEAT_INTERVAL)
                     .create();
@@ -92,6 +106,14 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
 
     public Set<TableName> getTableNames() {
         return ConfigSerializerUtil.deserializeTableNames(config.getString(ScyllaConnectorConfig.TABLE_NAMES));
+    }
+
+    public String getUser() {
+        return config.getString(ScyllaConnectorConfig.USER);
+    }
+
+    public String getPassword() {
+        return config.getString(ScyllaConnectorConfig.PASSWORD);
     }
 
     @Override
