@@ -20,7 +20,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <scylla.driver.version>3.10.2-scylla-0</scylla.driver.version>
+        <scylla.driver.version>3.10.2-scylla-1</scylla.driver.version>
         <flogger.version>0.5.1</flogger.version>
         <netty.version>4.0.56.Final</netty.version>
         <netty-tcnative.version>2.0.7.Final</netty-tcnative.version>
