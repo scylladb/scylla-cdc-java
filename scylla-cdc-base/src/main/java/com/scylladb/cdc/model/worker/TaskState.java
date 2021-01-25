@@ -34,7 +34,8 @@ public final class TaskState {
     }
 
     public UUID getWindowEnd() {
-        return UUIDs.endOf(windowEnd.toDate().getTime());
+        // Without -1, we would be reading windows 1ms too long.
+        return UUIDs.endOf(windowEnd.toDate().getTime() - 1);
     }
 
     public Timestamp getWindowEndTimestamp() {
