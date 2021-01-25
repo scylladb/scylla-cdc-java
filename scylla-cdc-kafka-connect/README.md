@@ -64,9 +64,9 @@ heartbeat.interval.ms=30000
 auto.create.topics.enable=true
 ```
 
-This configuration will capture row-level changes in the `ks.my_table` table from Scylla cluster (`127.0.0.1`, `127.0.0.2`). Change data capture events will appear on `MyScyllaCluster_ks_my_table` Kafka topic encoded as JSONs with schema information.
+This configuration will capture row-level changes in the `ks.my_table` table from Scylla cluster (`127.0.0.1`, `127.0.0.2`). Change data capture events will appear on `MyScyllaCluster.ks.my_table` Kafka topic encoded as JSONs with schema information.
 
-Scylla CDC Source Connector writes events to a separate Kafka topic for each source Scylla table. The topic name will be: `logicalName_keyspaceName_tableName` (logical name configured by `scylla.name` property). You can turn on automatic topic creation by using the `auto.create.topics.enable` property.
+Scylla CDC Source Connector writes events to a separate Kafka topic for each source Scylla table. The topic name will be: `logicalName.keyspaceName.tableName` (logical name configured by `scylla.name` property). You can turn on automatic topic creation by using the `auto.create.topics.enable` property.
 
 ### Data change events
 Scylla CDC Source Connector generates a data change event for each row-level `INSERT`, `UPDATE` or `DELETE` operation. Each event consists of key and value.

@@ -6,7 +6,7 @@ import java.util.StringJoiner;
 
 public class ScyllaTopicSelector {
     public static TopicSelector<CollectionId> defaultSelector(String prefix, String heartbeatPrefix) {
-        return TopicSelector.defaultSelector(prefix, heartbeatPrefix, "_",
+        return TopicSelector.defaultSelector(prefix, heartbeatPrefix, ".",
                 ScyllaTopicSelector::getTopicName);
     }
 
