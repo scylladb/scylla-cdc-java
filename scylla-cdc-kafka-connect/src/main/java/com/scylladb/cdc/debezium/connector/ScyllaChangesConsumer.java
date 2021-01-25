@@ -33,11 +33,9 @@ public class ScyllaChangesConsumer implements TaskAndRawChangeConsumer {
             if (operationType != RawChange.OperationType.ROW_INSERT
                     && operationType != RawChange.OperationType.ROW_UPDATE
                     && operationType != RawChange.OperationType.ROW_DELETE) {
-                logger.info("Ignoring change: {} of type {}", change.getId().toString(), operationType);
                 return CompletableFuture.completedFuture(null);
             }
 
-            logger.info("Dispatching change: {}", change.getId().toString());
             dispatcher.dispatchDataChangeEvent(new CollectionId(task.id.getTable()),
                     new ScyllaChangeRecordEmitter(change, taskStateOffsetContext, schema, clock));
         } catch (InterruptedException e) {
