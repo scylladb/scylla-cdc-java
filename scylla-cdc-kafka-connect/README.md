@@ -88,27 +88,27 @@ INSERT INTO ks.t(pk, ck, v) VALUES (1, 1, 'example row');
 The data change event's key will look like this (with JSON serializer and schema enabled):
 ```json
 {
-    "schema": {
-        "type": "struct",
-        "fields": [
-            {
-                "type": "int32",
-                "optional": true,
-                "field": "ck"
-            },
-            {
-                "type": "int32",
-                "optional": true,
-                "field": "pk"
-            }
-        ],
-        "optional": false,
-        "name": "ks.t.Key"
-    },
-    "payload": {
-        "ck": 1,
-        "pk": 1
-    }
+  "schema": {
+    "type": "struct",
+    "fields": [
+      {
+        "type": "int32",
+        "optional": true,
+        "field": "ck"
+      },
+      {
+        "type": "int32",
+        "optional": true,
+        "field": "pk"
+      }
+    ],
+    "optional": false,
+    "name": "MyScyllaCluster.ks.my_table.Key"
+  },
+  "payload": {
+    "ck": 1,
+    "pk": 1
+  }
 }
 ```
 
@@ -178,180 +178,184 @@ INSERT INTO ks.t(pk, ck, v) VALUES (1, 1, 'example row');
 The connector will generate the following data change event's value (with JSON serializer and schema enabled):
 ```json
 {
-    "schema": {
+  "schema": {
+    "type": "struct",
+    "fields": [
+      {
         "type": "struct",
         "fields": [
-            {
-                "type": "struct",
-                "fields": [
-                    {
-                        "type": "string",
-                        "optional": false,
-                        "field": "version"
-                    },
-                    {
-                        "type": "string",
-                        "optional": false,
-                        "field": "connector"
-                    },
-                    {
-                        "type": "string",
-                        "optional": false,
-                        "field": "name"
-                    },
-                    {
-                        "type": "int64",
-                        "optional": false,
-                        "field": "ts_ms"
-                    },
-                    {
-                        "type": "string",
-                        "optional": true,
-                        "name": "io.debezium.data.Enum",
-                        "version": 1,
-                        "parameters": {
-                            "allowed": "true,last,false"
-                        },
-                        "default": "false",
-                        "field": "snapshot"
-                    },
-                    {
-                        "type": "string",
-                        "optional": false,
-                        "field": "db"
-                    },
-                    {
-                        "type": "string",
-                        "optional": false,
-                        "field": "keyspace_name"
-                    },
-                    {
-                        "type": "string",
-                        "optional": false,
-                        "field": "table_name"
-                    }
-                ],
-                "optional": false,
-                "name": "com.scylladb.cdc.debezium.connector",
-                "field": "source"
+          {
+            "type": "string",
+            "optional": false,
+            "field": "version"
+          },
+          {
+            "type": "string",
+            "optional": false,
+            "field": "connector"
+          },
+          {
+            "type": "string",
+            "optional": false,
+            "field": "name"
+          },
+          {
+            "type": "int64",
+            "optional": false,
+            "field": "ts_ms"
+          },
+          {
+            "type": "string",
+            "optional": true,
+            "name": "io.debezium.data.Enum",
+            "version": 1,
+            "parameters": {
+              "allowed": "true,last,false"
             },
-            {
-                "type": "struct",
-                "fields": [
-                    {
-                        "type": "int32",
-                        "optional": true,
-                        "field": "ck"
-                    },
-                    {
-                        "type": "int32",
-                        "optional": true,
-                        "field": "pk"
-                    },
-                    {
-                        "type": "struct",
-                        "fields": [
-                            {
-                                "type": "string",
-                                "optional": true,
-                                "field": "value"
-                            }
-                        ],
-                        "optional": true,
-                        "field": "v"
-                    }
-                ],
-                "optional": true,
-                "field": "before"
-            },
-            {
-                "type": "struct",
-                "fields": [
-                    {
-                        "type": "int32",
-                        "optional": true,
-                        "field": "ck"
-                    },
-                    {
-                        "type": "int32",
-                        "optional": true,
-                        "field": "pk"
-                    },
-                    {
-                        "type": "struct",
-                        "fields": [
-                            {
-                                "type": "string",
-                                "optional": true,
-                                "field": "value"
-                            }
-                        ],
-                        "optional": true,
-                        "field": "v"
-                    }
-                ],
-                "optional": true,
-                "field": "after"
-            },
-            {
-                "type": "string",
-                "optional": true,
-                "field": "op"
-            },
-            {
-                "type": "int64",
-                "optional": true,
-                "field": "ts_ms"
-            },
-            {
-                "type": "struct",
-                "fields": [
-                    {
-                        "type": "string",
-                        "optional": false,
-                        "field": "id"
-                    },
-                    {
-                        "type": "int64",
-                        "optional": false,
-                        "field": "total_order"
-                    },
-                    {
-                        "type": "int64",
-                        "optional": false,
-                        "field": "data_collection_order"
-                    }
-                ],
-                "optional": true,
-                "field": "transaction"
-            }
+            "default": "false",
+            "field": "snapshot"
+          },
+          {
+            "type": "string",
+            "optional": false,
+            "field": "db"
+          },
+          {
+            "type": "string",
+            "optional": false,
+            "field": "keyspace_name"
+          },
+          {
+            "type": "string",
+            "optional": false,
+            "field": "table_name"
+          }
         ],
         "optional": false,
-        "name": "ks.t.Envelope"
+        "name": "com.scylladb.cdc.debezium.connector",
+        "field": "source"
+      },
+      {
+        "type": "struct",
+        "fields": [
+          {
+            "type": "int32",
+            "optional": true,
+            "field": "ck"
+          },
+          {
+            "type": "int32",
+            "optional": true,
+            "field": "pk"
+          },
+          {
+            "type": "struct",
+            "fields": [
+              {
+                "type": "string",
+                "optional": true,
+                "field": "value"
+              }
+            ],
+            "optional": true,
+            "name": "MyScyllaCluster.ks.my_table.v.Cell",
+            "field": "v"
+          }
+        ],
+        "optional": true,
+        "name": "MyScyllaCluster.ks.my_table.Before",
+        "field": "before"
+      },
+      {
+        "type": "struct",
+        "fields": [
+          {
+            "type": "int32",
+            "optional": true,
+            "field": "ck"
+          },
+          {
+            "type": "int32",
+            "optional": true,
+            "field": "pk"
+          },
+          {
+            "type": "struct",
+            "fields": [
+              {
+                "type": "string",
+                "optional": true,
+                "field": "value"
+              }
+            ],
+            "optional": true,
+            "name": "MyScyllaCluster.ks.my_table.v.Cell",
+            "field": "v"
+          }
+        ],
+        "optional": true,
+        "name": "MyScyllaCluster.ks.my_table.After",
+        "field": "after"
+      },
+      {
+        "type": "string",
+        "optional": true,
+        "field": "op"
+      },
+      {
+        "type": "int64",
+        "optional": true,
+        "field": "ts_ms"
+      },
+      {
+        "type": "struct",
+        "fields": [
+          {
+            "type": "string",
+            "optional": false,
+            "field": "id"
+          },
+          {
+            "type": "int64",
+            "optional": false,
+            "field": "total_order"
+          },
+          {
+            "type": "int64",
+            "optional": false,
+            "field": "data_collection_order"
+          }
+        ],
+        "optional": true,
+        "field": "transaction"
+      }
+    ],
+    "optional": false,
+    "name": "MyScyllaCluster.ks.my_table.Envelope"
+  },
+  "payload": {
+    "source": {
+      "version": "1.0.1-SNAPSHOT",
+      "connector": "scylla",
+      "name": "MyScyllaCluster",
+      "ts_ms": 1611578778701,
+      "snapshot": "false",
+      "db": "ks",
+      "keyspace_name": "ks",
+      "table_name": "my_table"
     },
-    "payload": {
-        "source": {
-            "version": "1.0.0",
-            "connector": "scylla",
-            "name": "MyScyllaCluster",
-            "ts_ms": 1610447874949,
-            "snapshot": "false",
-            "db": "ks",
-            "keyspace_name": "ks",
-            "table_name": "t"
-        },
-        "before": null,
-        "after": {
-            "ck": 1,
-            "pk": 1,
-            "v": {
-                "value": "example row"
-            }
-        },
-        "op": "c",
-        "ts_ms": 1610449737807,
-        "transaction": null
-    }
+    "before": null,
+    "after": {
+      "ck": 1,
+      "pk": 1,
+      "v": {
+        "value": "example row"
+      }
+    },
+    "op": "c",
+    "ts_ms": 1611578838754,
+    "transaction": null
+  }
 }
 ```
 
@@ -372,14 +376,14 @@ The connector will generate the following data change event's value (with JSON s
   "schema": {},
   "payload": {
     "source": {
-      "version": "1.0.0",
+      "version": "1.0.1-SNAPSHOT",
       "connector": "scylla",
       "name": "MyScyllaCluster",
-      "ts_ms": 1610451234949,
+      "ts_ms": 1611578808701,
       "snapshot": "false",
       "db": "ks",
       "keyspace_name": "ks",
-      "table_name": "t"
+      "table_name": "my_table"
     },
     "before": null,
     "after": {
@@ -390,7 +394,7 @@ The connector will generate the following data change event's value (with JSON s
       }
     },
     "op": "u",
-    "ts_ms": 1610451295022,
+    "ts_ms": 1611578868758,
     "transaction": null
   }
 }
@@ -402,14 +406,14 @@ Data change event's value for the second `UPDATE`:
   "schema": {},
   "payload": {
     "source": {
-      "version": "1.0.0",
+      "version": "1.0.1-SNAPSHOT",
       "connector": "scylla",
       "name": "MyScyllaCluster",
-      "ts_ms": 1610451324949,
+      "ts_ms": 1611578808701,
       "snapshot": "false",
       "db": "ks",
       "keyspace_name": "ks",
-      "table_name": "t"
+      "table_name": "my_table"
     },
     "before": null,
     "after": {
@@ -420,7 +424,7 @@ Data change event's value for the second `UPDATE`:
       }
     },
     "op": "u",
-    "ts_ms": 1610451385009,
+    "ts_ms": 1611578868758,
     "transaction": null
   }
 }
@@ -442,14 +446,14 @@ The connector will generate the following data change event's value (with JSON s
   "schema": {},
   "payload": {
     "source": {
-      "version": "1.0.0",
+      "version": "1.0.1-SNAPSHOT",
       "connector": "scylla",
       "name": "MyScyllaCluster",
-      "ts_ms": 1610451834949,
+      "ts_ms": 1611578808701,
       "snapshot": "false",
       "db": "ks",
       "keyspace_name": "ks",
-      "table_name": "t"
+      "table_name": "my_table"
     },
     "before": {
       "ck": 1,
@@ -458,7 +462,7 @@ The connector will generate the following data change event's value (with JSON s
     },
     "after": null,
     "op": "d",
-    "ts_ms": 1610451894968,
+    "ts_ms": 1611578868759,
     "transaction": null
   }
 }

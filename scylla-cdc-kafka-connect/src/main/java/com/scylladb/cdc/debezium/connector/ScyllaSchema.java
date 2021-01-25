@@ -21,12 +21,14 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
     public static final String CELL_VALUE = "value";
 
     private final Schema sourceSchema;
+    private final ScyllaConnectorConfig configuration;
     private final SchemaNameAdjuster adjuster = SchemaNameAdjuster.create(LOGGER);
     private final Map<CollectionId, ScyllaCollectionSchema> dataCollectionSchemas = new HashMap<>();
     private final Map<CollectionId, ChangeSchema> changeSchemas = new HashMap<>();
 
-    public ScyllaSchema(Schema sourceSchema) {
+    public ScyllaSchema(ScyllaConnectorConfig configuration, Schema sourceSchema) {
         this.sourceSchema = sourceSchema;
+        this.configuration = configuration;
     }
 
     @Override
@@ -51,7 +53,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
         Schema afterSchema = computeAfterSchema(changeSchema, cellSchemas, collectionId);
 
         final Schema valueSchema = SchemaBuilder.struct()
-                .name(adjuster.adjust(Envelope.schemaName(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Value")))
+                .name(adjuster.adjust(Envelope.schemaName(configuration.getLogicalName() + "." + collectionId.getTableName().keyspace + "." + collectionId.getTableName().name)))
                 .field(Envelope.FieldName.SOURCE, sourceSchema)
                 .field(Envelope.FieldName.BEFORE, beforeSchema)
                 .field(Envelope.FieldName.AFTER, afterSchema)
@@ -74,7 +76,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
 
             Schema columnSchema = computeColumnSchema(cdef);
             Schema cellSchema = SchemaBuilder.struct()
-                    .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + "." + cdef.getColumnName() + ".Cell"))
+                    .name(adjuster.adjust(configuration.getLogicalName() + "." + collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + "." + cdef.getColumnName() + ".Cell"))
                     .field(CELL_VALUE, columnSchema).optional().build();
             cellSchemas.put(cdef.getColumnName(), cellSchema);
         }
@@ -83,7 +85,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
 
     private Schema computeKeySchema(ChangeSchema changeSchema, CollectionId collectionId) {
         SchemaBuilder keySchemaBuilder = SchemaBuilder.struct()
-                .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Key"));
+                .name(adjuster.adjust(configuration.getLogicalName() + "." + collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Key"));
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
             if (cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY
                     && cdef.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) continue;
@@ -98,7 +100,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
 
     private Schema computeAfterSchema(ChangeSchema changeSchema, Map<String, Schema> cellSchemas, CollectionId collectionId) {
         SchemaBuilder afterSchemaBuilder = SchemaBuilder.struct()
-                .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".After"));
+                .name(adjuster.adjust(configuration.getLogicalName() + "." + collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".After"));
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
             if (!isSupportedColumnSchema(cdef)) continue;
 
@@ -114,7 +116,7 @@ public class ScyllaSchema implements DatabaseSchema<CollectionId> {
 
     private Schema computeBeforeSchema(ChangeSchema changeSchema, Map<String, Schema> cellSchemas, CollectionId collectionId) {
         SchemaBuilder beforeSchemaBuilder = SchemaBuilder.struct()
-                .name(adjuster.adjust(collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Before"));
+                .name(adjuster.adjust(configuration.getLogicalName() + "." + collectionId.getTableName().keyspace + "." + collectionId.getTableName().name + ".Before"));
         for (ChangeSchema.ColumnDefinition cdef : changeSchema.getNonCdcColumnDefinitions()) {
             if (!isSupportedColumnSchema(cdef)) continue;
 

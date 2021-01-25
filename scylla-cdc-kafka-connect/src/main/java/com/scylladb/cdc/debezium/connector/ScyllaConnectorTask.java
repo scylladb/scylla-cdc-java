@@ -48,7 +48,7 @@ public class ScyllaConnectorTask extends BaseSourceTask {
         final TopicSelector<CollectionId> topicSelector = ScyllaTopicSelector.defaultSelector(logicalName, connectorConfig.getHeartbeatTopicsPrefix());
 
         final Schema structSchema = connectorConfig.getSourceInfoStructMaker().schema();
-        this.schema = new ScyllaSchema(structSchema);
+        this.schema = new ScyllaSchema(connectorConfig, structSchema);
 
         List<Pair<TaskId, SortedSet<StreamId>>> tasks = getTasks(configuration);
 
