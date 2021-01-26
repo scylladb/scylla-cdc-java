@@ -70,7 +70,7 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
      * should be positive (0 would disable heartbeats) and a default value is changed
      * (previously 0).
      */
-    private static final Field CUSTOM_HEARTBEAT_INTERVAL = Heartbeat.HEARTBEAT_INTERVAL
+    protected static final Field CUSTOM_HEARTBEAT_INTERVAL = Heartbeat.HEARTBEAT_INTERVAL
             .withDescription("Length of an interval in milli-seconds in in which the connector periodically sends heartbeat messages "
                     + "to a heartbeat topic. In Scylla CDC Source Connector, a heartbeat message is used to record the last read " +
                     "CDC log row.")

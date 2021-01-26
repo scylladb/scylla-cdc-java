@@ -84,6 +84,7 @@ public class ScyllaConnector extends SourceConnector {
         List<String> workerConfigs = new TaskConfigBuilder(tasks).buildTaskConfigs(maxTasks);
         return workerConfigs.stream().map(c -> config.edit()
                 .with(ScyllaConnectorConfig.WORKER_CONFIG, c)
+                .withDefault(ScyllaConnectorConfig.CUSTOM_HEARTBEAT_INTERVAL, ScyllaConnectorConfig.CUSTOM_HEARTBEAT_INTERVAL.defaultValue())
                 .build().asMap()).collect(Collectors.toList());
     }
 
