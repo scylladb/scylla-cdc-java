@@ -1,5 +1,6 @@
 package com.scylladb.cdc.debezium.connector;
 
+import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumer;
@@ -30,7 +31,22 @@ public class ScyllaChangesConsumer implements TaskAndRawChangeConsumer {
         TaskStateOffsetContext taskStateOffsetContext = offsetContext.taskStateOffsetContext(task.id);
         try {
             RawChange.OperationType operationType = change.getOperationType();
-            if (operationType != RawChange.OperationType.ROW_INSERT
+            ChangeSchema changeSchema = change.getSchema();
+            if (operationType == RawChange.OperationType.PARTITION_DELETE) {
+                // The connector currently does not support partition deletes.
+                //
+                // However, there is a single exception to this:
+                // If the (base) table's primary key consists only of
+                // partition key, row DELETEs in such a table are represented as
+                // partition deletes (even though they affect at most a single row).
+                // In that case, we will interpret such a CDC operation
+                // as a "standard" ROW_DELETE.
+                boolean hasClusteringColumn = changeSchema.getNonCdcColumnDefinitions().stream()
+                        .anyMatch(column -> column.getBaseTableColumnType() == ChangeSchema.ColumnType.CLUSTERING_KEY);
+                if (hasClusteringColumn) {
+                    return CompletableFuture.completedFuture(null);
+                }
+            } else if (operationType != RawChange.OperationType.ROW_INSERT
                     && operationType != RawChange.OperationType.ROW_UPDATE
                     && operationType != RawChange.OperationType.ROW_DELETE) {
                 return CompletableFuture.completedFuture(null);
