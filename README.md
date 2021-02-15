@@ -15,6 +15,13 @@ The repository contains two example applications that use the library:
 
 Read [here](scylla-cdc-kafka-connect) more about the Connector and how to install and configure it.
 
+## Why Use a Library?
+Scylla's design of CDC is based on the concept of CDC log tables. For every table whose changes you wish to track, an associated CDC log table is created. We refer to this new table as the CDC log table and the original table as a base table. Every time you modify your data in the base table — insert, update or delete — this fact is recorded by inserting one or more rows to the corresponding CDC log table.
+
+This approach makes it possible to use tools that already exist in order to read from a CDC log. Everything is accessible through CQL and the schema of CDC log tables is documented by us, so it's possible to write an application consuming CDC with the help of a driver (or even `cqlsh`).
+
+However, the CDC log format is more complicated than a single queue of events. You need to know the design of Scylla CDC well in order to implement an application that is performant and robust. Fortunately, the `scylla-cdc-java` library will handle those concerns for you. You can use its convenient API so that you can concentrate on writing the business logic of your application.
+
 ## Installation
 
 The latest release of scylla-cdc-java is available on Maven Central. You can integrate it in your application by using the following Maven dependencies:
@@ -68,14 +75,16 @@ try (Cluster cluster = Cluster.builder().addContactPoint("127.0.0.1").build();
 
 The consumer is started as a single-thread CDC consumer and reads the CDC log for 10 seconds.
 
-**Next steps: you can see the entire code of this example and read more about how to use the library in the [Printer example application](scylla-cdc-printer).**
+**Next steps: read more about how to use the library in the [Printer example application documentation](scylla-cdc-printer).**
 
 ## Useful links
 
 - [Scylla Docs - Change Data Capture (CDC)](https://docs.scylladb.com/using-scylla/cdc/)
 - [Scylla University - Change Data Capture (CDC)](https://university.scylladb.com/courses/scylla-operations/lessons/change-data-capture-cdc/)
 - [ScyllaDB YouTube - Change Data Capture in Scylla](https://www.youtube.com/watch?v=392Nbfrq7Dg)
+- [ScyllaDB Blog - Consuming CDC with Java and Go](https://www.scylladb.com/2021/02/09/consuming-cdc-with-java-and-go/)
 - [ScyllaDB Blog - Using Change Data Capture (CDC) in Scylla](https://www.scylladb.com/2020/07/23/using-change-data-capture-cdc-in-scylla/)
+- [scylla-cdc-go - A library for Go](https://github.com/scylladb/scylla-cdc-go)
 
 ## Contact
 
