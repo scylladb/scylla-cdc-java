@@ -63,6 +63,77 @@
                     <skip>true</skip>
                 </configuration>
             </plugin>
+
+            <plugin>
+                <groupId>io.confluent</groupId>
+                <version>0.12.0</version>
+                <artifactId>kafka-connect-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>kafka-connect</goal>
+                        </goals>
+                        <configuration>
+                            <name>kafka-connect-scylla-cdc</name>
+                            <title>Scylla CDC Source Connector</title>
+                            <documentationUrl>https://github.com/scylladb/scylla-cdc-java/tree/master/scylla-cdc-kafka-connect</documentationUrl>
+                            <description>
+                                Scylla CDC Source Connector is a source connector capturing row-level changes in the tables of a Scylla cluster.
+                            </description>
+                            <logo>logos/connector.png</logo>
+
+                            <ownerUsername>ScyllaDB</ownerUsername>
+                            <ownerName>ScyllaDB</ownerName>
+                            <ownerType>organization</ownerType>
+                            <ownerUrl>https://www.scylladb.com/</ownerUrl>
+                            <ownerLogo>logos/scylla.png</ownerLogo>
+
+                            <componentTypes>
+                                <componentType>source</componentType>
+                            </componentTypes>
+
+                            <tags>
+                                <tag>Scylla Database</tag>
+                            </tags>
+
+                            <requirements>
+                                <requirement>Kafka 2.6.0+</requirement>
+                            </requirements>
+
+                            <deliveryGuarantee>
+                                <deliveryGuarantee>atLeastOnce</deliveryGuarantee>
+                            </deliveryGuarantee>
+
+                            <confluentControlCenterIntegration>true</confluentControlCenterIntegration>
+
+                            <!--
+                                kafka-connect-maven-plugin by default includes README.md
+                                from the parent project. That's unfortunate, as our
+                                parent README.md contains documentation that is not
+                                directly relevant to the connector (more relevant
+                                to the scylla-cdc-java library).
+
+                                Therefore manually include connector's README.md.
+
+                                Warning: fileSets are not documented by Confluent
+                                (they are "internal" API).
+                            -->
+                            <fileSets>
+                                <fileSet>
+                                    <directory>${project.basedir}</directory>
+                                    <outputDirectory>doc/</outputDirectory>
+                                    <includes>
+                                        <include>version.txt*</include>
+                                        <include>README*</include>
+                                        <include>LICENSE*</include>
+                                        <include>NOTICE*</include>
+                                    </includes>
+                                </fileSet>
+                            </fileSets>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
 
         <resources>
