@@ -29,6 +29,7 @@ named arguments:
 
 ## Do it yourself!
 
+### Setting up the CDC consumer
 Let's go through the Printer code and learn how to use the library. You can see the final code [here](src/main/java/com/scylladb/cdc/printer/Main.java).
 
 First, we establish a connection to the Scylla cluster using the Scylla Java Driver in version 3.x:
@@ -61,30 +62,32 @@ RawChangeConsumer changeConsumer = change -> {
 };
 ```
 
-As the CDC consumer can be started multi-threaded, we specify a `RawChangeConsumerProvider` which builds a `RawChangeConsumer` for each thread. If your consumer is thread-safe, your consumer provider should return the same consumer. In case your consumer if not thread-safe, your provider should build a separate consumer for each thread (as below):
+The CDC consumer is started multi-threaded, with a configurable number of threads. Each thread will read a distinct subset of the CDC log (partitioned based on Vnodes). Those multiple threads will cumulatively read the entire CDC log. All changes related to the same row (more generally the same partition key) will appear on the same thread. Note that after a topology change (adding or removing nodes from the Scylla cluster) this mapping will be reset.
 
+Next, we create an instance of `RawChangeConsumerProvider` which returns a `RawChangeConsumer` for each thread. We could write the provider in two ways:
+
+1. A single consumer shared by all threads. With such a provider, a single consumer will receive rows read from all worker threads that read the CDC log. Note that the consumer should be thread-safe. Below is an example of such a provider:
 ```java
-// Build a provider of consumers. The CDCConsumer instance
-// can be run in multi-thread setting and a separate
-// RawChangeConsumer is used by each thread.
+// Build a shared consumer of changes.
+RawChangeConsumer sharedChangeConsumer = change -> {
+    // Print the change. 
+    printChange(change);
+    return CompletableFuture.completedFuture(null);
+};
+
+// Build a provider of this shared consumer. 
 RawChangeConsumerProvider changeConsumerProvider = threadId -> {
-    // Build a consumer of changes. You should provide
-    // a class that implements the RawChangeConsumer
-    // interface.
-    //
-    // Here, we use a lambda for simplicity.
-    //
-    // The consume() method of RawChangeConsumer returns
-    // a CompletableFuture, so your code can perform
-    // some I/O responding to the change.
-    //
-    // The RawChange name alludes to the fact that
-    // changes represented by this class correspond
-    // 1:1 to rows in *_scylla_cdc_log table.
+    return sharedChangeConsumer;
+};
+```
+
+2. Separate consumer for each thread. With such a provider, a separate consumer will be created for each worker thread. Those multiple consumers will cumulatively read the entire CDC log. Because each consumer receives changes from a single worker thread, they don’t have to be thread-safe. Note that after the topology change (adding or removing a node from the Scylla cluster), consumers are recreated. Below is an example of such a provider:
+```java
+// Build a provider of consumers. 
+RawChangeConsumerProvider changeConsumerProvider = threadId -> {
+    // Build a consumer of changes.
     RawChangeConsumer changeConsumer = change -> {
-        // Print the change. See printChange()
-        // for more information on how to
-        // access its details.
+        // Print the change. 
         printChange(change);
         return CompletableFuture.completedFuture(null);
     };
@@ -106,7 +109,9 @@ consumer.start();
 waitForConsumerStop(consumer);
 ```
 
-Let's look into the `printChange(RawChange change)` method and see what information is available about the change. First, there is information about the change id: its stream id and time:
+### Consuming CDC changes
+
+Let's implement the `printChange(RawChange change)` method and see what information is available about the change. The `RawChange` object represents a single row of CDC log. First, we get information about the change id: its stream id and time:
 
 ```java
 private static void printChange(RawChange change) {
@@ -118,29 +123,29 @@ private static void printChange(RawChange change) {
 
 Those accessors correspond to `cdc$stream_id` and `cdc$time` columns.
 
-We can get the operation type (if it was an `INSERT`, `UPDATE` etc.):
+We can get the [operation type](https://docs.scylladb.com/using-scylla/cdc/cdc-log-table/#operation-column) (if it was an `INSERT`, `UPDATE` etc.):
 
 ```java
 // Get the operation type, for example: ROW_UPDATE, POST_IMAGE.
 RawChange.OperationType operationType = change.getOperationType();
 ```
 
+In each `RawChange` there is information about the schema of the change - column names, data types, whether the column is part of the primary key:
+
+```java
+ChangeSchema changeSchema = change.getSchema();
+```
+
+There are two types of columns inside ChangeSchema:
+1. [CDC log columns](https://docs.scylladb.com/using-scylla/cdc/cdc-log-table/) (`cdc$time`, `cdc$stream_id`, ...)
+2. base table columns
+
+CDC log columns can be easily accessed by `RawChange` helper methods (such as `getTTL()`, `getId()`). Let's concentrate on non-CDC columns (those are from the base table) and iterate over them:
+
+
 In each `RawChange` there is an information about the change schema - column names, data types, whether the column is part of primary key:
 
 ```java
-// In each RawChange there is an information about the
-// change schema.
-ChangeSchema changeSchema = change.getSchema();
-
-// There are two types of columns inside the ChangeSchema:
-//   - CDC log columns (cdc$time, cdc$stream_id, ...)
-//   - base table columns
-//
-// CDC log columns can be easily accessed by RawChange
-// helper methods (such as getTTL(), getId()).
-//
-// Let's concentrate on non-CDC columns (those are
-// from the base table) and iterate over them:
 List<ChangeSchema.ColumnDefinition> nonCdcColumnDefinitions = changeSchema.getNonCdcColumnDefinitions();
 
 for (ChangeSchema.ColumnDefinition columnDefinition : nonCdcColumnDefinitions) {
@@ -157,20 +162,13 @@ for (ChangeSchema.ColumnDefinition columnDefinition : nonCdcColumnDefinitions) {
 
 We can also read the value of a given cell (column) in the change:
 ```java
-// Finally, we can get the value of this column:
 Cell cell = change.getCell(columnName);
-
-// Depending on the logDataType, you will want
-// to use different methods of Cell, for example
-// cell.getInt() if column is of INT type:
-//
-// Integer value = cell.getInt();
-//
-// getInt() can return null, if the cell value
-// was NULL.
-//
-// For printing purposes, we use getAsObject():
 Object cellValue = cell.getAsObject();
+```
+
+If we know the type of a given cell, we can get the value as a specific type:
+```java
+Integer intCellValue = cell.getInt();
 ```
 
 You can read the full source code of Printer [here](src/main/java/com/scylladb/cdc/printer/Main.java). 
