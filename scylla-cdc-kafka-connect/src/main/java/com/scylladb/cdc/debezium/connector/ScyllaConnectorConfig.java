@@ -83,6 +83,14 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
                     .type(CLUSTER_IP_ADDRESSES, USER, PASSWORD, LOGICAL_NAME)
                     .events(TABLE_NAMES)
                     .excluding(Heartbeat.HEARTBEAT_INTERVAL).events(CUSTOM_HEARTBEAT_INTERVAL)
+                    // Exclude some Debezium options, which are not applicable/not supported by
+                    // the Scylla CDC Source Connector.
+                    .excluding(CommonConnectorConfig.PROVIDE_TRANSACTION_METADATA,
+                            CommonConnectorConfig.SNAPSHOT_DELAY_MS,
+                            CommonConnectorConfig.SNAPSHOT_MODE_TABLES,
+                            CommonConnectorConfig.SNAPSHOT_FETCH_SIZE,
+                            CommonConnectorConfig.SNAPSHOT_MAX_THREADS,
+                            CommonConnectorConfig.QUERY_FETCH_SIZE)
                     .create();
 
     protected static Field.Set ALL_FIELDS = Field.setOf(CONFIG_DEFINITION.all());
