@@ -46,7 +46,8 @@ public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSou
         Driver3WorkerCQL cql = new Driver3WorkerCQL(session);
         ScyllaWorkerTransport workerTransport = new ScyllaWorkerTransport(context, offsetContext, dispatcher);
         ScyllaChangesConsumer changeConsumer = new ScyllaChangesConsumer(dispatcher, offsetContext, schema, clock);
-        Worker worker = new Worker(new Connectors(workerTransport, cql, changeConsumer));
+        Worker worker = new Worker(new Connectors(workerTransport, cql, changeConsumer, configuration.getQueryTimeWindowSizeMs(),
+                configuration.getConfidenceWindowSizeMs()));
 
         try {
             worker.run(taskContext.getTasks().stream().collect(Collectors.toMap(Pair::getKey, Pair::getValue)));

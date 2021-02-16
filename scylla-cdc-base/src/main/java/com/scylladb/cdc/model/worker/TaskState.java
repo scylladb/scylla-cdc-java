@@ -42,8 +42,8 @@ public final class TaskState {
         return windowEnd;
     }
 
-    public TaskState moveToNextWindow() {
-        return new TaskState(windowEnd, windowEnd.plus(30, ChronoUnit.SECONDS), Optional.empty());
+    public TaskState moveToNextWindow(long nextWindowSizeMs) {
+        return new TaskState(windowEnd, windowEnd.plus(nextWindowSizeMs, ChronoUnit.MILLIS), Optional.empty());
     }
 
     public TaskState update(ChangeId seen) {
@@ -74,10 +74,10 @@ public final class TaskState {
      * Creates an initial state for tasks in a given |generation|.
      *
      * Such initial state starts at the beginning of the generation and spans for
-     * 30s.
+     * |windowSizeMs| milliseconds.
      */
-    public static TaskState createInitialFor(GenerationId generation) {
+    public static TaskState createInitialFor(GenerationId generation, long windowSizeMs) {
         Timestamp generationStart = generation.getGenerationStart();
-        return new TaskState(generationStart, generationStart.plus(30, ChronoUnit.SECONDS), Optional.empty());
+        return new TaskState(generationStart, generationStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
     }
 }

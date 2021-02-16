@@ -23,6 +23,8 @@ import com.scylladb.cdc.transport.MasterTransport;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 public class LocalTransport implements MasterTransport, WorkerTransport {
+    private static final long DEFAULT_CONFIDENCE_WINDOW_SIZE_MS = 30000;
+    private static final long DEFAULT_QUERY_TIME_WINDOW_SIZE_MS = 30000;
 
     private final ThreadGroup workersThreadGroup;
     private final Session session;
@@ -74,7 +76,8 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
         Map<TaskId, SortedSet<StreamId>>[] tasks = split(workerConfigurations, wCount);
         for (int i = 0; i < wCount; ++i) {
             Connectors connectors = new Connectors(this, new Driver3WorkerCQL(session),
-                    new TaskAndRawChangeConsumerAdapter(consumer.getForThread(i)));
+                    new TaskAndRawChangeConsumerAdapter(consumer.getForThread(i)),
+                    DEFAULT_QUERY_TIME_WINDOW_SIZE_MS, DEFAULT_CONFIDENCE_WINDOW_SIZE_MS);
             workerThreads[i] = new WorkerThread(workersThreadGroup, i, connectors, tasks[i]);
             workerThreads[i].start();
         }

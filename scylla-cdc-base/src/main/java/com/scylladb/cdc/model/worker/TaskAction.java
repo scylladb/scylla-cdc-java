@@ -58,7 +58,7 @@ public abstract class TaskAction {
         private CompletableFuture<Void> waitForWindow() {
             Date end = task.state.getWindowEndTimestamp().toDate();
             Date now = new Date();
-            long toWait = end.getTime() - now.getTime() + TimeUnit.SECONDS.toMillis(30);
+            long toWait = end.getTime() - now.getTime() + connectors.confidenceWindowSizeMs;
             if (toWait > 0) {
                 CompletableFuture<Void> result = new CompletableFuture<>();
                 internalExecutor.schedule(() -> result.complete(null), toWait, TimeUnit.MILLISECONDS);
@@ -130,7 +130,7 @@ public abstract class TaskAction {
 
         @Override
         public CompletableFuture<TaskAction> run() {
-            TaskState newState = task.state.moveToNextWindow();
+            TaskState newState = task.state.moveToNextWindow(connectors.queryTimeWindowSizeMs);
             connectors.transport.moveStateToNextWindow(task.id, newState);
             Task newTask = task.updateState(newState);
             return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(connectors, newTask));

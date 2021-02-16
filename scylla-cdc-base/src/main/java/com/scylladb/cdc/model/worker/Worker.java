@@ -34,8 +34,9 @@ public final class Worker {
      * All streams are assumed to belong to the same generation and the initial
      * state is build based on the ID of this generation.
      */
-    private static TaskState getInitialStateForStreams(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
-        return TaskState.createInitialFor(getGenerationIdOfStreams(groupedStreams));
+    private static TaskState getInitialStateForStreams(Map<TaskId, SortedSet<StreamId>> groupedStreams,
+                                                       long windowSizeMs) {
+        return TaskState.createInitialFor(getGenerationIdOfStreams(groupedStreams), windowSizeMs);
     }
 
     /*
@@ -47,7 +48,7 @@ public final class Worker {
      */
     private Stream<Task> createTasksWithState(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
         Map<TaskId, TaskState> states = connectors.transport.getTaskStates(groupedStreams.keySet());
-        TaskState initialState = getInitialStateForStreams(groupedStreams);
+        TaskState initialState = getInitialStateForStreams(groupedStreams, connectors.queryTimeWindowSizeMs);
         return groupedStreams.entrySet().stream().map(taskStreams -> {
             TaskId id = taskStreams.getKey();
             SortedSet<StreamId> streams = taskStreams.getValue();

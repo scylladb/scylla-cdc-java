@@ -64,6 +64,29 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
             .withImportance(ConfigDef.Importance.HIGH)
             .withDescription("The password to connect to Scylla with. If not set, no authorization is done.");
 
+    public static final Field QUERY_TIME_WINDOW_SIZE = Field.create("scylla.query.time.window.size")
+            .withDisplayName("Query time window size (ms)")
+            .withType(ConfigDef.Type.INT)
+            .withWidth(ConfigDef.Width.MEDIUM)
+            .withImportance(ConfigDef.Importance.MEDIUM)
+            .withDescription("The size of windows queried by the connector. Changes are queried using SELECT statements " +
+                    "with time restriction with width defined by this parameter. Value expressed in milliseconds.")
+            .withValidation(Field::isNonNegativeInteger)
+            .withDefault(30000);
+
+    public static final Field CONFIDENCE_WINDOW_SIZE = Field.create("scylla.confidence.window.size")
+            .withDisplayName("Confidence window size (ms)")
+            .withType(ConfigDef.Type.INT)
+            .withWidth(ConfigDef.Width.MEDIUM)
+            .withImportance(ConfigDef.Importance.MEDIUM)
+            .withDescription("The size of the confidence window. It is necessary for the connector to avoid reading too fresh " +
+                    "data from the CDC log due to the eventual consistency of Scylla. The problem could appear when a newer write " +
+                    "reaches a replica before some older write. For a short period of time, when reading, it " +
+                    "is possible for the replica to return only the newer write. The connector mitigates this problem " +
+                    "by not reading a window of most recent changes (controlled by this parameter). Value expressed in milliseconds.")
+            .withValidation(Field::isNonNegativeInteger)
+            .withDefault(30000);
+
     /*
      * Scylla CDC Source Connector relies on heartbeats to move the offset,
      * because the offset determines if the generation ended, therefore HEARTBEAT_INTERVAL
@@ -81,6 +104,7 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
             CommonConnectorConfig.CONFIG_DEFINITION.edit()
                     .name("Scylla")
                     .type(CLUSTER_IP_ADDRESSES, USER, PASSWORD, LOGICAL_NAME)
+                    .connector(QUERY_TIME_WINDOW_SIZE, CONFIDENCE_WINDOW_SIZE)
                     .events(TABLE_NAMES)
                     .excluding(Heartbeat.HEARTBEAT_INTERVAL).events(CUSTOM_HEARTBEAT_INTERVAL)
                     // Exclude some Debezium options, which are not applicable/not supported by
@@ -122,6 +146,14 @@ public class ScyllaConnectorConfig extends CommonConnectorConfig {
 
     public String getPassword() {
         return config.getString(ScyllaConnectorConfig.PASSWORD);
+    }
+
+    public long getQueryTimeWindowSizeMs() {
+        return config.getInteger(ScyllaConnectorConfig.QUERY_TIME_WINDOW_SIZE);
+    }
+
+    public long getConfidenceWindowSizeMs() {
+        return config.getInteger(ScyllaConnectorConfig.CONFIDENCE_WINDOW_SIZE);
     }
 
     @Override
