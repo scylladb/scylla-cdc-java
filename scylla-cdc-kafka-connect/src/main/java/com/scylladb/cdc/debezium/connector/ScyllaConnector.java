@@ -20,55 +20,55 @@ import org.apache.kafka.connect.source.SourceConnector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 public class ScyllaConnector extends SourceConnector {
-
     private final Logger logger = LoggerFactory.getLogger(getClass());
-    private Map<String, String> props;
+
     private Configuration config;
 
+    // Used by background generation master.
     private ScyllaMasterTransport masterTransport;
     private ExecutorService masterExecutor;
-    private Master master;
-    private Future<?> masterFuture;
+    private Cluster masterCluster;
+    private Session masterSession;
 
     public ScyllaConnector() {
     }
 
     @Override
     public void start(Map<String, String> props) {
-        this.props = props;
-
         final Configuration config = Configuration.from(props);
         final ScyllaConnectorConfig connectorConfig = new ScyllaConnectorConfig(config);
         this.config = config;
 
-        // TODO - properly close the session
-        Cluster cluster = new ScyllaClusterBuilder(connectorConfig).build();
-        Session session = cluster.connect();
-        Driver3MasterCQL cql = new Driver3MasterCQL(session);
+        // Start master, which will watch for
+        // new generations.
+        this.startMaster(connectorConfig);
+    }
+
+    private void startMaster(ScyllaConnectorConfig connectorConfig) {
+        this.masterCluster = new ScyllaClusterBuilder(connectorConfig).build();
+        this.masterSession = this.masterCluster.connect();
+        Driver3MasterCQL cql = new Driver3MasterCQL(masterSession);
         this.masterTransport = new ScyllaMasterTransport(context(), new SourceInfo(connectorConfig));
         Set<TableName> tableNames = connectorConfig.getTableNames();
-        this.master = new Master(masterTransport, cql, tableNames);
+        Master master = new Master(masterTransport, cql, tableNames);
 
-        this.masterExecutor = Threads.newSingleThreadExecutor(ScyllaConnector.class, connectorConfig.getLogicalName(), "scylla-lib-master-executor");
-        this.masterFuture = this.masterExecutor.submit(() -> {
+        this.masterExecutor = Threads.newSingleThreadExecutor(ScyllaConnector.class, connectorConfig.getLogicalName(),
+                "scylla-cdc-java-master-executor");
+        this.masterExecutor.execute(() -> {
             try {
                 master.run();
-            } catch (ExecutionException e) {
-                // TODO - handle exception
+            } catch (ExecutionException ex) {
+                logger.error("Error in the scylla-cdc-java library master.", ex);
             }
         });
     }
@@ -90,8 +90,18 @@ public class ScyllaConnector extends SourceConnector {
 
     @Override
     public void stop() {
-        // TODO - properly close and stop all resources
-        this.masterFuture.cancel(true);
+        // Clear interrupt flag so the graceful termination is always attempted.
+        Thread.interrupted();
+
+        if (this.masterExecutor != null) {
+            this.masterExecutor.shutdownNow();
+        }
+        if (this.masterSession != null) {
+            this.masterSession.close();
+        }
+        if (this.masterCluster != null) {
+            this.masterCluster.close();
+        }
     }
 
     @Override
@@ -105,7 +115,7 @@ public class ScyllaConnector extends SourceConnector {
         ConfigValue userConfig = results.get(ScyllaConnectorConfig.USER.name());
         ConfigValue passwordConfig = results.get(ScyllaConnectorConfig.PASSWORD.name());
 
-        // Do a trial connection if no errors:
+        // Do a trial connection, if no errors:
         boolean noErrors = results.values().stream().allMatch(c -> c.errorMessages().isEmpty());
         if (noErrors) {
             final ScyllaConnectorConfig connectorConfig = new ScyllaConnectorConfig(config);
