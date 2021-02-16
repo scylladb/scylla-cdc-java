@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedSet;
@@ -17,6 +18,10 @@ public class TaskConfigBuilder {
     }
 
     public List<String> buildTaskConfigs(int maxTasks) {
+        if (tasks == null) {
+            return Collections.emptyList();
+        }
+
         List<String> serializedTasks = tasks.entrySet().stream().map(t -> {
             TaskId taskId = t.getKey();
             SortedSet<StreamId> streamIds = t.getValue();
