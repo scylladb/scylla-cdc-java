@@ -65,11 +65,8 @@ public class ScyllaConnector extends SourceConnector {
         this.masterExecutor = Threads.newSingleThreadExecutor(ScyllaConnector.class, connectorConfig.getLogicalName(),
                 "scylla-cdc-java-master-executor");
         this.masterExecutor.execute(() -> {
-            try {
-                master.run();
-            } catch (ExecutionException ex) {
-                logger.error("Error in the scylla-cdc-java library master.", ex);
-            }
+            master.run();
+            logger.info("scylla-cdc-java library master gracefully finished.");
         });
     }
 
