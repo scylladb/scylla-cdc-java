@@ -11,7 +11,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.datastax.driver.core.Session;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
+import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.GenerationId;
+import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
@@ -23,9 +25,6 @@ import com.scylladb.cdc.transport.MasterTransport;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 public class LocalTransport implements MasterTransport, WorkerTransport {
-    private static final long DEFAULT_CONFIDENCE_WINDOW_SIZE_MS = 30000;
-    private static final long DEFAULT_QUERY_TIME_WINDOW_SIZE_MS = 30000;
-
     private final ThreadGroup workersThreadGroup;
     private final Session session;
     private volatile boolean stopped = true;
@@ -34,11 +33,22 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
     private volatile int workersCount;
     private Thread[] workerThreads;
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, Session session, int workersCount, RawChangeConsumerProvider consumer) {
+    private long confidenceWindowSizeMs;
+    private long queryTimeWindowSizeMs;
+    private RetryBackoff workerRetryBackoff;
+
+    public LocalTransport(ThreadGroup cdcThreadGroup, Session session, int workersCount,
+                          RawChangeConsumerProvider consumer, long queryTimeWindowSizeMs,
+                          long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff) {
         this.session = Preconditions.checkNotNull(session);
         Preconditions.checkArgument(workersCount > 0);
         this.workersCount = workersCount;
         this.consumer = Preconditions.checkNotNull(consumer);
+        Preconditions.checkArgument(confidenceWindowSizeMs >= 0);
+        this.confidenceWindowSizeMs = confidenceWindowSizeMs;
+        Preconditions.checkArgument(queryTimeWindowSizeMs >= 0);
+        this.queryTimeWindowSizeMs = queryTimeWindowSizeMs;
+        this.workerRetryBackoff = Preconditions.checkNotNull(workerRetryBackoff);
         workersThreadGroup = new ThreadGroup(cdcThreadGroup, "Scylla-CDC-Worker-Threads");
     }
 
@@ -77,7 +87,7 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
         for (int i = 0; i < wCount; ++i) {
             Connectors connectors = new Connectors(this, new Driver3WorkerCQL(session),
                     new TaskAndRawChangeConsumerAdapter(consumer.getForThread(i)),
-                    DEFAULT_QUERY_TIME_WINDOW_SIZE_MS, DEFAULT_CONFIDENCE_WINDOW_SIZE_MS);
+                    queryTimeWindowSizeMs, confidenceWindowSizeMs, workerRetryBackoff);
             workerThreads[i] = new WorkerThread(workersThreadGroup, i, connectors, tasks[i]);
             workerThreads[i].start();
         }

@@ -5,6 +5,8 @@ import com.datastax.driver.core.ProtocolVersion;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.utils.Bytes;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
+import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
+import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.worker.Connectors;
 import com.scylladb.cdc.model.worker.Worker;
 import io.debezium.pipeline.EventDispatcher;
@@ -20,6 +22,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSource {
+    private static final RetryBackoff DEFAULT_WORKER_RETRY_BACKOFF =
+            new ExponentialRetryBackoffWithJitter(10, 30000);
 
     private final ScyllaConnectorConfig configuration;
     private ScyllaTaskContext taskContext;
@@ -47,7 +51,7 @@ public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSou
         ScyllaWorkerTransport workerTransport = new ScyllaWorkerTransport(context, offsetContext, dispatcher);
         ScyllaChangesConsumer changeConsumer = new ScyllaChangesConsumer(dispatcher, offsetContext, schema, clock);
         Worker worker = new Worker(new Connectors(workerTransport, cql, changeConsumer, configuration.getQueryTimeWindowSizeMs(),
-                configuration.getConfidenceWindowSizeMs()));
+                configuration.getConfidenceWindowSizeMs(), DEFAULT_WORKER_RETRY_BACKOFF));
 
         try {
             worker.run(taskContext.getTasks().stream().collect(Collectors.toMap(Pair::getKey, Pair::getValue)));
