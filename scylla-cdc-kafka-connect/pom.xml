@@ -6,7 +6,7 @@
         <version>1.0.1-SNAPSHOT</version>
     </parent>
     <artifactId>scylla-cdc-kafka-connect</artifactId>
-    <name>Scylla CDC Kafka Source Connector</name>
+    <name>Scylla CDC Source Connector</name>
     <description>Kafka Connect Source Connector from Scylla CDC.</description>
 
     <build>
