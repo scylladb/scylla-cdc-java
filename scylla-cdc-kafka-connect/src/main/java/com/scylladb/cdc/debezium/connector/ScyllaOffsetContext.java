@@ -8,21 +8,20 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 
 import java.time.Instant;
-import java.util.Date;
 import java.util.Map;
 
 public class ScyllaOffsetContext implements OffsetContext {
 
-    private final SourceInfo sourceInfo;
+    private final Map<TaskId, SourceInfo> sourceInfos;
     private final TransactionContext transactionContext;
 
-    public ScyllaOffsetContext(SourceInfo sourceInfo, TransactionContext transactionContext) {
-        this.sourceInfo = sourceInfo;
+    public ScyllaOffsetContext(Map<TaskId, SourceInfo> sourceInfos, TransactionContext transactionContext) {
+        this.sourceInfos = sourceInfos;
         this.transactionContext = transactionContext;
     }
 
     public TaskStateOffsetContext taskStateOffsetContext(TaskId taskId) {
-        return new TaskStateOffsetContext(this, taskId, sourceInfo);
+        return new TaskStateOffsetContext(this, sourceInfos.get(taskId));
     }
 
     @Override
@@ -39,12 +38,14 @@ public class ScyllaOffsetContext implements OffsetContext {
 
     @Override
     public Schema getSourceInfoSchema() {
-        return sourceInfo.schema();
+        // See TaskStateOffsetContext
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Struct getSourceInfo() {
-        return sourceInfo.struct();
+        // See TaskStateOffsetContext
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -74,8 +75,7 @@ public class ScyllaOffsetContext implements OffsetContext {
 
     @Override
     public void event(DataCollectionId dataCollectionId, Instant instant) {
-        // Not used by the scylla connector
-        // See TaskStateOffsetContext
+        // Not used by the Scylla CDC Source Connector.
         throw new UnsupportedOperationException();
     }
 

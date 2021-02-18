@@ -56,7 +56,7 @@ public class ScyllaConnector extends SourceConnector {
     private Master buildMaster(ScyllaConnectorConfig connectorConfig) {
         this.masterSession = new ScyllaSessionBuilder(connectorConfig).build();
         Driver3MasterCQL cql = new Driver3MasterCQL(masterSession);
-        this.masterTransport = new ScyllaMasterTransport(context(), new SourceInfo(connectorConfig));
+        this.masterTransport = new ScyllaMasterTransport(context(), connectorConfig);
         Set<TableName> tableNames = connectorConfig.getTableNames();
         MasterConfiguration masterConfiguration = MasterConfiguration.builder()
                 .withTransport(masterTransport)

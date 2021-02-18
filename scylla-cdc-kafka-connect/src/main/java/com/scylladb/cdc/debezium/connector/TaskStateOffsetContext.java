@@ -12,77 +12,75 @@ import java.time.Instant;
 import java.util.Map;
 
 public class TaskStateOffsetContext implements OffsetContext {
-
-    private final ScyllaOffsetContext offsetContext;
-    private final TaskId taskId;
+    private final ScyllaOffsetContext scyllaOffsetContext;
     private final SourceInfo sourceInfo;
 
-    public TaskStateOffsetContext(ScyllaOffsetContext offsetContext, TaskId taskId, SourceInfo sourceInfo) {
-        this.offsetContext = offsetContext;
-        this.taskId = taskId;
+    public TaskStateOffsetContext(ScyllaOffsetContext scyllaOffsetContext, SourceInfo sourceInfo) {
+        this.scyllaOffsetContext = scyllaOffsetContext;
         this.sourceInfo = sourceInfo;
     }
 
     @Override
     public Map<String, ?> getPartition() {
-        return sourceInfo.partition(taskId);
+        return sourceInfo.partition();
     }
 
     @Override
     public Map<String, ?> getOffset() {
-        return sourceInfo.offset(taskId);
+        return sourceInfo.offset();
     }
 
     public TaskState getTaskState() {
-        return sourceInfo.getTaskState(taskId);
+        return sourceInfo.getTaskState();
     }
 
     public void dataChangeEvent(TaskState taskState) {
-        sourceInfo.dataChangeEvent(taskId, taskState);
+        sourceInfo.dataChangeEvent(taskState);
     }
 
     @Override
     public Schema getSourceInfoSchema() {
-        return offsetContext.getSourceInfoSchema();
+        return sourceInfo.schema();
     }
 
     @Override
     public Struct getSourceInfo() {
-        return offsetContext.getSourceInfo();
+        return sourceInfo.struct();
     }
 
     @Override
     public boolean isSnapshotRunning() {
-        return offsetContext.isSnapshotRunning();
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void markLastSnapshotRecord() {
-        offsetContext.markLastSnapshotRecord();
+
     }
 
     @Override
     public void preSnapshotStart() {
-        offsetContext.preSnapshotStart();
+
     }
 
     @Override
     public void preSnapshotCompletion() {
-        offsetContext.preSnapshotCompletion();
+
     }
 
     @Override
     public void postSnapshotCompletion() {
-        offsetContext.postSnapshotCompletion();
+
     }
 
     @Override
     public void event(DataCollectionId dataCollectionId, Instant instant) {
+        // Not used by the Scylla CDC Source Connector.
         throw new UnsupportedOperationException();
     }
 
     @Override
     public TransactionContext getTransactionContext() {
-        return offsetContext.getTransactionContext();
+        return scyllaOffsetContext.getTransactionContext();
     }
 }

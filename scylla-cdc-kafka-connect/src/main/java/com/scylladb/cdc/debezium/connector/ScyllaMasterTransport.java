@@ -25,12 +25,12 @@ public class ScyllaMasterTransport implements MasterTransport {
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final SourceConnectorContext context;
-    private final SourceInfo sourceInfo;
+    private final ScyllaConnectorConfig connectorConfig;
     private volatile Map<TaskId, SortedSet<StreamId>> currentWorkerConfigurations;
 
-    public ScyllaMasterTransport(SourceConnectorContext context, SourceInfo sourceInfo) {
+    public ScyllaMasterTransport(SourceConnectorContext context, ScyllaConnectorConfig connectorConfig) {
         this.context = context;
-        this.sourceInfo = sourceInfo;
+        this.connectorConfig = connectorConfig;
     }
 
     @Override
@@ -44,7 +44,7 @@ public class ScyllaMasterTransport implements MasterTransport {
         OffsetStorageReader reader = context.offsetStorageReader();
 
         List<Map<String, String>> partitions = tasks.stream()
-                .map(sourceInfo::partition)
+                .map(taskId -> new SourceInfo(connectorConfig, taskId).partition())
                 .collect(Collectors.toList());
 
         Collection<Map<String, Object>> offsets = reader.offsets(partitions).values();

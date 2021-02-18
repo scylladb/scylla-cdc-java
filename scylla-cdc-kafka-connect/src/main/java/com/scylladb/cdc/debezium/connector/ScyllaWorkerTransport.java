@@ -37,8 +37,7 @@ public class ScyllaWorkerTransport implements WorkerTransport {
 
     @Override
     public void setState(TaskId task, TaskState newState) {
-        TaskStateOffsetContext taskStateOffsetContext = offsetContext.taskStateOffsetContext(task);
-        taskStateOffsetContext.dataChangeEvent(newState);
+        // Already handled in consume().
     }
 
     @Override

@@ -104,15 +104,20 @@ public class ScyllaConnectorTask extends BaseSourceTask {
     }
 
     private ScyllaOffsetContext getPreviousOffsets(ScyllaConnectorConfig connectorConfig, List<Pair<TaskId, SortedSet<StreamId>>> tasks) {
-        SourceInfo sourceInfo = new SourceInfo(connectorConfig);
-        List<Map<String, String>> partitions = tasks.stream()
-                .map(t -> sourceInfo.partition(t.getLeft()))
-                .collect(Collectors.toList());
-        Map<Map<String, String>, Map<String, Object>> offsetMap = context.offsetStorageReader().offsets(partitions);
+        Map<TaskId, SourceInfo> sourceInfos = new HashMap<>();
         tasks.forEach(t -> {
             TaskId taskId = t.getLeft();
+            SourceInfo sourceInfo = new SourceInfo(connectorConfig, taskId);
+            sourceInfos.put(taskId, sourceInfo);
+        });
 
-            Map<String, String> partition = sourceInfo.partition(taskId);
+        List<Map<String, String>> partitions = sourceInfos.values()
+                .stream().map(SourceInfo::partition)
+                .collect(Collectors.toList());
+        Map<Map<String, String>, Map<String, Object>> offsetMap = context.offsetStorageReader().offsets(partitions);
+
+        sourceInfos.values().forEach(sourceInfo -> {
+            Map<String, String> partition = sourceInfo.partition();
             Map<String, Object> offset = offsetMap.get(partition);
 
             if (offset != null) {
@@ -125,10 +130,10 @@ public class ScyllaConnectorTask extends BaseSourceTask {
                     changeId = Optional.of(new ChangeId(streamId, new ChangeTime(time)));
                 }
                 TaskState taskState = new TaskState(windowStart, windowEnd, changeId);
-                sourceInfo.setTaskState(taskId, taskState);
+                sourceInfo.setTaskState(taskState);
             }
         });
-        return new ScyllaOffsetContext(sourceInfo, new TransactionContext());
+        return new ScyllaOffsetContext(sourceInfos, new TransactionContext());
     }
 
     @Override
