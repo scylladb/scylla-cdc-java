@@ -52,4 +52,10 @@ public final class FutureUtils {
         });
         return result;
     }
+
+    public static <T> CompletableFuture<T> exceptionalFuture(Throwable t) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        future.completeExceptionally(t);
+        return future;
+    }
 }

@@ -5,6 +5,7 @@ import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.transport.MasterTransport;
 
+import java.time.Clock;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.fail;
@@ -26,7 +27,11 @@ public class MasterThread implements AutoCloseable {
     }
 
     public MasterThread(MasterTransport masterTransport, MasterCQL masterCQL, Set<TableName> tableNames) {
-        this(new Connectors(masterTransport, masterCQL, tableNames,
+        this(masterTransport, masterCQL, tableNames, Clock.systemDefaultZone());
+    }
+
+    public MasterThread(MasterTransport masterTransport, MasterCQL masterCQL, Set<TableName> tableNames, Clock clock) {
+        this(new Connectors(masterTransport, masterCQL, tableNames, clock,
                 DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS));
     }
 
