@@ -122,8 +122,12 @@ Data change event's value consists of a schema and a payload section. The payloa
 - `op`: type of operation. `c` for `INSERT`, `u` for `UPDATE`, `d` for `DELETE`.
 - `before`: an optional field with state of the row before the event occurred. Present in `DELETE` data change events.
 - `after`: an optional field with state of the row after the event occurred. Present in `UPDATE` and `INSERT` data change events.
-- `source`: metadata about the source of event.
 - `ts_ms`: time at which connector processed the event.
+- `source`: metadata about the source of event:
+    - `name`: logical name of Scylla cluster (`scylla.name`).
+    - `ts_ms`: the time that the change was made in the database (in milliseconds). You can compute a difference between `source.ts_ms` and (top-level) `ts_ms` to determine the lag between the source Scylla change and the connector.
+    - `ts_us`: the time that the change was made in the database (in microseconds).
+    - `keyspace_name`, `table_name`: the name of keyspace and table this data change event originated from. 
 
 #### Cell representation
 Operations in Scylla, such as `INSERT` or `UPDATE`, do not have to modify all columns of a row. To differentiate between non-modification of column and inserting/updating `NULL`, all non-primary-key columns are wrapped with structure containing a single `value` field. For example, given this Scylla table and `UPDATE` operation:
@@ -207,6 +211,11 @@ The connector will generate the following data change event's value (with JSON s
             "type": "int64",
             "optional": false,
             "field": "ts_ms"
+          },
+          {
+            "type": "int64",
+            "optional": false,
+            "field": "ts_us"
           },
           {
             "type": "string",
@@ -343,6 +352,7 @@ The connector will generate the following data change event's value (with JSON s
       "connector": "scylla",
       "name": "MyScyllaCluster",
       "ts_ms": 1611578778701,
+      "ts_us": 1611578778701813,
       "snapshot": "false",
       "db": "ks",
       "keyspace_name": "ks",
@@ -384,6 +394,7 @@ The connector will generate the following data change event's value (with JSON s
       "connector": "scylla",
       "name": "MyScyllaCluster",
       "ts_ms": 1611578808701,
+      "ts_us": 1611578808701321,
       "snapshot": "false",
       "db": "ks",
       "keyspace_name": "ks",
@@ -414,6 +425,7 @@ Data change event's value for the second `UPDATE`:
       "connector": "scylla",
       "name": "MyScyllaCluster",
       "ts_ms": 1611578808701,
+      "ts_us": 1611578808701341,
       "snapshot": "false",
       "db": "ks",
       "keyspace_name": "ks",
@@ -454,6 +466,7 @@ The connector will generate the following data change event's value (with JSON s
       "connector": "scylla",
       "name": "MyScyllaCluster",
       "ts_ms": 1611578808701,
+      "ts_us": 1611578808701919,
       "snapshot": "false",
       "db": "ks",
       "keyspace_name": "ks",

@@ -28,8 +28,11 @@ public class ScyllaChangesConsumer implements TaskAndRawChangeConsumer {
 
     @Override
     public CompletableFuture<Void> consume(Task task, RawChange change) {
-        TaskStateOffsetContext taskStateOffsetContext = offsetContext.taskStateOffsetContext(task.id);
         try {
+            Task updatedTask = task.updateState(change.getId());
+            TaskStateOffsetContext taskStateOffsetContext = offsetContext.taskStateOffsetContext(task.id);
+            taskStateOffsetContext.dataChangeEvent(updatedTask.state);
+
             RawChange.OperationType operationType = change.getOperationType();
             ChangeSchema changeSchema = change.getSchema();
             if (operationType == RawChange.OperationType.PARTITION_DELETE) {
