@@ -1,14 +1,9 @@
 package com.scylladb.cdc.debezium.connector;
 
-import io.debezium.config.CommonConnectorConfig;
 import io.debezium.pipeline.source.AbstractSnapshotChangeEventSource;
-import io.debezium.pipeline.source.spi.SnapshotChangeEventSource;
 import io.debezium.pipeline.source.spi.SnapshotProgressListener;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.pipeline.spi.SnapshotResult;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-
-import java.util.Collections;
 
 public class ScyllaSnapshotChangeEventSource extends AbstractSnapshotChangeEventSource {
 
@@ -32,7 +27,7 @@ public class ScyllaSnapshotChangeEventSource extends AbstractSnapshotChangeEvent
 
     @Override
     protected SnapshotContext prepare(ChangeEventSourceContext changeEventSourceContext) throws Exception {
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override

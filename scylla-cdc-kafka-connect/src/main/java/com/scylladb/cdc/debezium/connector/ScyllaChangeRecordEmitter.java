@@ -10,7 +10,6 @@ import io.debezium.pipeline.AbstractChangeRecordEmitter;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.util.Clock;
 import org.apache.kafka.connect.data.Struct;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.util.Calendar;
 import java.util.Date;
@@ -53,7 +52,7 @@ public class ScyllaChangeRecordEmitter extends AbstractChangeRecordEmitter<Scyll
 
     @Override
     protected void emitReadRecord(Receiver receiver, ScyllaCollectionSchema scyllaCollectionSchema) throws InterruptedException {
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override
