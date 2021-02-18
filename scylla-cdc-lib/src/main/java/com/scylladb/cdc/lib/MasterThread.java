@@ -1,5 +1,6 @@
 package com.scylladb.cdc.lib;
 
+import java.time.Clock;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -25,7 +26,7 @@ public final class MasterThread extends Thread {
         Preconditions.checkNotNull(cql);
         Preconditions.checkNotNull(tables);
         Preconditions.checkArgument(!tables.isEmpty());
-        Connectors connectors = new Connectors(transport, cql, tables,
+        Connectors connectors = new Connectors(transport, cql, tables, Clock.systemDefaultZone(),
                 DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS);
         this.master = new Master(connectors);
     }

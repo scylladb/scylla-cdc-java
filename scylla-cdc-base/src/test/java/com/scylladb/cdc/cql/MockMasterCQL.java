@@ -2,18 +2,22 @@ package com.scylladb.cdc.cql;
 
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.GenerationId;
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.master.GenerationMetadata;
 
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MockMasterCQL implements MasterCQL {
     private volatile List<GenerationMetadata> generationMetadatas;
+    private volatile Map<TableName, Optional<Long>> tablesTTL = new HashMap<>();
     private volatile boolean shouldInjectFailure = false;
     private final AtomicInteger failedFetchCount = new AtomicInteger(0);
     private final AtomicInteger successfulFetchCount = new AtomicInteger(0);
@@ -28,6 +32,10 @@ public class MockMasterCQL implements MasterCQL {
 
     public void setGenerationMetadatas(List<GenerationMetadata> generationMetadatas) {
         this.generationMetadatas = Preconditions.checkNotNull(generationMetadatas);
+    }
+
+    public void setTablesTTL(Map<TableName, Optional<Long>> tablesTTL) {
+        this.tablesTTL = tablesTTL;
     }
 
     public void setShouldInjectFailure(boolean injectFailure) {
@@ -85,6 +93,18 @@ public class MockMasterCQL implements MasterCQL {
         // fetchGenerationMetadata which increments it itself.
 
         return fetchGenerationMetadata(id).thenApply(GenerationMetadata::getEnd);
+    }
+
+    @Override
+    public CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName) {
+        if (shouldInjectFailure) {
+            return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
+        }
+
+        Optional<Long> ttl = tablesTTL.getOrDefault(tableName, Optional.empty());
+        return CompletableFuture.completedFuture(ttl);
     }
 
     private <T> CompletableFuture<T> injectFailure() {

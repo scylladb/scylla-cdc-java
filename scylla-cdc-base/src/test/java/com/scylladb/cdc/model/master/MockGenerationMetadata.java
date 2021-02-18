@@ -7,16 +7,6 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 public class MockGenerationMetadata {
-
-    public static GenerationMetadata mockGenerationMetadata(long start, Optional<Long> end, int vnodeCount) {
-        // Scale start, end to minutes.
-        final long TIMESTAMP_SCALING = 1000 * 60;
-        start = start * TIMESTAMP_SCALING;
-        end = end.map(e -> e * TIMESTAMP_SCALING);
-
-        return mockGenerationMetadata(new Timestamp(new Date(start)), end.map(Date::new).map(Timestamp::new), vnodeCount);
-    }
-
     public static GenerationMetadata mockGenerationMetadata(Timestamp start, Optional<Timestamp> end, int vnodeCount) {
         // Random with deterministic seed
         Random random = new Random(start.toDate().getTime());

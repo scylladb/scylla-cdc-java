@@ -1,6 +1,10 @@
 package com.scylladb.cdc.model.master;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -42,10 +46,52 @@ public final class Master {
         }
     }
 
-    private boolean generationDone(GenerationMetadata generation, Set<TaskId> tasks) {
-        return generation.isClosed()
-                && !tasks.isEmpty()
-                && connectors.transport.areTasksFullyConsumedUntil(tasks, generation.getEnd().get());
+    private boolean generationDone(GenerationMetadata generation, Set<TaskId> tasks) throws ExecutionException, InterruptedException {
+        if (!generation.isClosed()) {
+            return false;
+        }
+
+        if (generationTTLExpired(generation)) {
+            return true;
+        }
+
+        return connectors.transport.areTasksFullyConsumedUntil(tasks, generation.getEnd().get());
+    }
+
+    private boolean generationTTLExpired(GenerationMetadata generation) throws ExecutionException, InterruptedException {
+        // Check the CDC tables TTL values.
+        //
+        // By default the TTL value is relatively
+        // small (24 hours), which means that we
+        // could safely skip some older generations
+        // (the changes in them have already
+        // expired).
+        Date now = Date.from(connectors.clock.instant());
+        List<Optional<Long>> tablesTTL = new ArrayList<>();
+        for (TableName table : connectors.tables) {
+            // In case fetching the TTL value was unsuccessful,
+            // assume that no TTL is set on a table. This way
+            // the generation will not expire. By "catching"
+            // the exception here, one "bad" table will
+            // not disturb the entire master process.
+            Optional<Long> ttl = connectors.cql.fetchTableTTL(table).exceptionally(ex -> {
+                logger.atSevere().withCause(ex).log("Error while fetching TTL " +
+                        "value for table %s.%s", table.keyspace, table.name);
+                return Optional.empty();
+            }).get();
+            tablesTTL.add(ttl);
+        }
+
+        // If tablesTTL is empty or contains a table with TTL disabled,
+        // use new Date(0) value - meaning there is no lower bound
+        // of row timestamps the table could possibly contain.
+        Date lastVisibleChanges = tablesTTL.stream()
+                // getTime() is in milliseconds, TTL is in seconds
+                .map(t -> t.map(ttl -> new Date(now.getTime() - 1000L * ttl)).orElse(new Date(0)))
+                .min(Comparator.naturalOrder())
+                .orElse(new Date(0));
+
+        return lastVisibleChanges.after(generation.getEnd().get().toDate());
     }
 
     private GenerationMetadata getNextGeneration(GenerationMetadata generation)
