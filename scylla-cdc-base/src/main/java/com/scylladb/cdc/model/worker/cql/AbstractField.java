@@ -1,6 +1,6 @@
 package com.scylladb.cdc.model.worker.cql;
 
-import com.sun.org.apache.xerces.internal.impl.dv.util.HexBin;
+import com.google.common.io.BaseEncoding;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -128,7 +128,8 @@ public abstract class AbstractField {
     @Override
     public String toString() {
         if (value != null && value instanceof ByteBuffer) {
-            return HexBin.encode(((ByteBuffer) value).array()).toLowerCase();
+            byte[] valueArray = ((ByteBuffer) value).array();
+            return BaseEncoding.base16().encode(valueArray, 0, valueArray.length);
         }
         return Objects.toString(value);
     }
