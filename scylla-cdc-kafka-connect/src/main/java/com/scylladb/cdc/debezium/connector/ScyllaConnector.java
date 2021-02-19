@@ -9,6 +9,7 @@ import com.scylladb.cdc.cql.driver3.Driver3MasterCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
+import com.scylladb.cdc.model.master.Connectors;
 import com.scylladb.cdc.model.master.Master;
 import io.debezium.config.Configuration;
 import io.debezium.util.Threads;
@@ -27,10 +28,15 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class ScyllaConnector extends SourceConnector {
     private final Logger logger = LoggerFactory.getLogger(getClass());
+
+    private static final long DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS = TimeUnit.SECONDS.toMillis(10);
+    private static final long DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS = TimeUnit.SECONDS.toMillis(30);
+    private static final long DEFAULT_SLEEP_AFTER_EXCEPTION_MS = TimeUnit.SECONDS.toMillis(10);
 
     private Configuration config;
 
@@ -60,7 +66,9 @@ public class ScyllaConnector extends SourceConnector {
         Driver3MasterCQL cql = new Driver3MasterCQL(masterSession);
         this.masterTransport = new ScyllaMasterTransport(context(), new SourceInfo(connectorConfig));
         Set<TableName> tableNames = connectorConfig.getTableNames();
-        Master master = new Master(masterTransport, cql, tableNames);
+        Connectors connectors = new Connectors(masterTransport, cql, tableNames,
+                DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS);
+        Master master = new Master(connectors);
 
         this.masterExecutor = Threads.newSingleThreadExecutor(ScyllaConnector.class, connectorConfig.getLogicalName(),
                 "scylla-cdc-java-master-executor");

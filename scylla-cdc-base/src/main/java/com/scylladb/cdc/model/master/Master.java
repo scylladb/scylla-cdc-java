@@ -22,50 +22,42 @@ import com.scylladb.cdc.transport.MasterTransport;
 public final class Master {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
-    private static final long SLEEP_BEFORE_FIRST_GENERATION_MS = TimeUnit.SECONDS.toMillis(10);
-    private static final long SLEEP_BEFORE_GENERATION_DONE_MS = TimeUnit.SECONDS.toMillis(30);
-    private static final long SLEEP_AFTER_EXCEPTION_MS = TimeUnit.SECONDS.toMillis(10);
+    private final Connectors connectors;
 
-    private final MasterTransport transport;
-    private final MasterCQL cql;
-    private final Set<TableName> tables;
-
-    public Master(MasterTransport transport, MasterCQL cql, Set<TableName> tables) {
-        this.transport = Preconditions.checkNotNull(transport);
-        this.cql = Preconditions.checkNotNull(cql);
-        Preconditions.checkNotNull(tables);
-        Preconditions.checkArgument(!tables.isEmpty());
-        this.tables = tables;
+    public Master(Connectors connectors) {
+        this.connectors = Preconditions.checkNotNull(connectors);
     }
 
     private GenerationId getGenerationId() throws InterruptedException, ExecutionException {
-        Optional<GenerationId> generationId = transport.getCurrentGenerationId();
+        Optional<GenerationId> generationId = connectors.transport.getCurrentGenerationId();
         if (generationId.isPresent()) {
             return generationId.get();
         }
         while (true) {
-            generationId = cql.fetchFirstGenerationId().get();
+            generationId = connectors.cql.fetchFirstGenerationId().get();
             if (generationId.isPresent()) {
                 return generationId.get();
             }
-            Thread.sleep(SLEEP_BEFORE_FIRST_GENERATION_MS);
+            Thread.sleep(connectors.sleepBeforeFirstGenerationMs);
         }
     }
 
     private boolean generationDone(GenerationMetadata generation, Set<TaskId> tasks) {
-        return generation.isClosed() && !tasks.isEmpty() && transport.areTasksFullyConsumedUntil(tasks, generation.getEnd().get());
+        return generation.isClosed()
+                && !tasks.isEmpty()
+                && connectors.transport.areTasksFullyConsumedUntil(tasks, generation.getEnd().get());
     }
 
     private GenerationMetadata getNextGeneration(GenerationMetadata generation)
             throws InterruptedException, ExecutionException {
-        return cql.fetchGenerationMetadata(generation.getNextGenerationId().get()).get();
+        return connectors.cql.fetchGenerationMetadata(generation.getNextGenerationId().get()).get();
     }
 
     private Map<TaskId, SortedSet<StreamId>> createTasks(GenerationMetadata generation) {
         SortedSet<StreamId> streams = generation.getStreams();
         Map<TaskId, SortedSet<StreamId>> tasks = new HashMap<>();
         for (StreamId s : streams) {
-            for (TableName t : tables) {
+            for (TableName t : connectors.tables) {
                 TaskId taskId = new TaskId(generation.getId(), s.getVNodeId(), t);
                 tasks.computeIfAbsent(taskId, id -> new TreeSet<>()).add(s);
             }
@@ -75,7 +67,7 @@ public final class Master {
 
     private GenerationMetadata refreshEnd(GenerationMetadata generation)
             throws InterruptedException, ExecutionException {
-        Optional<Timestamp> end = cql.fetchGenerationEnd(generation.getId()).get();
+        Optional<Timestamp> end = connectors.cql.fetchGenerationEnd(generation.getId()).get();
         return end.isPresent() ? generation.withEnd(end.get()) : generation;
     }
 
@@ -93,7 +85,7 @@ public final class Master {
             }
             // Retry backoff
             try {
-                Thread.sleep(SLEEP_AFTER_EXCEPTION_MS);
+                Thread.sleep(connectors.sleepAfterExceptionMs);
             } catch (InterruptedException e) {
                 // Interruptions are expected.
                 Thread.currentThread().interrupt();
@@ -104,16 +96,16 @@ public final class Master {
     private void runUntilException() throws ExecutionException {
         try {
             GenerationId generationId = getGenerationId();
-            GenerationMetadata generation = cql.fetchGenerationMetadata(generationId).get();
+            GenerationMetadata generation = connectors.cql.fetchGenerationMetadata(generationId).get();
             Map<TaskId, SortedSet<StreamId>> tasks = createTasks(generation);
             while (!Thread.interrupted()) {
                 while (generationDone(generation, tasks.keySet())) {
                     generation = getNextGeneration(generation);
                     tasks = createTasks(generation);
                 }
-                transport.configureWorkers(tasks);
+                connectors.transport.configureWorkers(tasks);
                 while (!generationDone(generation, tasks.keySet())) {
-                    Thread.sleep(SLEEP_BEFORE_GENERATION_DONE_MS);
+                    Thread.sleep(connectors.sleepBeforeGenerationDoneMs);
                     if (!generation.isClosed()) {
                         generation = refreshEnd(generation);
                     }
