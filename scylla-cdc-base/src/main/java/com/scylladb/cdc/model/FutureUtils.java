@@ -1,5 +1,9 @@
 package com.scylladb.cdc.model;
 
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Function;
@@ -30,5 +34,22 @@ public final class FutureUtils {
                 return exceptionally.apply(wrapper.throwable);
             }
         });
+    }
+
+    public static <T> CompletableFuture<T> convert(ListenableFuture<T> fut) {
+        CompletableFuture<T> result = new CompletableFuture<>();
+        Futures.addCallback(fut, new FutureCallback<T>() {
+
+            @Override
+            public void onSuccess(T value) {
+                result.complete(value);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                result.completeExceptionally(t);
+            }
+        });
+        return result;
     }
 }

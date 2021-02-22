@@ -103,6 +103,7 @@ public final class Master {
                     generation = getNextGeneration(generation);
                     tasks = createTasks(generation);
                 }
+                logger.atInfo().log("Master found a new generation: %s. Will call transport.configureWorkers().", generation.getId());
                 connectors.transport.configureWorkers(tasks);
                 while (!generationDone(generation, tasks.keySet())) {
                     Thread.sleep(connectors.sleepBeforeGenerationDoneMs);
