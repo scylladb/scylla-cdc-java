@@ -2,7 +2,9 @@ package com.scylladb.cdc.replicator;
 
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.KeyspaceMetadata;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.TableMetadata;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
@@ -49,6 +51,11 @@ public class Main {
             String[] tablesToReplicate = tables.split(",");
 
             for (String table : tablesToReplicate) {
+                validateTableExists(sourceCluster, keyspace, table,
+                        "The source cluster is missing the given table to replicate.");
+                validateTableExists(destinationCluster, keyspace, table,
+                        "Before running the replicator, create the corresponding tables in your destination cluster.");
+
                 Set<TableName> cdcTableSet = Collections.singleton(new TableName(keyspace, table));
 
                 CDCConsumer consumer = CDCConsumerBuilder.builder(sourceSession, (threadId) ->
@@ -71,6 +78,25 @@ public class Main {
             } catch (InterruptedException e) {
                 // Ignore exception.
             }
+        } catch (ReplicatorValidationException ex) {
+            System.err.println(ex.getMessage());
+            System.exit(1);
+        }
+    }
+
+    private static void validateTableExists(Cluster cluster, String keyspace, String table, String hint) throws ReplicatorValidationException {
+        String clusterName = cluster.getClusterName() + " (" + cluster.getMetadata().getAllHosts().toString() + ")";
+
+        KeyspaceMetadata keyspaceMetadata = cluster.getMetadata().getKeyspace(keyspace);
+        if (keyspaceMetadata == null) {
+            throw new ReplicatorValidationException(String.format("Missing keyspace %s in cluster: %s. %s",
+                    keyspace, clusterName, hint));
+        }
+
+        TableMetadata tableMetadata = keyspaceMetadata.getTable(table);
+        if (tableMetadata == null) {
+            throw new ReplicatorValidationException(String.format("Missing table %s.%s in cluster: %s. %s",
+                    keyspace, table, clusterName, hint));
         }
     }
 
