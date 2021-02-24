@@ -175,6 +175,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.scylladb</groupId>
+            <artifactId>scylla-cdc-driver3</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>io.debezium</groupId>
             <artifactId>debezium-core</artifactId>
             <version>${debezium.version}</version>
