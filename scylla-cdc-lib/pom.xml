@@ -15,5 +15,10 @@
             <artifactId>scylla-cdc-base</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.scylladb</groupId>
+            <artifactId>scylla-cdc-driver3</artifactId>
+            <version>${project.version}</version>
+        </dependency>
      </dependencies>
 </project>
