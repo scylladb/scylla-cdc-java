@@ -5,7 +5,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.datastax.driver.core.utils.UUIDs;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.Timestamp;
@@ -26,7 +25,7 @@ public final class TaskState {
     }
 
     public UUID getWindowStart() {
-        return UUIDs.startOf(windowStart.toDate().getTime());
+        return TimeUUID.startOf(windowStart.toDate().getTime());
     }
 
     public boolean hasPassed(Timestamp t) {
@@ -35,7 +34,7 @@ public final class TaskState {
 
     public UUID getWindowEnd() {
         // Without -1, we would be reading windows 1ms too long.
-        return UUIDs.endOf(windowEnd.toDate().getTime() - 1);
+        return TimeUUID.endOf(windowEnd.toDate().getTime() - 1);
     }
 
     public Timestamp getWindowEndTimestamp() {
