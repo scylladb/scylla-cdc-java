@@ -21,12 +21,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <scylla.driver.version>3.10.2-scylla-1</scylla.driver.version>
         <flogger.version>0.5.1</flogger.version>
-
-        <!-- Versions copied from Scylla Driver: -->
-        <netty.version>4.0.56.Final</netty.version>
-        <netty-tcnative.version>2.0.7.Final</netty-tcnative.version>
     </properties>
 
     <dependencyManagement>
@@ -43,26 +38,6 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.scylladb</groupId>
-            <artifactId>scylla-driver-core</artifactId>
-            <version>${scylla.driver.version}</version>
-            <scope>compile</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.netty</groupId>
-                    <artifactId>netty-handler</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.netty</groupId>
-                    <artifactId>netty-transport-native-epoll</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.netty</groupId>
-                    <artifactId>netty-tcnative</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>com.google.flogger</groupId>
             <artifactId>flogger</artifactId>
             <version>${flogger.version}</version>
@@ -71,21 +46,6 @@
             <groupId>com.google.flogger</groupId>
             <artifactId>flogger-system-backend</artifactId>
             <version>${flogger.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-transport-native-epoll</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-tcnative</artifactId>
-            <version>${netty-tcnative.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

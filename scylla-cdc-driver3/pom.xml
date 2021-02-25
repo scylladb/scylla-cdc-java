@@ -14,11 +14,54 @@
     <description>A CQL backend for scylla-cdc-java using Scylla Java Driver 3.x.</description>
     <packaging>jar</packaging>
 
+    <properties>
+        <scylla.driver.version>3.10.2-scylla-1</scylla.driver.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.scylladb</groupId>
             <artifactId>scylla-cdc-base</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.scylladb</groupId>
+            <artifactId>scylla-driver-core</artifactId>
+            <version>${scylla.driver.version}</version>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <relocations>
+                                <relocation>
+                                    <pattern>com.datastax.</pattern>
+                                    <shadedPattern>shaded.com.scylladb.cdc.driver3.</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>io.netty.</pattern>
+                                    <shadedPattern>shaded.com.scylladb.cdc.driver3.</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.google.</pattern>
+                                    <shadedPattern>shaded.com.scylladb.cdc.driver3.</shadedPattern>
+                                </relocation>
+                            </relocations>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

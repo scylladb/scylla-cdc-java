@@ -9,4 +9,16 @@
     <name>Java Library for Scylla CDC - base</name>
     <description>A library for reading the Scylla CDC log.</description>
     <packaging>jar</packaging>
+
+    <properties>
+        <guava.version>19.0</guava.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>${guava.version}</version>
+        </dependency>
+    </dependencies>
 </project>
