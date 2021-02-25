@@ -1,5 +1,7 @@
 package com.scylladb.cdc.model.worker;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -44,26 +46,24 @@ public class ChangeSchema {
         /*
          * Used in MAP, LIST, SET and TUPLE.
          */
-        private final ImmutableList<DataType> typeArguments;
+        private final List<DataType> typeArguments;
 
         public static class UdtType {
             /*
              * Map from field name to its DataType.
-             * Type ImmutableMap is ordered by insertion time,
-             * so the order of entries matches the order in UDT.
              */
-            private final ImmutableMap<String, DataType> fields;
+            private final Map<String, DataType> fields;
 
             private final String keyspace;
             private final String name;
 
-            public UdtType(ImmutableMap<String, DataType> fields, String keyspace, String name) {
+            public UdtType(Map<String, DataType> fields, String keyspace, String name) {
                 this.fields = fields;
                 this.keyspace = keyspace;
                 this.name = name;
             }
 
-            public ImmutableMap<String, DataType> getFields() {
+            public Map<String, DataType> getFields() {
                 return fields;
             }
 
@@ -97,7 +97,7 @@ public class ChangeSchema {
             this(cqlType, null, null);
         }
 
-        public DataType(CqlType cqlType, ImmutableList<DataType> typeArguments) {
+        public DataType(CqlType cqlType, List<DataType> typeArguments) {
             this(cqlType, typeArguments, null);
         }
 
@@ -105,7 +105,7 @@ public class ChangeSchema {
             this(cqlType, null, udtType);
         }
 
-        public DataType(CqlType cqlType, ImmutableList<DataType> typeArguments, UdtType udtType) {
+        public DataType(CqlType cqlType, List<DataType> typeArguments, UdtType udtType) {
             Preconditions.checkArgument(typeArguments == null || udtType == null,
                     "Cannot have both non-null type arguments and UdtType.");
 
@@ -135,7 +135,7 @@ public class ChangeSchema {
             return cqlType;
         }
 
-        public ImmutableList<DataType> getTypeArguments() {
+        public List<DataType> getTypeArguments() {
             if (typeArguments == null) {
                 throw new IllegalStateException("Cannot get type arguments for this CQL type: " + cqlType.name());
             }
@@ -246,22 +246,22 @@ public class ChangeSchema {
         }
     }
 
-    private final ImmutableList<ColumnDefinition> columnDefinitions;
+    private final List<ColumnDefinition> columnDefinitions;
 
-    public ChangeSchema(ImmutableList<ColumnDefinition> columnDefinitions) {
+    public ChangeSchema(List<ColumnDefinition> columnDefinitions) {
         this.columnDefinitions = Preconditions.checkNotNull(columnDefinitions);
     }
 
-    public ImmutableList<ColumnDefinition> getAllColumnDefinitions() {
+    public List<ColumnDefinition> getAllColumnDefinitions() {
         return columnDefinitions;
     }
 
-    public ImmutableList<ColumnDefinition> getCdcColumnDefinitions() {
+    public List<ColumnDefinition> getCdcColumnDefinitions() {
         return columnDefinitions.stream().filter(ColumnDefinition::isCdcColumn)
                 .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
     }
 
-    public ImmutableList<ColumnDefinition> getNonCdcColumnDefinitions() {
+    public List<ColumnDefinition> getNonCdcColumnDefinitions() {
         return columnDefinitions.stream().filter(c -> !c.isCdcColumn())
                 .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
     }
