@@ -163,9 +163,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <debezium.version>1.4.1.Final</debezium.version>
         <kafka.version>2.6.0</kafka.version>
-
-        <!-- Versions copied from Scylla Driver: -->
-        <guava.version>19.0</guava.version>
     </properties>
 
     <dependencies>
@@ -183,17 +180,6 @@
             <groupId>io.debezium</groupId>
             <artifactId>debezium-core</artifactId>
             <version>${debezium.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.google.guava</groupId>
-                    <artifactId>guava</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>${guava.version}</version>
         </dependency>
         <dependency>
             <groupId>io.debezium</groupId>
