@@ -3,10 +3,10 @@ package com.scylladb.cdc.lib;
 import java.util.Optional;
 import java.util.Set;
 
-import com.datastax.driver.core.Session;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.cql.driver3.Driver3MasterCQL;
+import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.TableName;
@@ -20,7 +20,7 @@ public final class CDCConsumer {
     private final Set<TableName> tables;
     private MasterThread master;
 
-    public CDCConsumer(Session session, RawChangeConsumerProvider consumer, Set<TableName> tables, int workersCount,
+    public CDCConsumer(Driver3Session session, RawChangeConsumerProvider consumer, Set<TableName> tables, int workersCount,
                        long queryTimeWindowSizeMs, long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff) {
         cdcThreadGroup = new ThreadGroup("Scylla-CDC-Threads");
         Preconditions.checkNotNull(consumer);

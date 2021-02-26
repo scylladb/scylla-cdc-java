@@ -58,9 +58,8 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
     private PreparedStatement legacyFetchSmallestGenerationAfterStmt;
     private PreparedStatement legacyFetchStreamsStmt;
 
-    public Driver3MasterCQL(Session session) {
-        Preconditions.checkNotNull(session);
-        this.session = session;
+    public Driver3MasterCQL(Driver3Session session) {
+        this.session = Preconditions.checkNotNull(session).getDriverSession();
     }
 
     private CompletableFuture<Boolean> fetchShouldQueryLegacyTables() {

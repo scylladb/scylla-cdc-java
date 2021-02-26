@@ -39,8 +39,8 @@ public final class Driver3WorkerCQL implements WorkerCQL {
     private final Session session;
     private final Map<TableName, PreparedStatement> preparedStmts = new HashMap<>();
 
-    public Driver3WorkerCQL(Session session) {
-        this.session = Preconditions.checkNotNull(session);
+    public Driver3WorkerCQL(Driver3Session session) {
+        this.session = Preconditions.checkNotNull(session).getDriverSession();
     }
 
     private static final class PreparedResult {

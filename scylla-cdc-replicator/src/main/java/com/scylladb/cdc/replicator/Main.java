@@ -5,6 +5,8 @@ import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.KeyspaceMetadata;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.TableMetadata;
+import com.scylladb.cdc.cql.CQLConfiguration;
+import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
@@ -39,9 +41,10 @@ public class Main {
 
     private static void startReplicator(Mode mode, String source, String destination, String keyspace, String tables,
                                         ConsistencyLevel consistencyLevel) {
+        CQLConfiguration configuration = CQLConfiguration.builder().addContactPoint(source).build();
+
         // Connect to source and destination clusters.
-        try (Cluster sourceCluster = Cluster.builder().addContactPoint(source).build();
-             Session sourceSession = sourceCluster.connect();
+        try (Driver3Session sourceSession = new Driver3Session(configuration);
              Cluster destinationCluster = Cluster.builder().addContactPoint(destination).build();
              Session destinationSession = destinationCluster.connect()) {
 

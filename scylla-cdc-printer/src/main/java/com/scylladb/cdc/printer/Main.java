@@ -1,8 +1,8 @@
 package com.scylladb.cdc.printer;
 
-import com.datastax.driver.core.Cluster;
-import com.datastax.driver.core.Session;
 import com.google.common.io.BaseEncoding;
+import com.scylladb.cdc.cql.CQLConfiguration;
+import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.lib.CDCConsumer;
 import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.lib.RawChangeConsumerProvider;
@@ -43,10 +43,11 @@ public class Main {
         String source = parsedArguments.getString("source");
         String keyspace = parsedArguments.getString("keyspace"), table = parsedArguments.getString("table");
 
+        CQLConfiguration cqlConfiguration = CQLConfiguration.builder().addContactPoint(source).build();
+
         // Build the connection to the cluster. Currently, the library supports
         // only the Scylla Java Driver in version 3.x.
-        try (Cluster cluster = Cluster.builder().addContactPoint(source).build();
-             Session session = cluster.connect()) {
+        try (Driver3Session session = new Driver3Session(cqlConfiguration)) {
 
             // Here, we are connected to the cluster. Let's start
             // printing rows from the CDC log!

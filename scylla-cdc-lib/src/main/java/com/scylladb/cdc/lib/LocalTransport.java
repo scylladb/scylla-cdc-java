@@ -8,8 +8,8 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.datastax.driver.core.Session;
 import com.google.common.base.Preconditions;
+import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
 import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.GenerationId;
@@ -26,7 +26,7 @@ import com.scylladb.cdc.transport.WorkerTransport;
 
 public class LocalTransport implements MasterTransport, WorkerTransport {
     private final ThreadGroup workersThreadGroup;
-    private final Session session;
+    private final Driver3Session session;
     private volatile boolean stopped = true;
     private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
     private final RawChangeConsumerProvider consumer;
@@ -37,7 +37,7 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
     private long queryTimeWindowSizeMs;
     private RetryBackoff workerRetryBackoff;
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, Session session, int workersCount,
+    public LocalTransport(ThreadGroup cdcThreadGroup, Driver3Session session, int workersCount,
                           RawChangeConsumerProvider consumer, long queryTimeWindowSizeMs,
                           long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff) {
         this.session = Preconditions.checkNotNull(session);

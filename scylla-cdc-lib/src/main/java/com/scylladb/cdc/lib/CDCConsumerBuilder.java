@@ -2,8 +2,8 @@ package com.scylladb.cdc.lib;
 
 import java.util.Set;
 
-import com.datastax.driver.core.Session;
 import com.google.common.base.Preconditions;
+import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.TableName;
@@ -15,7 +15,7 @@ public final class CDCConsumerBuilder {
     private static final RetryBackoff DEFAULT_WORKER_RETRY_BACKOFF =
             new ExponentialRetryBackoffWithJitter(10, 30000);
 
-    private final Session session;
+    private final Driver3Session session;
     private final RawChangeConsumerProvider consumer;
     private final Set<TableName> tables;
     private int workersCount = getDefaultWorkersCount();
@@ -23,7 +23,7 @@ public final class CDCConsumerBuilder {
     private long confidenceWindowSizeMs = DEFAULT_CONFIDENCE_WINDOW_SIZE_MS;
     private RetryBackoff workerRetryBackoff = DEFAULT_WORKER_RETRY_BACKOFF;
 
-    private CDCConsumerBuilder(Session session, RawChangeConsumerProvider consumer, Set<TableName> tables) {
+    private CDCConsumerBuilder(Driver3Session session, RawChangeConsumerProvider consumer, Set<TableName> tables) {
         this.consumer = Preconditions.checkNotNull(consumer);
         Preconditions.checkNotNull(tables);
         Preconditions.checkArgument(!tables.isEmpty());
@@ -31,7 +31,7 @@ public final class CDCConsumerBuilder {
         this.session = Preconditions.checkNotNull(session);
     }
 
-    public static CDCConsumerBuilder builder(Session session, RawChangeConsumerProvider consumer, Set<TableName> tables) {
+    public static CDCConsumerBuilder builder(Driver3Session session, RawChangeConsumerProvider consumer, Set<TableName> tables) {
         return new CDCConsumerBuilder(session, consumer, tables);
     }
 
