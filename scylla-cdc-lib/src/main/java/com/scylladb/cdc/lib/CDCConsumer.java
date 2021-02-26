@@ -1,5 +1,6 @@
 package com.scylladb.cdc.lib;
 
+import java.util.Optional;
 import java.util.Set;
 
 import com.datastax.driver.core.Session;
@@ -37,6 +38,20 @@ public final class CDCConsumer {
         Preconditions.checkState(transport.isReadyToStart());
         master = new MasterThread(cdcThreadGroup, transport, masterCQL, tables);
         master.start();
+    }
+
+    public Optional<Throwable> validate() {
+        Preconditions.checkState(master == null);
+
+        // Create a "probe" master.
+        master = new MasterThread(cdcThreadGroup, transport, masterCQL, tables);
+
+        // Validate it.
+        Optional<Throwable> validationResult = master.validate();
+
+        // Dispose of a "probe" master.
+        master = null;
+        return validationResult;
     }
 
     public void stop() throws InterruptedException {

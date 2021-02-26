@@ -107,6 +107,18 @@ public class MockMasterCQL implements MasterCQL {
         return CompletableFuture.completedFuture(ttl);
     }
 
+    @Override
+    public CompletableFuture<Optional<Throwable>> validateTable(TableName table) {
+        if (shouldInjectFailure) {
+            return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
+        }
+
+        // All tables are correct. (Present and with CDC enabled).
+        return CompletableFuture.completedFuture(Optional.empty());
+    }
+
     private <T> CompletableFuture<T> injectFailure() {
         failedFetchCount.incrementAndGet();
 

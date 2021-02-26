@@ -13,4 +13,5 @@ public interface MasterCQL {
     CompletableFuture<GenerationMetadata> fetchGenerationMetadata(GenerationId id);
     CompletableFuture<Optional<Timestamp>> fetchGenerationEnd(GenerationId id);
     CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName);
+    CompletableFuture<Optional<Throwable>> validateTable(TableName table);
 }

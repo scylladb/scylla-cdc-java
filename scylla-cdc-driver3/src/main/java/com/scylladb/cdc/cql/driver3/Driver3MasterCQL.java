@@ -358,4 +358,29 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
                     String.format("Table %s.%s has invalid TTL value: %s.", tableName.keyspace, tableName.name, ttl)));
         }
     }
+
+    @Override
+    public CompletableFuture<Optional<Throwable>> validateTable(TableName table) {
+        KeyspaceMetadata keyspaceMetadata = session.getCluster().getMetadata().getKeyspace(table.keyspace);
+        if (keyspaceMetadata == null) {
+            return CompletableFuture.completedFuture(Optional.of(new IllegalArgumentException(
+                    String.format("Did not find table '%s.%s' in Scylla cluster - missing keyspace '%s'.",
+                            table.keyspace, table.name, table.keyspace))));
+        }
+
+        TableMetadata tableMetadata = keyspaceMetadata.getTable(table.name);
+        if (tableMetadata == null) {
+            return CompletableFuture.completedFuture(Optional.of(new IllegalArgumentException(
+                    String.format("Did not find table '%s.%s' in Scylla cluster.",
+                            table.keyspace, table.name))));
+        }
+
+        if (!tableMetadata.getOptions().isScyllaCDC()) {
+            return CompletableFuture.completedFuture(Optional.of(new IllegalArgumentException(
+                    String.format("The table '%s.%s' does not have Scylla CDC enabled.",
+                            table.keyspace, table.name))));
+        }
+
+        return CompletableFuture.completedFuture(Optional.empty());
+    }
 }
