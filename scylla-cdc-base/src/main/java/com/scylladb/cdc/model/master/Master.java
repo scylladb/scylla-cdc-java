@@ -26,23 +26,23 @@ import com.scylladb.cdc.transport.MasterTransport;
 public final class Master {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
-    private final Connectors connectors;
+    private final MasterConfiguration masterConfiguration;
 
-    public Master(Connectors connectors) {
-        this.connectors = Preconditions.checkNotNull(connectors);
+    public Master(MasterConfiguration masterConfiguration) {
+        this.masterConfiguration = Preconditions.checkNotNull(masterConfiguration);
     }
 
     private GenerationId getGenerationId() throws InterruptedException, ExecutionException {
-        Optional<GenerationId> generationId = connectors.transport.getCurrentGenerationId();
+        Optional<GenerationId> generationId = masterConfiguration.transport.getCurrentGenerationId();
         if (generationId.isPresent()) {
             return generationId.get();
         }
         while (true) {
-            generationId = connectors.cql.fetchFirstGenerationId().get();
+            generationId = masterConfiguration.cql.fetchFirstGenerationId().get();
             if (generationId.isPresent()) {
                 return generationId.get();
             }
-            Thread.sleep(connectors.sleepBeforeFirstGenerationMs);
+            Thread.sleep(masterConfiguration.sleepBeforeFirstGenerationMs);
         }
     }
 
@@ -55,7 +55,7 @@ public final class Master {
             return true;
         }
 
-        return connectors.transport.areTasksFullyConsumedUntil(tasks, generation.getEnd().get());
+        return masterConfiguration.transport.areTasksFullyConsumedUntil(tasks, generation.getEnd().get());
     }
 
     private boolean generationTTLExpired(GenerationMetadata generation) throws ExecutionException, InterruptedException {
@@ -66,15 +66,15 @@ public final class Master {
         // could safely skip some older generations
         // (the changes in them have already
         // expired).
-        Date now = Date.from(connectors.clock.instant());
+        Date now = Date.from(masterConfiguration.clock.instant());
         List<Optional<Long>> tablesTTL = new ArrayList<>();
-        for (TableName table : connectors.tables) {
+        for (TableName table : masterConfiguration.tables) {
             // In case fetching the TTL value was unsuccessful,
             // assume that no TTL is set on a table. This way
             // the generation will not expire. By "catching"
             // the exception here, one "bad" table will
             // not disturb the entire master process.
-            Optional<Long> ttl = connectors.cql.fetchTableTTL(table).exceptionally(ex -> {
+            Optional<Long> ttl = masterConfiguration.cql.fetchTableTTL(table).exceptionally(ex -> {
                 logger.atSevere().withCause(ex).log("Error while fetching TTL " +
                         "value for table %s.%s", table.keyspace, table.name);
                 return Optional.empty();
@@ -96,14 +96,14 @@ public final class Master {
 
     private GenerationMetadata getNextGeneration(GenerationMetadata generation)
             throws InterruptedException, ExecutionException {
-        return connectors.cql.fetchGenerationMetadata(generation.getNextGenerationId().get()).get();
+        return masterConfiguration.cql.fetchGenerationMetadata(generation.getNextGenerationId().get()).get();
     }
 
     private Map<TaskId, SortedSet<StreamId>> createTasks(GenerationMetadata generation) {
         SortedSet<StreamId> streams = generation.getStreams();
         Map<TaskId, SortedSet<StreamId>> tasks = new HashMap<>();
         for (StreamId s : streams) {
-            for (TableName t : connectors.tables) {
+            for (TableName t : masterConfiguration.tables) {
                 TaskId taskId = new TaskId(generation.getId(), s.getVNodeId(), t);
                 tasks.computeIfAbsent(taskId, id -> new TreeSet<>()).add(s);
             }
@@ -113,7 +113,7 @@ public final class Master {
 
     private GenerationMetadata refreshEnd(GenerationMetadata generation)
             throws InterruptedException, ExecutionException {
-        Optional<Timestamp> end = connectors.cql.fetchGenerationEnd(generation.getId()).get();
+        Optional<Timestamp> end = masterConfiguration.cql.fetchGenerationEnd(generation.getId()).get();
         return end.isPresent() ? generation.withEnd(end.get()) : generation;
     }
 
@@ -131,7 +131,7 @@ public final class Master {
             }
             // Retry backoff
             try {
-                Thread.sleep(connectors.sleepAfterExceptionMs);
+                Thread.sleep(masterConfiguration.sleepAfterExceptionMs);
             } catch (InterruptedException e) {
                 // Interruptions are expected.
                 Thread.currentThread().interrupt();
@@ -141,8 +141,8 @@ public final class Master {
 
     public Optional<Throwable> validate() {
         try {
-            for (TableName table : connectors.tables) {
-                Optional<Throwable> tableValidation = connectors.cql.validateTable(table).get();
+            for (TableName table : masterConfiguration.tables) {
+                Optional<Throwable> tableValidation = masterConfiguration.cql.validateTable(table).get();
                 if (tableValidation.isPresent()) {
                     return tableValidation;
                 }
@@ -156,7 +156,7 @@ public final class Master {
     private void runUntilException() throws ExecutionException {
         try {
             GenerationId generationId = getGenerationId();
-            GenerationMetadata generation = connectors.cql.fetchGenerationMetadata(generationId).get();
+            GenerationMetadata generation = masterConfiguration.cql.fetchGenerationMetadata(generationId).get();
             Map<TaskId, SortedSet<StreamId>> tasks = createTasks(generation);
             while (!Thread.interrupted()) {
                 while (generationDone(generation, tasks.keySet())) {
@@ -168,9 +168,9 @@ public final class Master {
                 tasks.forEach((task, streams) ->
                         logger.atFine().log("Created Task: %s with streams: %s", task, streams));
 
-                connectors.transport.configureWorkers(tasks);
+                masterConfiguration.transport.configureWorkers(tasks);
                 while (!generationDone(generation, tasks.keySet())) {
-                    Thread.sleep(connectors.sleepBeforeGenerationDoneMs);
+                    Thread.sleep(masterConfiguration.sleepBeforeGenerationDoneMs);
                     if (!generation.isClosed()) {
                         generation = refreshEnd(generation);
                     }

@@ -19,9 +19,9 @@ public class MasterThread implements AutoCloseable {
 
     private final Thread masterThread;
 
-    public MasterThread(Connectors connectors) {
-        Preconditions.checkNotNull(connectors);
-        Master master = new Master(connectors);
+    public MasterThread(MasterConfiguration masterConfiguration) {
+        Preconditions.checkNotNull(masterConfiguration);
+        Master master = new Master(masterConfiguration);
         this.masterThread = new Thread(master::run);
         this.masterThread.start();
     }
@@ -31,7 +31,7 @@ public class MasterThread implements AutoCloseable {
     }
 
     public MasterThread(MasterTransport masterTransport, MasterCQL masterCQL, Set<TableName> tableNames, Clock clock) {
-        this(new Connectors(masterTransport, masterCQL, tableNames, clock,
+        this(new MasterConfiguration(masterTransport, masterCQL, tableNames, clock,
                 DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS));
     }
 

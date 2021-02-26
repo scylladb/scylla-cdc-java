@@ -9,7 +9,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.master.Connectors;
+import com.scylladb.cdc.model.master.MasterConfiguration;
 import com.scylladb.cdc.model.master.Master;
 import com.scylladb.cdc.transport.MasterTransport;
 
@@ -27,9 +27,9 @@ public final class MasterThread extends Thread {
         Preconditions.checkNotNull(cql);
         Preconditions.checkNotNull(tables);
         Preconditions.checkArgument(!tables.isEmpty());
-        Connectors connectors = new Connectors(transport, cql, tables, Clock.systemDefaultZone(),
+        MasterConfiguration masterConfiguration = new MasterConfiguration(transport, cql, tables, Clock.systemDefaultZone(),
                 DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS);
-        this.master = new Master(connectors);
+        this.master = new Master(masterConfiguration);
     }
 
     public Optional<Throwable> validate() {

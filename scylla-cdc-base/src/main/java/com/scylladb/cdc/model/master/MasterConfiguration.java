@@ -8,7 +8,7 @@ import com.scylladb.cdc.transport.MasterTransport;
 import java.time.Clock;
 import java.util.Set;
 
-public class Connectors {
+public class MasterConfiguration {
     public final MasterTransport transport;
     public final MasterCQL cql;
     public final Set<TableName> tables;
@@ -18,8 +18,8 @@ public class Connectors {
     public final long sleepBeforeGenerationDoneMs;
     public final long sleepAfterExceptionMs;
 
-    public Connectors(MasterTransport transport, MasterCQL cql, Set<TableName> tables, Clock clock,
-                      long sleepBeforeFirstGenerationMs, long sleepBeforeGenerationDoneMs, long sleepAfterExceptionMs) {
+    public MasterConfiguration(MasterTransport transport, MasterCQL cql, Set<TableName> tables, Clock clock,
+                               long sleepBeforeFirstGenerationMs, long sleepBeforeGenerationDoneMs, long sleepAfterExceptionMs) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.tables = Preconditions.checkNotNull(tables);
