@@ -13,10 +13,10 @@ import com.scylladb.cdc.model.TaskId;
 
 public final class Worker {
 
-    private final Connectors connectors;
+    private final WorkerConfiguration workerConfiguration;
 
-    public Worker(Connectors connectors) {
-        this.connectors = Preconditions.checkNotNull(connectors);
+    public Worker(WorkerConfiguration workerConfiguration) {
+        this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
     }
 
     /*
@@ -47,8 +47,8 @@ public final class Worker {
      * successfully before.
      */
     private Stream<Task> createTasksWithState(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
-        Map<TaskId, TaskState> states = connectors.transport.getTaskStates(groupedStreams.keySet());
-        TaskState initialState = getInitialStateForStreams(groupedStreams, connectors.queryTimeWindowSizeMs);
+        Map<TaskId, TaskState> states = workerConfiguration.transport.getTaskStates(groupedStreams.keySet());
+        TaskState initialState = getInitialStateForStreams(groupedStreams, workerConfiguration.queryTimeWindowSizeMs);
         return groupedStreams.entrySet().stream().map(taskStreams -> {
             TaskId id = taskStreams.getKey();
             SortedSet<StreamId> streams = taskStreams.getValue();
@@ -65,7 +65,7 @@ public final class Worker {
      */
     private TaskActionsQueue queueFirstActionForEachTask(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
         return new TaskActionsQueue(createTasksWithState(groupedStreams)
-                .map(task -> TaskAction.createFirstAction(connectors, task)).collect(Collectors.toSet()));
+                .map(task -> TaskAction.createFirstAction(workerConfiguration, task)).collect(Collectors.toSet()));
     }
 
     /*
@@ -75,7 +75,7 @@ public final class Worker {
      * available.
      */
     private void performActionsUntilStopRequested(TaskActionsQueue actions) {
-        while (!connectors.transport.shouldStop()) {
+        while (!workerConfiguration.transport.shouldStop()) {
             try {
                 actions.runNextAction();
             } catch (InterruptedException e) {
@@ -99,7 +99,7 @@ public final class Worker {
                 groupedStreams.keySet().stream().map(TaskId::getGenerationId).distinct().count() == 1,
                 "Tasks from different generations");
 
-        connectors.cql.prepare(groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet()));
+        workerConfiguration.cql.prepare(groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet()));
         TaskActionsQueue actions = queueFirstActionForEachTask(groupedStreams);
         performActionsUntilStopRequested(actions);
     }

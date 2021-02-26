@@ -7,7 +7,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
-import com.scylladb.cdc.model.worker.Connectors;
+import com.scylladb.cdc.model.worker.WorkerConfiguration;
 import com.scylladb.cdc.model.worker.Worker;
 
 public class WorkerThread extends Thread {
@@ -16,9 +16,9 @@ public class WorkerThread extends Thread {
     private final Worker worker;
     private final Map<TaskId, SortedSet<StreamId>> tasks;
 
-    public WorkerThread(ThreadGroup tg, int no, Connectors connectors, Map<TaskId, SortedSet<StreamId>> tasks) {
+    public WorkerThread(ThreadGroup tg, int no, WorkerConfiguration workerConfiguration, Map<TaskId, SortedSet<StreamId>> tasks) {
         super(tg, "Scylla-CDC-Worker-Thread-" + no);
-        worker = new Worker(connectors);
+        worker = new Worker(workerConfiguration);
         this.tasks = Preconditions.checkNotNull(tasks);
     }
 

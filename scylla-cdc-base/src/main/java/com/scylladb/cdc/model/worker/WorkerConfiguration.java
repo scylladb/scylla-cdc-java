@@ -5,7 +5,7 @@ import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.transport.WorkerTransport;
 
-public final class Connectors {
+public final class WorkerConfiguration {
     public final WorkerTransport transport;
     public final WorkerCQL cql;
     public final TaskAndRawChangeConsumer consumer;
@@ -15,8 +15,8 @@ public final class Connectors {
 
     public RetryBackoff workerRetryBackoff;
 
-    public Connectors(WorkerTransport transport, WorkerCQL cql, TaskAndRawChangeConsumer consumer,
-                      long queryTimeWindowSizeMs, long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff) {
+    public WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, TaskAndRawChangeConsumer consumer,
+                               long queryTimeWindowSizeMs, long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
