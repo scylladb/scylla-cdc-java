@@ -1,11 +1,7 @@
 package com.scylladb.cdc.debezium.connector;
 
-import com.datastax.driver.core.Cluster;
-import com.datastax.driver.core.KeyspaceMetadata;
-import com.datastax.driver.core.Metadata;
-import com.datastax.driver.core.Session;
-import com.datastax.driver.core.TableMetadata;
 import com.scylladb.cdc.cql.driver3.Driver3MasterCQL;
+import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
@@ -45,8 +41,7 @@ public class ScyllaConnector extends SourceConnector {
     // Used by background generation master.
     private ScyllaMasterTransport masterTransport;
     private ExecutorService masterExecutor;
-    private Cluster masterCluster;
-    private Session masterSession;
+    private Driver3Session masterSession;
 
     public ScyllaConnector() {
     }
@@ -63,8 +58,7 @@ public class ScyllaConnector extends SourceConnector {
     }
 
     private Master buildMaster(ScyllaConnectorConfig connectorConfig) {
-        this.masterCluster = new ScyllaClusterBuilder(connectorConfig).build();
-        this.masterSession = this.masterCluster.connect();
+        this.masterSession = new ScyllaSessionBuilder(connectorConfig).build();
         Driver3MasterCQL cql = new Driver3MasterCQL(masterSession);
         this.masterTransport = new ScyllaMasterTransport(context(), new SourceInfo(connectorConfig));
         Set<TableName> tableNames = connectorConfig.getTableNames();
@@ -109,9 +103,6 @@ public class ScyllaConnector extends SourceConnector {
         }
         if (this.masterSession != null) {
             this.masterSession.close();
-        }
-        if (this.masterCluster != null) {
-            this.masterCluster.close();
         }
     }
 

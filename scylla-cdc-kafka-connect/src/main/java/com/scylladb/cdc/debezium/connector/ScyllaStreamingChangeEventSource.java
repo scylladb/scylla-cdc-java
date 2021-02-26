@@ -1,9 +1,6 @@
 package com.scylladb.cdc.debezium.connector;
 
-import com.datastax.driver.core.Cluster;
-import com.datastax.driver.core.ProtocolVersion;
-import com.datastax.driver.core.Session;
-import com.datastax.driver.core.utils.Bytes;
+import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
 import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.RetryBackoff;
@@ -16,6 +13,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.sql.Driver;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -45,8 +43,7 @@ public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSou
 
     @Override
     public void execute(ChangeEventSourceContext context) throws InterruptedException {
-        Cluster cluster = new ScyllaClusterBuilder(configuration).build();
-        Session session = cluster.connect();
+        Driver3Session session = new ScyllaSessionBuilder(configuration).build();
         Driver3WorkerCQL cql = new Driver3WorkerCQL(session);
         ScyllaWorkerTransport workerTransport = new ScyllaWorkerTransport(context, offsetContext, dispatcher);
         ScyllaChangesConsumer changeConsumer = new ScyllaChangesConsumer(dispatcher, offsetContext, schema, clock);
