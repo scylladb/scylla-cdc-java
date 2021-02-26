@@ -35,17 +35,17 @@ public abstract class TaskAction {
 
     public abstract CompletableFuture<TaskAction> run();
 
-    public static TaskAction createFirstAction(Connectors connectors, Task task) {
-        return new ReadNewWindowTaskAction(connectors, task, 0);
+    public static TaskAction createFirstAction(WorkerConfiguration workerConfiguration, Task task) {
+        return new ReadNewWindowTaskAction(workerConfiguration, task, 0);
     }
 
     private static final class ReadNewWindowTaskAction extends TaskAction {
-        private final Connectors connectors;
+        private final WorkerConfiguration workerConfiguration;
         private final Task task;
         private final int tryAttempt;
 
-        protected ReadNewWindowTaskAction(Connectors connectors, Task task, int tryAttempt) {
-            this.connectors = Preconditions.checkNotNull(connectors);
+        protected ReadNewWindowTaskAction(WorkerConfiguration workerConfiguration, Task task, int tryAttempt) {
+            this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
             this.task = Preconditions.checkNotNull(task);
             Preconditions.checkArgument(tryAttempt >= 0);
             this.tryAttempt = tryAttempt;
@@ -54,23 +54,23 @@ public abstract class TaskAction {
         @Override
         public CompletableFuture<TaskAction> run() {
             CompletableFuture<Void> waitFuture = waitForWindow();
-            CompletableFuture<Reader> readerFuture = waitFuture.thenCompose(w -> connectors.cql.createReader(task));
+            CompletableFuture<Reader> readerFuture = waitFuture.thenCompose(w -> workerConfiguration.cql.createReader(task));
             CompletableFuture<TaskAction> taskActionFuture = readerFuture
-                    .thenApply(reader -> new UpdateStatusTaskAction(connectors, task, reader, tryAttempt));
+                    .thenApply(reader -> new UpdateStatusTaskAction(workerConfiguration, task, reader, tryAttempt));
             return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
                 // Exception occured while starting up the reader. Retry by starting
                 // this TaskAction once again.
-                long backoffTime = connectors.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
+                long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
                 logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
                         "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-                return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(connectors, task, tryAttempt + 1));
+                return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
             });
         }
 
         private CompletableFuture<Void> waitForWindow() {
             Date end = task.state.getWindowEndTimestamp().toDate();
             Date now = new Date();
-            long toWait = end.getTime() - now.getTime() + connectors.confidenceWindowSizeMs;
+            long toWait = end.getTime() - now.getTime() + workerConfiguration.confidenceWindowSizeMs;
             if (toWait > 0) {
                 return sleepOnExecutor(toWait);
             }
@@ -79,13 +79,13 @@ public abstract class TaskAction {
     }
 
     private static class ConsumeChangeTaskAction extends TaskAction {
-        protected final Connectors connectors;
+        protected final WorkerConfiguration workerConfiguration;
         protected final Task task;
         private final Reader reader;
         private final int tryAttempt;
 
-        public ConsumeChangeTaskAction(Connectors connectors, Task task, Reader reader, int tryAttempt) {
-            this.connectors = Preconditions.checkNotNull(connectors);
+        public ConsumeChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, int tryAttempt) {
+            this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
             this.task = Preconditions.checkNotNull(task);
             this.reader = Preconditions.checkNotNull(reader);
             Preconditions.checkArgument(tryAttempt >= 0);
@@ -95,8 +95,8 @@ public abstract class TaskAction {
         private CompletableFuture<TaskAction> consumeChange(Optional<RawChange> change) {
             if (change.isPresent()) {
                 Task updatedTask = task.updateState(change.get().getId());
-                return connectors.consumer.consume(task, change.get())
-                        .thenApply(q -> new UpdateStatusTaskAction(connectors, updatedTask, reader, tryAttempt));
+                return workerConfiguration.consumer.consume(task, change.get())
+                        .thenApply(q -> new UpdateStatusTaskAction(workerConfiguration, updatedTask, reader, tryAttempt));
             } else {
                 if (tryAttempt > 0) {
                     logger.atWarning().log("Successfully finished reading a window after %d tries. Task: %s. " +
@@ -104,7 +104,7 @@ public abstract class TaskAction {
                 }
 
                 CompletableFuture<TaskAction> result = new CompletableFuture<>();
-                result.complete(new MoveToNextWindowTaskAction(connectors, task));
+                result.complete(new MoveToNextWindowTaskAction(workerConfiguration, task));
                 return result;
             }
         }
@@ -115,43 +115,43 @@ public abstract class TaskAction {
             return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
                 // Exception occured while reading the window, we will have to restart
                 // ReadNewWindowTaskAction - read a window from state defined in task.
-                long backoffTime = connectors.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
+                long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
                 logger.atSevere().withCause(ex).log("Error while consuming change. Task: %s. " +
                         "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-                return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(connectors, task, tryAttempt + 1));
+                return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
             });
         }
     }
 
     private static final class UpdateStatusTaskAction extends ConsumeChangeTaskAction {
 
-        public UpdateStatusTaskAction(Connectors connectors, Task task, Reader reader, int tryAttempt) {
-            super(connectors, task, reader, tryAttempt);
+        public UpdateStatusTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, int tryAttempt) {
+            super(workerConfiguration, task, reader, tryAttempt);
         }
 
         @Override
         public CompletableFuture<TaskAction> run() {
-            connectors.transport.setState(task.id, task.state);
+            workerConfiguration.transport.setState(task.id, task.state);
             return super.run();
         }
 
     }
 
     private static final class MoveToNextWindowTaskAction extends TaskAction {
-        private final Connectors connectors;
+        private final WorkerConfiguration workerConfiguration;
         private final Task task;
 
-        public MoveToNextWindowTaskAction(Connectors connectors, Task task) {
-            this.connectors = Preconditions.checkNotNull(connectors);
+        public MoveToNextWindowTaskAction(WorkerConfiguration workerConfiguration, Task task) {
+            this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
             this.task = Preconditions.checkNotNull(task);
         }
 
         @Override
         public CompletableFuture<TaskAction> run() {
-            TaskState newState = task.state.moveToNextWindow(connectors.queryTimeWindowSizeMs);
-            connectors.transport.moveStateToNextWindow(task.id, newState);
+            TaskState newState = task.state.moveToNextWindow(workerConfiguration.queryTimeWindowSizeMs);
+            workerConfiguration.transport.moveStateToNextWindow(task.id, newState);
             Task newTask = task.updateState(newState);
-            return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(connectors, newTask, 0));
+            return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(workerConfiguration, newTask, 0));
         }
     }
 }

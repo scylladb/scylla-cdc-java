@@ -18,7 +18,7 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;
-import com.scylladb.cdc.model.worker.Connectors;
+import com.scylladb.cdc.model.worker.WorkerConfiguration;
 import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumerAdapter;
 import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.transport.MasterTransport;
@@ -85,10 +85,10 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
         workerThreads = new Thread[wCount];
         Map<TaskId, SortedSet<StreamId>>[] tasks = split(workerConfigurations, wCount);
         for (int i = 0; i < wCount; ++i) {
-            Connectors connectors = new Connectors(this, new Driver3WorkerCQL(session),
+            WorkerConfiguration workerConfiguration = new WorkerConfiguration(this, new Driver3WorkerCQL(session),
                     new TaskAndRawChangeConsumerAdapter(consumer.getForThread(i)),
                     queryTimeWindowSizeMs, confidenceWindowSizeMs, workerRetryBackoff);
-            workerThreads[i] = new WorkerThread(workersThreadGroup, i, connectors, tasks[i]);
+            workerThreads[i] = new WorkerThread(workersThreadGroup, i, workerConfiguration, tasks[i]);
             workerThreads[i].start();
         }
     }

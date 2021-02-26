@@ -4,7 +4,7 @@ import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
 import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.RetryBackoff;
-import com.scylladb.cdc.model.worker.Connectors;
+import com.scylladb.cdc.model.worker.WorkerConfiguration;
 import com.scylladb.cdc.model.worker.Worker;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
@@ -47,7 +47,7 @@ public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSou
         Driver3WorkerCQL cql = new Driver3WorkerCQL(session);
         ScyllaWorkerTransport workerTransport = new ScyllaWorkerTransport(context, offsetContext, dispatcher);
         ScyllaChangesConsumer changeConsumer = new ScyllaChangesConsumer(dispatcher, offsetContext, schema, clock);
-        Worker worker = new Worker(new Connectors(workerTransport, cql, changeConsumer, configuration.getQueryTimeWindowSizeMs(),
+        Worker worker = new Worker(new WorkerConfiguration(workerTransport, cql, changeConsumer, configuration.getQueryTimeWindowSizeMs(),
                 configuration.getConfidenceWindowSizeMs(), DEFAULT_WORKER_RETRY_BACKOFF));
 
         try {
