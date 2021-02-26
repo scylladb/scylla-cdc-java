@@ -1,10 +1,7 @@
 package com.scylladb.cdc.printer;
 
 import com.google.common.io.BaseEncoding;
-import com.scylladb.cdc.cql.CQLConfiguration;
-import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.lib.CDCConsumer;
-import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.lib.RawChangeConsumerProvider;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -21,10 +18,8 @@ import net.sourceforge.argparse4j.inf.Namespace;
 import sun.misc.Signal;
 
 import java.text.SimpleDateFormat;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.logging.Handler;
@@ -43,57 +38,63 @@ public class Main {
         String source = parsedArguments.getString("source");
         String keyspace = parsedArguments.getString("keyspace"), table = parsedArguments.getString("table");
 
-        CQLConfiguration cqlConfiguration = CQLConfiguration.builder().addContactPoint(source).build();
-
-        // Build the connection to the cluster. Currently, the library supports
-        // only the Scylla Java Driver in version 3.x.
-        try (Driver3Session session = new Driver3Session(cqlConfiguration)) {
-
-            // Here, we are connected to the cluster. Let's start
-            // printing rows from the CDC log!
-
-            // First, create a set of tables we want to watch.
-            // They should have CDC enabled on them. Provide
-            // the base table name, e.g. ks.t; NOT ks.t_scylla_cdc_log.
-            Set<TableName> tables = Collections.singleton(new TableName(keyspace, table));
-
-            // Build a provider of consumers. The CDCConsumer instance
-            // can be run in multi-thread setting and a separate
-            // RawChangeConsumer is used by each thread.
-            RawChangeConsumerProvider changeConsumerProvider = threadId -> {
-                // Build a consumer of changes. You should provide
-                // a class that implements the RawChangeConsumer
-                // interface.
-                //
-                // Here, we use a lambda for simplicity.
-                //
-                // The consume() method of RawChangeConsumer returns
-                // a CompletableFuture, so your code can perform
-                // some I/O responding to the change.
-                //
-                // The RawChange name alludes to the fact that
-                // changes represented by this class correspond
-                // 1:1 to rows in *_scylla_cdc_log table.
-                RawChangeConsumer changeConsumer = change -> {
-                    // Print the change. See printChange()
-                    // for more information on how to
-                    // access its details.
-                    printChange(change);
-                    return CompletableFuture.completedFuture(null);
-                };
-                return changeConsumer;
+        // Build a provider of consumers. The CDCConsumer instance
+        // can be run in multi-thread setting and a separate
+        // RawChangeConsumer is used by each thread.
+        RawChangeConsumerProvider changeConsumerProvider = threadId -> {
+            // Build a consumer of changes. You should provide
+            // a class that implements the RawChangeConsumer
+            // interface.
+            //
+            // Here, we use a lambda for simplicity.
+            //
+            // The consume() method of RawChangeConsumer returns
+            // a CompletableFuture, so your code can perform
+            // some I/O responding to the change.
+            //
+            // The RawChange name alludes to the fact that
+            // changes represented by this class correspond
+            // 1:1 to rows in *_scylla_cdc_log table.
+            RawChangeConsumer changeConsumer = change -> {
+                // Print the change. See printChange()
+                // for more information on how to
+                // access its details.
+                printChange(change);
+                return CompletableFuture.completedFuture(null);
             };
+            return changeConsumer;
+        };
 
-            // Build a CDCConsumer instance. We start it in a single-thread
-            // configuration: workersCount(1).
-            CDCConsumer consumer = CDCConsumerBuilder.builder(session, changeConsumerProvider, tables).workersCount(1).build();
+        // Build a CDCConsumer, which is single-threaded
+        // (workersCount(1)), reads changes
+        // from [keyspace].[table] and passes them
+        // to consumers created by changeConsumerProvider.
+        try (CDCConsumer consumer = CDCConsumer.builder()
+                .addContactPoint(source)
+                .addTable(new TableName(keyspace, table))
+                .withConsumerProvider(changeConsumerProvider)
+                .withWorkersCount(1)
+                .build()) {
 
-            // Start a consumer. You can stop it by using .stop() method.
-            // In waitForConsumerStop() we are waiting for SIGINT
-            // and then calling the stop() method.
+            // Start a consumer. You can stop it by using .stop() method
+            // or it can be automatically stopped when created in a
+            // try-with-resources (as shown above).
             consumer.start();
-            waitForConsumerStop(consumer);
+
+            // The consumer is started in background threads.
+            // It is consuming the CDC log and providing read changes
+            // to the consumers.
+
+            // Wait for SIGINT:
+            CountDownLatch terminationLatch = new CountDownLatch(1);
+            Signal.handle(new Signal("INT"), signal -> terminationLatch.countDown());
+            terminationLatch.await();
+        } catch (InterruptedException ex) {
+            System.err.println("Exception occurred while running the Printer: "
+                + ex.getMessage());
         }
+
+        // The CDCConsumer is gracefully stopped after try-with-resources.
     }
 
     private static void printChange(RawChange change) {
@@ -154,20 +155,6 @@ public class Main {
         }
 
         prettyPrintEnd();
-    }
-
-    private static void waitForConsumerStop(CDCConsumer consumer) {
-        try {
-            // Wait for SIGINT:
-            CountDownLatch terminationLatch = new CountDownLatch(1);
-            Signal.handle(new Signal("INT"), signal -> terminationLatch.countDown());
-            terminationLatch.await();
-
-            // And gracefully stop the consumer:
-            consumer.stop();
-        } catch (InterruptedException e) {
-            // Ignore exception.
-        }
     }
 
     // Some pretty printing helpers:

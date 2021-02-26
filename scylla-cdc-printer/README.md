@@ -32,24 +32,6 @@ named arguments:
 ### Setting up the CDC consumer
 Let's go through the Printer code and learn how to use the library. You can see the final code [here](src/main/java/com/scylladb/cdc/printer/Main.java).
 
-First, we establish a connection to the Scylla cluster using the Scylla Java Driver in version 3.x:
-
-```java
-// Build the connection to the cluster. Currently, the library supports
-// only the Scylla Java Driver in version 3.x.
-try (Cluster cluster = Cluster.builder().addContactPoint(source).build();
-     Session session = cluster.connect()) {
-```
-
-Having established a connection, we have to specify which tables CDC log we want to read. The provided name should be of a base table, *not* the CDC log tables (e.g. `ks.t` not `ks.t_scylla_cdc_log`):
-
-```java
-// First, create a set of tables we want to watch.
-// They should have CDC enabled on them. Provide
-// the base table name, e.g. ks.t; NOT ks.t_scylla_cdc_log.
-Set<TableName> tables = Collections.singleton(new TableName(keyspace, table));
-```
-
 To consume changes, we specify a class which implements `RawChangeConsumer` interface (here by using a lambda). The consumer returns a `CompletableFuture`, so you can react to CDC changes and perform some I/O or longer processing.
 
 ```java
@@ -95,18 +77,37 @@ RawChangeConsumerProvider changeConsumerProvider = threadId -> {
 };
 ```
 
-Finally, we can build a `CDCConsumer` instance and start it! If we are finished consuming the changes, we should call a `stop()` method.
+Finally, we can build a `CDCConsumer` instance and start it! When using `CDCConsumer.builder()` you should provide the following configuration:
+- Contact points (`addContactPoint()`) used to connect to the Scylla cluster.
+- Tables to read (`addTable()`). The provided name should be of a base table, *not* the CDC log tables (e.g. `ks.t` not `ks.t_scylla_cdc_log`).
+- Consumer provider (`withConsumerProvider()`) which will receive the CDC changes.
+
+You can stop the `CDCConsumer` by calling the `stop()` method or by constructing the `CDCConsumer` in `try` (try-with-resources), which will stop it after the `try` block.
 
 ```java
-// Build a CDCConsumer instance. We start it in a single-thread
-// configuration: workersCount(1).
-CDCConsumer consumer = CDCConsumerBuilder.builder(session, changeConsumerProvider, tables).workersCount(1).build();
+try (CDCConsumer consumer = CDCConsumer.builder()
+        .addContactPoint(source)
+        .addTable(new TableName(keyspace, table))
+        .withConsumerProvider(changeConsumerProvider)
+        .withWorkersCount(1)
+        .build()) {
 
-// Start a consumer. You can stop it by using .stop() method.
-// In waitForConsumerStop() we are waiting for SIGINT
-// and then calling the stop() method.
-consumer.start();
-waitForConsumerStop(consumer);
+    // Start a consumer. You can stop it by using .stop() method
+    // or it can be automatically stopped when created in a
+    // try-with-resources (as shown above).
+    consumer.start();
+
+    // The consumer is started in background threads.
+    // It is consuming the CDC log and providing read changes
+    // to the consumers.
+
+    // Wait for SIGINT (blocking wait)
+    CountDownLatch terminationLatch = new CountDownLatch(1);
+    Signal.handle(new Signal("INT"), signal -> terminationLatch.countDown());
+    terminationLatch.await();
+}
+
+// The CDCConsumer is gracefully stopped after try-with-resources.
 ```
 
 ### Consuming CDC changes
