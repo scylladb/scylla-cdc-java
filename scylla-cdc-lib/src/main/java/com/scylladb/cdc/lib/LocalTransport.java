@@ -85,9 +85,14 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
         workerThreads = new Thread[wCount];
         Map<TaskId, SortedSet<StreamId>>[] tasks = split(workerConfigurations, wCount);
         for (int i = 0; i < wCount; ++i) {
-            WorkerConfiguration workerConfiguration = new WorkerConfiguration(this, new Driver3WorkerCQL(session),
-                    new TaskAndRawChangeConsumerAdapter(consumer.getForThread(i)),
-                    queryTimeWindowSizeMs, confidenceWindowSizeMs, workerRetryBackoff);
+            WorkerConfiguration workerConfiguration = WorkerConfiguration.builder()
+                    .withTransport(this)
+                    .withCQL(new Driver3WorkerCQL(session))
+                    .withConsumer(new TaskAndRawChangeConsumerAdapter(consumer.getForThread(i)))
+                    .withQueryTimeWindowSizeMs(queryTimeWindowSizeMs)
+                    .withConfidenceWindowSizeMs(confidenceWindowSizeMs)
+                    .withWorkerRetryBackoff(workerRetryBackoff).build();
+
             workerThreads[i] = new WorkerThread(workersThreadGroup, i, workerConfiguration, tasks[i]);
             workerThreads[i].start();
         }
