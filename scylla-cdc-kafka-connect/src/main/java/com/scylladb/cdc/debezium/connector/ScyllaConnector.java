@@ -25,6 +25,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ExecutionException;
@@ -61,7 +62,7 @@ public class ScyllaConnector extends SourceConnector {
         this.startMaster(connectorConfig);
     }
 
-    private void startMaster(ScyllaConnectorConfig connectorConfig) {
+    private Master buildMaster(ScyllaConnectorConfig connectorConfig) {
         this.masterCluster = new ScyllaClusterBuilder(connectorConfig).build();
         this.masterSession = this.masterCluster.connect();
         Driver3MasterCQL cql = new Driver3MasterCQL(masterSession);
@@ -69,7 +70,11 @@ public class ScyllaConnector extends SourceConnector {
         Set<TableName> tableNames = connectorConfig.getTableNames();
         Connectors connectors = new Connectors(masterTransport, cql, tableNames, Clock.systemDefaultZone(),
                 DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS);
-        Master master = new Master(connectors);
+        return new Master(connectors);
+    }
+
+    private void startMaster(ScyllaConnectorConfig connectorConfig) {
+        Master master = buildMaster(connectorConfig);
 
         this.masterExecutor = Threads.newSingleThreadExecutor(ScyllaConnector.class, connectorConfig.getLogicalName(),
                 "scylla-cdc-java-master-executor");
@@ -116,7 +121,6 @@ public class ScyllaConnector extends SourceConnector {
         Map<String, ConfigValue> results = config.validate(ScyllaConnectorConfig.EXPOSED_FIELDS);
 
         ConfigValue clusterIpAddressesConfig = results.get(ScyllaConnectorConfig.CLUSTER_IP_ADDRESSES.name());
-        ConfigValue tableNamesConfig = results.get(ScyllaConnectorConfig.TABLE_NAMES.name());
 
         ConfigValue userConfig = results.get(ScyllaConnectorConfig.USER.name());
         ConfigValue passwordConfig = results.get(ScyllaConnectorConfig.PASSWORD.name());
@@ -132,35 +136,19 @@ public class ScyllaConnector extends SourceConnector {
                 passwordConfig.addErrorMessage("Password is not set while username was set.");
             }
 
-            try (Cluster cluster = new ScyllaClusterBuilder(connectorConfig).build();
-                 Session session = cluster.connect()) {
-                Set<TableName> tableNames = connectorConfig.getTableNames();
-                Metadata metadata = session.getCluster().getMetadata();
-                for (TableName tableName : tableNames) {
-                    KeyspaceMetadata keyspaceMetadata = metadata.getKeyspace(tableName.keyspace);
-                    if (keyspaceMetadata == null) {
-                        tableNamesConfig.addErrorMessage("Did not find table '" + tableName.keyspace + "."
-                                + tableName.name + "' in Scylla cluster - missing keyspace '" + tableName.keyspace + "'.");
-                        continue;
-                    }
+            try {
+                Master master = buildMaster(connectorConfig);
 
-                    TableMetadata tableMetadata = keyspaceMetadata.getTable(tableName.name);
-                    if (tableMetadata == null) {
-                        tableNamesConfig.addErrorMessage("Did not find table '" + tableName.keyspace + "."
-                                + tableName.name + "' in Scylla cluster.");
-                        continue;
-                    }
-
-                    if (!tableMetadata.getOptions().isScyllaCDC()) {
-                        tableNamesConfig.addErrorMessage("The table '" + tableName.keyspace + "."
-                                + tableName.name + "' does not have CDC enabled.");
-                    }
-                }
+                Optional<Throwable> validation = master.validate();
+                validation.ifPresent(error -> clusterIpAddressesConfig.addErrorMessage(error.getMessage()));
             } catch (Exception ex) {
                 // TODO - catch specific exceptions, for example authentication error
                 // should add error message to user, password fields instead of
                 // clusterIpAddressesConfig.
                 clusterIpAddressesConfig.addErrorMessage("Unable to connect to Scylla cluster: " + ex.getMessage());
+            } finally {
+                // Stop the session created for Master.
+                this.stop();
             }
         }
 

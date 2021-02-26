@@ -1,6 +1,7 @@
 package com.scylladb.cdc.lib;
 
 import java.time.Clock;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -29,6 +30,10 @@ public final class MasterThread extends Thread {
         Connectors connectors = new Connectors(transport, cql, tables, Clock.systemDefaultZone(),
                 DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS);
         this.master = new Master(connectors);
+    }
+
+    public Optional<Throwable> validate() {
+        return this.master.validate();
     }
 
     public void finish() throws InterruptedException {

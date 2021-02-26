@@ -139,6 +139,20 @@ public final class Master {
         }
     }
 
+    public Optional<Throwable> validate() {
+        try {
+            for (TableName table : connectors.tables) {
+                Optional<Throwable> tableValidation = connectors.cql.validateTable(table).get();
+                if (tableValidation.isPresent()) {
+                    return tableValidation;
+                }
+            }
+        } catch (InterruptedException | ExecutionException ex) {
+            return Optional.of(ex);
+        }
+        return Optional.empty();
+    }
+
     private void runUntilException() throws ExecutionException {
         try {
             GenerationId generationId = getGenerationId();

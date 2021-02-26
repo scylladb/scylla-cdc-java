@@ -17,6 +17,7 @@ import sun.misc.Signal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
@@ -51,8 +52,6 @@ public class Main {
             String[] tablesToReplicate = tables.split(",");
 
             for (String table : tablesToReplicate) {
-                validateTableExists(sourceCluster, keyspace, table,
-                        "The source cluster is missing the given table to replicate.");
                 validateTableExists(destinationCluster, keyspace, table,
                         "Before running the replicator, create the corresponding tables in your destination cluster.");
 
@@ -61,6 +60,10 @@ public class Main {
                 CDCConsumer consumer = CDCConsumerBuilder.builder(sourceSession, (threadId) ->
                         new ReplicatorConsumer(mode, destinationCluster, destinationSession,
                                 keyspace, table, consistencyLevel), cdcTableSet).workersCount(1).build();
+                Optional<Throwable> validation = consumer.validate();
+                if (validation.isPresent()) {
+                    throw new ReplicatorValidationException("Validation error of the source table: " + validation.get().getMessage());
+                }
                 consumer.start();
 
                 startedConsumers.add(consumer);
