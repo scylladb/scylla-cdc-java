@@ -1,4 +1,4 @@
-package com.scylladb.cdc.cql.driver3;
+package com.scylladb.cdc.replicator.driver3;
 
 import com.datastax.driver.core.CodecRegistry;
 import com.datastax.driver.core.DataType;

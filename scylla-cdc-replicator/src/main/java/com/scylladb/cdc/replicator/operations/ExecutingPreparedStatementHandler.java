@@ -10,11 +10,11 @@ import com.datastax.driver.core.Session;
 import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.TableMetadata;
 import com.datastax.driver.core.TypeCodec;
-import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.cql.Cell;
 import com.scylladb.cdc.replicator.ReplicatorConsumer;
+import com.scylladb.cdc.replicator.driver3.Driver3FromLibraryTranslator;
 
 import java.util.ArrayList;
 import java.util.List;

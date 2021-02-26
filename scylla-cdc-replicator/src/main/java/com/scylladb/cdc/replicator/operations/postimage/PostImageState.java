@@ -2,9 +2,9 @@ package com.scylladb.cdc.replicator.operations.postimage;
 
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.TableMetadata;
-import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.worker.RawChange;
+import com.scylladb.cdc.replicator.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.replicator.operations.CdcOperationHandler;
 import com.scylladb.cdc.replicator.operations.insert.InsertOperationHandler;
 import com.scylladb.cdc.replicator.operations.update.PreparedUpdateOperationHandler;

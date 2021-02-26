@@ -7,10 +7,10 @@ import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.TableMetadata;
 import com.datastax.driver.core.querybuilder.Delete;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
-import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.cql.Cell;
+import com.scylladb.cdc.replicator.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.replicator.operations.ExecutingStatementHandler;
 
 import java.util.Iterator;

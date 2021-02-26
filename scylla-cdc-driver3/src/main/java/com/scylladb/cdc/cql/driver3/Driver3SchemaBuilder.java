@@ -122,7 +122,7 @@ public class Driver3SchemaBuilder {
                 if (baseIsNonfrozenList && (
                         dataType.getCqlType() != ChangeSchema.CqlType.MAP ||
                         dataType.getTypeArguments().get(0).getCqlType() != ChangeSchema.CqlType.TIMEUUID ||
-                        !new Driver3FromLibraryTranslator(metadata).getDriverDataType(dataType.getTypeArguments().get(1)).equals(baseType.getTypeArguments().get(0)))) {
+                        !driverDefinition.getType().getTypeArguments().get(1).equals(baseType.getTypeArguments().get(0)))) {
                     throw new IllegalStateException(
                             String.format("expected CDC value column type map<timeuuid, %s> for base column type list<%s>, got map<%s, %s>",
                                     dataType.getTypeArguments().get(1).getCqlType().toString(), baseType.getTypeArguments().get(0).toString(),
