@@ -18,17 +18,9 @@ public final class MasterThread extends Thread {
 
     private final Master master;
 
-    public MasterThread(ThreadGroup tg, MasterTransport transport, MasterCQL cql, Set<TableName> tables) {
+    public MasterThread(ThreadGroup tg, MasterConfiguration masterConfiguration) {
         super(tg, "ScyllaCDCMaster");
-        Preconditions.checkNotNull(transport);
-        Preconditions.checkNotNull(cql);
-        Preconditions.checkNotNull(tables);
-        Preconditions.checkArgument(!tables.isEmpty());
-        MasterConfiguration masterConfiguration = MasterConfiguration.builder()
-                .withTransport(transport)
-                .withCQL(cql)
-                .addTables(tables)
-                .build();
+        Preconditions.checkNotNull(masterConfiguration);
         this.master = new Master(masterConfiguration);
     }
 

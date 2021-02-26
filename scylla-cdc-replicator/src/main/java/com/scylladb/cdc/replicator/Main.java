@@ -8,7 +8,6 @@ import com.datastax.driver.core.TableMetadata;
 import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.lib.CDCConsumer;
-import com.scylladb.cdc.lib.CDCConsumerBuilder;
 import com.scylladb.cdc.model.TableName;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
@@ -41,16 +40,10 @@ public class Main {
 
     private static void startReplicator(Mode mode, String source, String destination, String keyspace, String tables,
                                         ConsistencyLevel consistencyLevel) {
-        CQLConfiguration configuration = CQLConfiguration.builder().addContactPoint(source).build();
-
-        // Connect to source and destination clusters.
-        try (Driver3Session sourceSession = new Driver3Session(configuration);
-             Cluster destinationCluster = Cluster.builder().addContactPoint(destination).build();
+        // Connect to the destination cluster.
+        try (Cluster destinationCluster = Cluster.builder().addContactPoint(destination).build();
              Session destinationSession = destinationCluster.connect()) {
 
-            // Start a CDCConsumer for each replicated table,
-            // which will read the RawChanges and apply them
-            // onto the destination cluster.
             List<CDCConsumer> startedConsumers = new ArrayList<>();
             String[] tablesToReplicate = tables.split(",");
 
@@ -58,11 +51,18 @@ public class Main {
                 validateTableExists(destinationCluster, keyspace, table,
                         "Before running the replicator, create the corresponding tables in your destination cluster.");
 
-                Set<TableName> cdcTableSet = Collections.singleton(new TableName(keyspace, table));
+                // Start a CDCConsumer for each replicated table,
+                // which will read the RawChanges and apply them
+                // onto the destination cluster.
+                CDCConsumer consumer = CDCConsumer.builder()
+                        .addContactPoint(source)
+                        .withConsumerProvider((threadId) ->
+                                new ReplicatorConsumer(mode, destinationCluster, destinationSession,
+                                        keyspace, table, consistencyLevel))
+                        .addTable(new TableName(keyspace, table))
+                        .withWorkersCount(1)
+                        .build();
 
-                CDCConsumer consumer = CDCConsumerBuilder.builder(sourceSession, (threadId) ->
-                        new ReplicatorConsumer(mode, destinationCluster, destinationSession,
-                                keyspace, table, consistencyLevel), cdcTableSet).workersCount(1).build();
                 Optional<Throwable> validation = consumer.validate();
                 if (validation.isPresent()) {
                     throw new ReplicatorValidationException("Validation error of the source table: " + validation.get().getMessage());

@@ -26,30 +26,19 @@ import com.scylladb.cdc.transport.WorkerTransport;
 
 public class LocalTransport implements MasterTransport, WorkerTransport {
     private final ThreadGroup workersThreadGroup;
-    private final Driver3Session session;
     private volatile boolean stopped = true;
+    private final WorkerConfiguration.Builder workerConfigurationBuilder;
+    private final RawChangeConsumerProvider consumerProvider;
     private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
-    private final RawChangeConsumerProvider consumer;
     private volatile int workersCount;
     private Thread[] workerThreads;
 
-    private long confidenceWindowSizeMs;
-    private long queryTimeWindowSizeMs;
-    private RetryBackoff workerRetryBackoff;
-
-    public LocalTransport(ThreadGroup cdcThreadGroup, Driver3Session session, int workersCount,
-                          RawChangeConsumerProvider consumer, long queryTimeWindowSizeMs,
-                          long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff) {
-        this.session = Preconditions.checkNotNull(session);
+    public LocalTransport(ThreadGroup cdcThreadGroup, int workersCount, WorkerConfiguration.Builder workerConfigurationBuilder, RawChangeConsumerProvider consumerProvider) {
         Preconditions.checkArgument(workersCount > 0);
         this.workersCount = workersCount;
-        this.consumer = Preconditions.checkNotNull(consumer);
-        Preconditions.checkArgument(confidenceWindowSizeMs >= 0);
-        this.confidenceWindowSizeMs = confidenceWindowSizeMs;
-        Preconditions.checkArgument(queryTimeWindowSizeMs >= 0);
-        this.queryTimeWindowSizeMs = queryTimeWindowSizeMs;
-        this.workerRetryBackoff = Preconditions.checkNotNull(workerRetryBackoff);
         workersThreadGroup = new ThreadGroup(cdcThreadGroup, "Scylla-CDC-Worker-Threads");
+        this.workerConfigurationBuilder = Preconditions.checkNotNull(workerConfigurationBuilder);
+        this.consumerProvider = Preconditions.checkNotNull(consumerProvider);
     }
 
     @Override
@@ -85,13 +74,11 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
         workerThreads = new Thread[wCount];
         Map<TaskId, SortedSet<StreamId>>[] tasks = split(workerConfigurations, wCount);
         for (int i = 0; i < wCount; ++i) {
-            WorkerConfiguration workerConfiguration = WorkerConfiguration.builder()
-                    .withTransport(this)
-                    .withCQL(new Driver3WorkerCQL(session))
-                    .withConsumer(new TaskAndRawChangeConsumerAdapter(consumer.getForThread(i)))
-                    .withQueryTimeWindowSizeMs(queryTimeWindowSizeMs)
-                    .withConfidenceWindowSizeMs(confidenceWindowSizeMs)
-                    .withWorkerRetryBackoff(workerRetryBackoff).build();
+            WorkerConfiguration workerConfiguration =
+                    workerConfigurationBuilder
+                            .withTransport(this)
+                            .withConsumer(new TaskAndRawChangeConsumerAdapter(consumerProvider.getForThread(i)))
+                            .build();
 
             workerThreads[i] = new WorkerThread(workersThreadGroup, i, workerConfiguration, tasks[i]);
             workerThreads[i].start();

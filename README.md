@@ -50,26 +50,23 @@ mvn clean install
 The following code snippet establishes a connection to local Scylla cluster (`127.0.0.1`) and starts printing CDC log rows from CDC table of `ks.table`.
 
 ```java
-try (Cluster cluster = Cluster.builder().addContactPoint("127.0.0.1").build();
-     Session session = cluster.connect()) {
-    Set<TableName> tables = Collections.singleton(new TableName("ks", "table"));
-
-    RawChangeConsumerProvider changeConsumerProvider = threadId -> {
-        RawChangeConsumer changeConsumer = change -> {
-            System.out.println(change);
-            return CompletableFuture.completedFuture(null);
-        };
-        return changeConsumer;
+RawChangeConsumerProvider changeConsumerProvider = threadId -> {
+    RawChangeConsumer changeConsumer = change -> {
+        System.out.println(change);
+        return CompletableFuture.completedFuture(null);
     };
+    return changeConsumer;
+};
 
-    CDCConsumer consumer = CDCConsumerBuilder.builder(session, changeConsumerProvider, tables)
-        .workersCount(1).build();
-
+try (CDCConsumer consumer = CDCConsumer.builder()
+        .addContactPoint("127.0.0.1")
+        .addTable(new TableName("ks", "table"))
+        .withConsumerProvider(changeConsumerProvider)
+        .withWorkersCount(1).build()) {
     consumer.start();
     Thread.sleep(10000);
-    consumer.stop();
-} catch (InterruptedException ex) {
-    ex.printStackTrace();
+} catch (InterruptedException e) {
+    e.printStackTrace();
 }
 ```
 
