@@ -11,9 +11,9 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.fail;
 
 public class MasterThread implements AutoCloseable {
-    private static final long DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS = 5;
-    private static final long DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS = 5;
-    private static final long DEFAULT_SLEEP_AFTER_EXCEPTION_MS = 5;
+    private static final long SLEEP_BEFORE_FIRST_GENERATION_MS = 5;
+    private static final long SLEEP_BEFORE_GENERATION_DONE_MS = 5;
+    private static final long SLEEP_AFTER_EXCEPTION_MS = 5;
 
     private static final long THREAD_JOIN_TIMEOUT_MS = 3000;
 
@@ -31,8 +31,15 @@ public class MasterThread implements AutoCloseable {
     }
 
     public MasterThread(MasterTransport masterTransport, MasterCQL masterCQL, Set<TableName> tableNames, Clock clock) {
-        this(new MasterConfiguration(masterTransport, masterCQL, tableNames, clock,
-                DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS));
+        this(MasterConfiguration.builder()
+                .withTransport(masterTransport)
+                .withCQL(masterCQL)
+                .addTables(tableNames)
+                .withSleepBeforeFirstGenerationMs(SLEEP_BEFORE_FIRST_GENERATION_MS)
+                .withSleepBeforeGenerationDoneMs(SLEEP_BEFORE_GENERATION_DONE_MS)
+                .withSleepAfterExceptionMs(SLEEP_AFTER_EXCEPTION_MS)
+                .withClock(clock)
+                .build());
     }
 
     @Override

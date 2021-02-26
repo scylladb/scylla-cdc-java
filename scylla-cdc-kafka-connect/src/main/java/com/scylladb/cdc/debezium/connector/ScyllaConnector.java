@@ -32,10 +32,6 @@ import java.util.stream.Collectors;
 public class ScyllaConnector extends SourceConnector {
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
-    private static final long DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS = TimeUnit.SECONDS.toMillis(10);
-    private static final long DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS = TimeUnit.SECONDS.toMillis(30);
-    private static final long DEFAULT_SLEEP_AFTER_EXCEPTION_MS = TimeUnit.SECONDS.toMillis(10);
-
     private Configuration config;
 
     // Used by background generation master.
@@ -62,8 +58,11 @@ public class ScyllaConnector extends SourceConnector {
         Driver3MasterCQL cql = new Driver3MasterCQL(masterSession);
         this.masterTransport = new ScyllaMasterTransport(context(), new SourceInfo(connectorConfig));
         Set<TableName> tableNames = connectorConfig.getTableNames();
-        MasterConfiguration masterConfiguration = new MasterConfiguration(masterTransport, cql, tableNames, Clock.systemDefaultZone(),
-                DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS);
+        MasterConfiguration masterConfiguration = MasterConfiguration.builder()
+                .withTransport(masterTransport)
+                .withCQL(cql)
+                .addTables(tableNames)
+                .build();
         return new Master(masterConfiguration);
     }
 
