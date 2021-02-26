@@ -11,10 +11,10 @@ import com.datastax.driver.core.querybuilder.ListSetIdxTimeUUIDAssignment;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.UdtSetFieldAssignment;
 import com.datastax.driver.core.querybuilder.Update;
-import com.scylladb.cdc.cql.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.cql.AbstractField;
 import com.scylladb.cdc.model.worker.cql.Field;
+import com.scylladb.cdc.replicator.driver3.Driver3FromLibraryTranslator;
 import com.scylladb.cdc.replicator.operations.ExecutingStatementHandler;
 
 import java.util.ArrayList;

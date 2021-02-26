@@ -1,4 +1,4 @@
-package com.scylladb.cdc.cql.driver3;
+package com.scylladb.cdc.replicator.driver3;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,7 +17,7 @@ import com.scylladb.cdc.model.worker.cql.CqlDate;
 import com.scylladb.cdc.model.worker.cql.CqlDuration;
 import com.scylladb.cdc.model.worker.cql.Field;
 
-class Driver3ToLibraryTranslator {
+public class Driver3ToLibraryTranslator {
     public static Object translate(Object driverObject, ChangeSchema.DataType dataType) {
         // Some types returned by getObject() are
         // some classes of Java Driver. We should
