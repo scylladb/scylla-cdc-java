@@ -5,7 +5,7 @@ import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
-import com.scylladb.cdc.model.master.Connectors;
+import com.scylladb.cdc.model.master.MasterConfiguration;
 import com.scylladb.cdc.model.master.Master;
 import io.debezium.config.Configuration;
 import io.debezium.util.Threads;
@@ -62,9 +62,9 @@ public class ScyllaConnector extends SourceConnector {
         Driver3MasterCQL cql = new Driver3MasterCQL(masterSession);
         this.masterTransport = new ScyllaMasterTransport(context(), new SourceInfo(connectorConfig));
         Set<TableName> tableNames = connectorConfig.getTableNames();
-        Connectors connectors = new Connectors(masterTransport, cql, tableNames, Clock.systemDefaultZone(),
+        MasterConfiguration masterConfiguration = new MasterConfiguration(masterTransport, cql, tableNames, Clock.systemDefaultZone(),
                 DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS);
-        return new Master(connectors);
+        return new Master(masterConfiguration);
     }
 
     private void startMaster(ScyllaConnectorConfig connectorConfig) {
