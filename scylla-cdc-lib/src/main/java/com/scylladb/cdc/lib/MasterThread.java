@@ -14,9 +14,6 @@ import com.scylladb.cdc.model.master.Master;
 import com.scylladb.cdc.transport.MasterTransport;
 
 public final class MasterThread extends Thread {
-    private static final long DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS = TimeUnit.SECONDS.toMillis(10);
-    private static final long DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS = TimeUnit.SECONDS.toMillis(30);
-    private static final long DEFAULT_SLEEP_AFTER_EXCEPTION_MS = TimeUnit.SECONDS.toMillis(10);
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Master master;
@@ -27,8 +24,11 @@ public final class MasterThread extends Thread {
         Preconditions.checkNotNull(cql);
         Preconditions.checkNotNull(tables);
         Preconditions.checkArgument(!tables.isEmpty());
-        MasterConfiguration masterConfiguration = new MasterConfiguration(transport, cql, tables, Clock.systemDefaultZone(),
-                DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS, DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS, DEFAULT_SLEEP_AFTER_EXCEPTION_MS);
+        MasterConfiguration masterConfiguration = MasterConfiguration.builder()
+                .withTransport(transport)
+                .withCQL(cql)
+                .addTables(tables)
+                .build();
         this.master = new Master(masterConfiguration);
     }
 
