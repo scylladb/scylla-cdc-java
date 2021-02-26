@@ -8,20 +8,16 @@ import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;
+import com.scylladb.cdc.model.worker.WorkerConfiguration;
 
 public final class CDCConsumerBuilder {
-    private static final long DEFAULT_QUERY_TIME_WINDOW_SIZE_MS = 30000;
-    private static final long DEFAULT_CONFIDENCE_WINDOW_SIZE_MS = 30000;
-    private static final RetryBackoff DEFAULT_WORKER_RETRY_BACKOFF =
-            new ExponentialRetryBackoffWithJitter(10, 30000);
-
     private final Driver3Session session;
     private final RawChangeConsumerProvider consumer;
     private final Set<TableName> tables;
     private int workersCount = getDefaultWorkersCount();
-    private long queryTimeWindowSizeMs = DEFAULT_QUERY_TIME_WINDOW_SIZE_MS;
-    private long confidenceWindowSizeMs = DEFAULT_CONFIDENCE_WINDOW_SIZE_MS;
-    private RetryBackoff workerRetryBackoff = DEFAULT_WORKER_RETRY_BACKOFF;
+    private long queryTimeWindowSizeMs = WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS;
+    private long confidenceWindowSizeMs = WorkerConfiguration.DEFAULT_CONFIDENCE_WINDOW_SIZE_MS;
+    private RetryBackoff workerRetryBackoff = WorkerConfiguration.DEFAULT_WORKER_RETRY_BACKOFF;
 
     private CDCConsumerBuilder(Driver3Session session, RawChangeConsumerProvider consumer, Set<TableName> tables) {
         this.consumer = Preconditions.checkNotNull(consumer);

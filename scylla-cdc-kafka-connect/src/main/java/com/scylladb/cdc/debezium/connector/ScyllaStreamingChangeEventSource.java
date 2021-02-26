@@ -20,9 +20,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSource {
-    private static final RetryBackoff DEFAULT_WORKER_RETRY_BACKOFF =
-            new ExponentialRetryBackoffWithJitter(10, 30000);
-
     private final ScyllaConnectorConfig configuration;
     private ScyllaTaskContext taskContext;
     private final ScyllaOffsetContext offsetContext;
@@ -47,9 +44,14 @@ public class ScyllaStreamingChangeEventSource implements StreamingChangeEventSou
         Driver3WorkerCQL cql = new Driver3WorkerCQL(session);
         ScyllaWorkerTransport workerTransport = new ScyllaWorkerTransport(context, offsetContext, dispatcher);
         ScyllaChangesConsumer changeConsumer = new ScyllaChangesConsumer(dispatcher, offsetContext, schema, clock);
-        Worker worker = new Worker(new WorkerConfiguration(workerTransport, cql, changeConsumer, configuration.getQueryTimeWindowSizeMs(),
-                configuration.getConfidenceWindowSizeMs(), DEFAULT_WORKER_RETRY_BACKOFF));
-
+        WorkerConfiguration workerConfiguration = WorkerConfiguration.builder()
+                .withTransport(workerTransport)
+                .withCQL(cql)
+                .withConsumer(changeConsumer)
+                .withQueryTimeWindowSizeMs(configuration.getQueryTimeWindowSizeMs())
+                .withConfidenceWindowSizeMs(configuration.getConfidenceWindowSizeMs())
+                .build();
+        Worker worker = new Worker(workerConfiguration);
         try {
             worker.run(taskContext.getTasks().stream().collect(Collectors.toMap(Pair::getKey, Pair::getValue)));
         } catch (ExecutionException e) {
