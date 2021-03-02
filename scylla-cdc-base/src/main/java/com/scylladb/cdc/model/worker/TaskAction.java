@@ -56,7 +56,7 @@ public abstract class TaskAction {
             CompletableFuture<Void> waitFuture = waitForWindow();
             CompletableFuture<Reader> readerFuture = waitFuture.thenCompose(w -> workerConfiguration.cql.createReader(task));
             CompletableFuture<TaskAction> taskActionFuture = readerFuture
-                    .thenApply(reader -> new ConsumeChangeTaskAction(workerConfiguration, task, reader, tryAttempt));
+                    .thenApply(reader -> new ReadChangeTaskAction(workerConfiguration, task, reader, tryAttempt));
             return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
                 // Exception occured while starting up the reader. Retry by starting
                 // this TaskAction once again.
@@ -78,50 +78,76 @@ public abstract class TaskAction {
         }
     }
 
-    private static class ConsumeChangeTaskAction extends TaskAction {
-        protected final WorkerConfiguration workerConfiguration;
-        protected final Task task;
+    private static class ReadChangeTaskAction extends TaskAction {
+        private final WorkerConfiguration workerConfiguration;
+        private final Task task;
         private final Reader reader;
         private final int tryAttempt;
 
-        public ConsumeChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, int tryAttempt) {
+        public ReadChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, int tryAttempt) {
             this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
             this.task = Preconditions.checkNotNull(task);
             this.reader = Preconditions.checkNotNull(reader);
             Preconditions.checkArgument(tryAttempt >= 0);
             this.tryAttempt = tryAttempt;
         }
+        
+        @Override
+        public CompletableFuture<TaskAction> run() {
+            workerConfiguration.transport.setState(task.id, task.state);
 
-        private CompletableFuture<TaskAction> consumeChange(Optional<RawChange> change) {
+            CompletableFuture<TaskAction> taskActionFuture = reader.nextChange().
+                    thenApply(change -> new ConsumeChangeTaskAction(workerConfiguration, task, reader, change, tryAttempt));
+            return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
+                // Exception occured while reading the window, we will have to restart
+                // ReadNewWindowTaskAction - read a window from state defined in task.
+                long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
+                logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
+                        "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+                return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
+            });
+        }
+    }
+
+    private static final class ConsumeChangeTaskAction extends TaskAction {
+        private final WorkerConfiguration workerConfiguration;
+        private final Task task;
+        private final Reader reader;
+        private final Optional<RawChange> change;
+        private final int tryAttempt;
+
+        public ConsumeChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, Optional<RawChange> change, int tryAttempt) {
+            this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
+            this.task = Preconditions.checkNotNull(task);
+            this.reader = Preconditions.checkNotNull(reader);
+            this.change = Preconditions.checkNotNull(change);
+            Preconditions.checkArgument(tryAttempt >= 0);
+            this.tryAttempt = tryAttempt;
+        }
+
+        @Override
+        public CompletableFuture<TaskAction> run() {
             if (change.isPresent()) {
                 Task updatedTask = task.updateState(change.get().getId());
-                return workerConfiguration.consumer.consume(task, change.get())
-                        .thenApply(q -> new ConsumeChangeTaskAction(workerConfiguration, updatedTask, reader, tryAttempt));
+                CompletableFuture<TaskAction> taskActionFuture = workerConfiguration.consumer.consume(task, change.get())
+                        .thenApply(q -> new ReadChangeTaskAction(workerConfiguration, updatedTask, reader, tryAttempt));
+
+                return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
+                    // Exception occured while consuming the change, we will have to restart
+                    // ReadNewWindowTaskAction - read a window from state defined in task.
+                    long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
+                    logger.atSevere().withCause(ex).log("Error while executing consume() method provided to the library. Task: %s. " +
+                            "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+                    return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
+                });
             } else {
                 if (tryAttempt > 0) {
                     logger.atWarning().log("Successfully finished reading a window after %d tries. Task: %s. " +
                             "Task state: %s.", tryAttempt, task.id, task.state);
                 }
 
-                CompletableFuture<TaskAction> result = new CompletableFuture<>();
-                result.complete(new MoveToNextWindowTaskAction(workerConfiguration, task));
-                return result;
+                return CompletableFuture.completedFuture(new MoveToNextWindowTaskAction(workerConfiguration, task));
             }
-        }
-
-        @Override
-        public CompletableFuture<TaskAction> run() {
-            workerConfiguration.transport.setState(task.id, task.state);
-
-            CompletableFuture<TaskAction> taskActionFuture = reader.nextChange().thenCompose(this::consumeChange);
-            return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
-                // Exception occured while reading the window, we will have to restart
-                // ReadNewWindowTaskAction - read a window from state defined in task.
-                long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
-                logger.atSevere().withCause(ex).log("Error while consuming change. Task: %s. " +
-                        "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-                return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
-            });
         }
     }
 
