@@ -40,7 +40,7 @@ public class ChangeTime implements Comparable<ChangeTime> {
 
     @Override
     public int compareTo(ChangeTime changeTime) {
-        return time.compareTo(changeTime.time);
+        return Long.compare(time.timestamp(), changeTime.time.timestamp());
     }
 
     @Override
