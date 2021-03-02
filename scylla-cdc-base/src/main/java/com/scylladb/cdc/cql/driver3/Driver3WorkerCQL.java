@@ -155,7 +155,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                         .bind(task.streams.stream().map(StreamId::getValue).collect(Collectors.toList()),
                                 task.state.getWindowStart(), task.state.getWindowEnd())
                         .setConsistencyLevel(computeCL()));
-        logger.atFiner().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
+        logger.atFine().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
 
         Futures.addCallback(future, new FutureCallback<ResultSet>() {
 
