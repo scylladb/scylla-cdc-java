@@ -22,15 +22,12 @@ public final class TaskActionsQueue {
     private static final int POLL_TIMEOUT_MS = 50;
 
     /*
-     * Using a thread-safe queue on purpose.
+     * Using a thread-safe queue on purpose, as
+     * new TaskActions may be added from different
+     * threads.
      *
-     * However, it may be populated inside different threads that
-     * may not be allowed to block. (Why not allowed to block?
-     * Are they allowed to wait?). Current solution for add() is
-     * unfortunately blocking.
-     *
-     * runNextAction() is only ran inside one thread and is allowed
-     * to block.
+     * runNextAction() is only ran inside one (Queue)
+     * thread and is allowed to block.
      */
     private final LinkedBlockingQueue<TaskAction> queue;
 
@@ -46,8 +43,6 @@ public final class TaskActionsQueue {
         TaskAction action = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
         if (action != null) {
-            // This queue::add may be executed in any thread
-            // add() unfortunately is blocking
             action.run().thenAccept(queue::add).exceptionally(ex -> {
                 logger.atSevere().withCause(ex).log("Unhandled exception in TaskActionsQueue.");
                 return null;
