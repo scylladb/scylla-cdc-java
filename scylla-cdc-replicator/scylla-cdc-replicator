@@ -3,4 +3,4 @@
 # Change the working directory to Replicator.
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit
 
-mvn exec:java -q -Dexec.mainClass="com.scylladb.cdc.replicator.Main" -Dexec.args="$*" -Djava.util.logging.config.file="src/main/resources/logging.properties"
+mvn exec:java -q -Dexec.mainClass="com.scylladb.cdc.replicator.Main" -Dexec.args="$*" -Djava.util.logging.config.file="src/main/resources/logging.properties" -Dexec.cleanupDaemonThreads=false
