@@ -32,6 +32,7 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
     private final RawChangeConsumerProvider consumer;
     private volatile int workersCount;
     private Thread[] workerThreads;
+    private Optional<GenerationId> currentGenerationId = Optional.empty();
 
     private long confidenceWindowSizeMs;
     private long queryTimeWindowSizeMs;
@@ -54,7 +55,7 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public Optional<GenerationId> getCurrentGenerationId() {
-        return Optional.empty();
+        return currentGenerationId;
     }
 
     @Override
@@ -79,6 +80,8 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
                 it.remove();
             }
         }
+        currentGenerationId = workerConfigurations.keySet().stream()
+                .findAny().map(TaskId::getGenerationId);
         stop();
         stopped = false;
         int wCount = Math.min(workersCount, workerConfigurations.size());
@@ -109,7 +112,14 @@ public class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public Map<TaskId, TaskState> getTaskStates(Set<TaskId> tasks) {
-        return new HashMap<>();
+        Map<TaskId, TaskState> result = new HashMap<>();
+        tasks.forEach(task -> {
+            TaskState taskState = taskStates.get(task);
+            if (taskState != null) {
+                result.put(task, taskState);
+            }
+        });
+        return result;
     }
 
     @Override
