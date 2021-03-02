@@ -29,6 +29,7 @@ import com.google.common.util.concurrent.Futures;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
@@ -93,9 +94,11 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
         private volatile ResultSet rs;
         private volatile ChangeSchema schema;
+        private final Optional<ChangeId> lastChangeId;
 
-        public Driver3Reader(ResultSet rs) {
+        public Driver3Reader(ResultSet rs, Optional<ChangeId> lastChangeId) {
             this.rs = Preconditions.checkNotNull(rs);
+            this.lastChangeId = Preconditions.checkNotNull(lastChangeId);
         }
 
         private void findNext(CompletableFuture<Optional<RawChange>> fut) {
@@ -130,7 +133,20 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                     // it wouldn't be nice if we had to update `schema` on each query/page (expensive)
                     // See Scylla issue #7824.
                 }
-                fut.complete(Optional.of(new Driver3RawChange(row, schema)));
+                Driver3RawChange newChange = new Driver3RawChange(row, schema);
+
+                // lastChangeId determines the point from which we should
+                // start reading within a window. In this implementation
+                // we simply read the entire window and skip rows that
+                // were before lastChangeId.
+                //
+                // If lastChangeId is Optional.empty(), then we read
+                // the entire window.
+                if (!lastChangeId.isPresent() || newChange.getId().compareTo(lastChangeId.get()) > 0) {
+                    fut.complete(Optional.of(newChange));
+                } else {
+                    findNext(fut);
+                }
             }
         }
 
@@ -161,7 +177,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
             @Override
             public void onSuccess(ResultSet rs) {
-                result.complete(new Driver3Reader(rs));
+                result.complete(new Driver3Reader(rs, task.state.getLastConsumedChangeId()));
             }
 
             @Override
