@@ -32,6 +32,8 @@ named arguments:
                          Consistency level of writes. QUORUM by default (default: quorum)
 ```
 
+You can adjust the logging level of Replicator by editing [`src/main/resources/logging.properties`](src/main/resources/logging.properties) file, when launching with `./scylla-cdc-replicator` script. If you start the replicator externally, use `-Djava.util.logging.config.file=` JVM system property to specify a path to `logging.properties` file.
+
 ## Implementation overview
 
 Replicator's [`Main`](src/main/java/com/scylladb/cdc/replicator/Main.java) class reads the command-line arguments and starts up `CDCConsumer` with [`ReplicatorConsumer`](src/main/java/com/scylladb/cdc/replicator/ReplicatorConsumer.java).

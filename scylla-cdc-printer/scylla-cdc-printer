@@ -1,3 +1,6 @@
 #!/usr/bin/env bash
-export JAVA_PROGRAM_ARGS=`echo "$@"`
-mvn exec:java -q -Dexec.mainClass="com.scylladb.cdc.printer.Main" -Dexec.args="$JAVA_PROGRAM_ARGS"
+
+# Change the working directory to Printer.
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit
+
+mvn exec:java -q -Dexec.mainClass="com.scylladb.cdc.printer.Main" -Dexec.args="$*" -Djava.util.logging.config.file="src/main/resources/logging.properties"

@@ -27,16 +27,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class Main {
     public static void main(String[] args) {
-        // Turn off logging for the standard output
-        // to be more clear.
-        turnOffLogging();
-
         // Get connection info and desired table
         // from command line arguments.
         Namespace parsedArguments = parseArguments(args);
@@ -207,14 +200,6 @@ public class Main {
 
         fieldValue = String.format("%1$" + leftSpace + "s", fieldValue);
         System.out.println(fieldValue + " │");
-    }
-
-    private static void turnOffLogging() {
-        Logger root = Logger.getLogger("");
-        root.setLevel(Level.OFF);
-        for (Handler handler : root.getHandlers()) {
-            handler.setLevel(Level.OFF);
-        }
     }
 
     // Parsing the command-line arguments:
