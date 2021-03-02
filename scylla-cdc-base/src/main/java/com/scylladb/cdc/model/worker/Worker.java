@@ -108,6 +108,17 @@ public final class Worker {
                 // Ignore InterruptedException
             }
         }
+
+        // Stop all "sleeping" futures.
+        try {
+            workerConfiguration.delayedFutureService.stop();
+        } catch (InterruptedException e) {
+            // Ignore InterruptedException
+        }
+
+        // Wait for already started actions to gracefully
+        // finish.
+        actions.join();
     }
 
     /*

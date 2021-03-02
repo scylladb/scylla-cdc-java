@@ -3,10 +3,6 @@ package com.scylladb.cdc.model.worker;
 import java.util.Date;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
@@ -15,23 +11,6 @@ import com.scylladb.cdc.model.FutureUtils;
 
 public abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
-
-    private static final ScheduledExecutorService internalExecutor = Executors
-            .newSingleThreadScheduledExecutor(new ThreadFactory() {
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r);
-                    t.setName("DelayingExecutorThread");
-                    t.setDaemon(true);
-                    return t;
-                }
-            });
-
-    private static CompletableFuture<Void> sleepOnExecutor(long numberOfMilliseconds) {
-        CompletableFuture<Void> result = new CompletableFuture<>();
-        internalExecutor.schedule(() -> result.complete(null), numberOfMilliseconds, TimeUnit.MILLISECONDS);
-        return result;
-    }
 
     public abstract CompletableFuture<TaskAction> run();
 
@@ -53,7 +32,17 @@ public abstract class TaskAction {
 
         @Override
         public CompletableFuture<TaskAction> run() {
+            // Wait future might end prematurely - when transport
+            // requested stop. That could mean we create a reader
+            // for a window intersecting with confidence window.
+            // (reading too fresh data).
+            //
+            // Fortunately, to consume a change we queue
+            // ReadNewWindowTaskAction, but as transport requested
+            // stop, new TaskActions are not started and changes
+            // from that "incorrect" window will not be consumed.
             CompletableFuture<Void> waitFuture = waitForWindow();
+
             CompletableFuture<Reader> readerFuture = waitFuture.thenCompose(w -> workerConfiguration.cql.createReader(task));
             CompletableFuture<TaskAction> taskActionFuture = readerFuture
                     .thenApply(reader -> new ReadChangeTaskAction(workerConfiguration, task, reader, tryAttempt));
@@ -63,7 +52,8 @@ public abstract class TaskAction {
                 long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
                 logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
                         "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-                return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
+                return workerConfiguration.delayedFutureService.delayedFuture(backoffTime)
+                        .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
             });
         }
 
@@ -72,7 +62,7 @@ public abstract class TaskAction {
             Date now = new Date();
             long toWait = end.getTime() - now.getTime() + workerConfiguration.confidenceWindowSizeMs;
             if (toWait > 0) {
-                return sleepOnExecutor(toWait);
+                return workerConfiguration.delayedFutureService.delayedFuture(toWait);
             }
             return CompletableFuture.completedFuture(null);
         }
@@ -104,7 +94,8 @@ public abstract class TaskAction {
                 long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
                 logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
                         "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-                return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
+                return workerConfiguration.delayedFutureService.delayedFuture(backoffTime)
+                        .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
             });
         }
     }
@@ -138,7 +129,8 @@ public abstract class TaskAction {
                     long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
                     logger.atSevere().withCause(ex).log("Error while executing consume() method provided to the library. Task: %s. " +
                             "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-                    return TaskAction.sleepOnExecutor(backoffTime).thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
+                    return workerConfiguration.delayedFutureService.delayedFuture(backoffTime)
+                            .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
                 });
             } else {
                 if (tryAttempt > 0) {

@@ -19,10 +19,13 @@ public final class WorkerConfiguration {
     public final long queryTimeWindowSizeMs;
     public final long confidenceWindowSizeMs;
 
-    public RetryBackoff workerRetryBackoff;
+    public final RetryBackoff workerRetryBackoff;
+
+    public final DelayedFutureService delayedFutureService;
 
     private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, TaskAndRawChangeConsumer consumer,
-                               long queryTimeWindowSizeMs, long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff) {
+                               long queryTimeWindowSizeMs, long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff,
+                                DelayedFutureService delayedFutureService) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
@@ -31,6 +34,7 @@ public final class WorkerConfiguration {
         Preconditions.checkArgument(confidenceWindowSizeMs > 0);
         this.confidenceWindowSizeMs = confidenceWindowSizeMs;
         this.workerRetryBackoff = Preconditions.checkNotNull(workerRetryBackoff);
+        this.delayedFutureService = Preconditions.checkNotNull(delayedFutureService);
     }
 
     public static Builder builder() {
@@ -81,7 +85,7 @@ public final class WorkerConfiguration {
 
         public WorkerConfiguration build() {
             return new WorkerConfiguration(transport, cql, consumer,
-                    queryTimeWindowSizeMs, confidenceWindowSizeMs, workerRetryBackoff);
+                    queryTimeWindowSizeMs, confidenceWindowSizeMs, workerRetryBackoff, new DelayedFutureService());
         }
     }
 }
