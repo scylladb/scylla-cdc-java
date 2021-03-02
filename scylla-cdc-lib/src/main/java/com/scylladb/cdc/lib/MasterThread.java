@@ -4,6 +4,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
+import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.master.Connectors;
@@ -14,6 +15,7 @@ public final class MasterThread extends Thread {
     private static final long DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS = TimeUnit.SECONDS.toMillis(10);
     private static final long DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS = TimeUnit.SECONDS.toMillis(30);
     private static final long DEFAULT_SLEEP_AFTER_EXCEPTION_MS = TimeUnit.SECONDS.toMillis(10);
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Master master;
 
@@ -38,8 +40,7 @@ public final class MasterThread extends Thread {
         try {
             master.run();
         } catch (Throwable e) {
-            System.err.println("Master thread failed: " + e.getMessage());
-            e.printStackTrace(System.err);
+            logger.atSevere().withCause(e).log("Master thread failed in run().");
         }
     }
 

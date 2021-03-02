@@ -3,11 +3,13 @@ package com.scylladb.cdc.replicator.operations;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
+import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
 public final class FutureUtils {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private FutureUtils() {
         throw new UnsupportedOperationException(FutureUtils.class.getName() + " should never be instantiated");
@@ -24,8 +26,7 @@ public final class FutureUtils {
 
             @Override
             public void onFailure(Throwable t) {
-                System.err.println(errorMsg);
-                t.printStackTrace();
+                logger.atSevere().withCause(t).log(errorMsg);
                 result.completeExceptionally(t);
             }
         });
