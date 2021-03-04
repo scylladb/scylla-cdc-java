@@ -149,7 +149,11 @@ public final class Master {
                     generation = getNextGeneration(generation);
                     tasks = createTasks(generation);
                 }
+
                 logger.atInfo().log("Master found a new generation: %s. Will call transport.configureWorkers().", generation.getId());
+                tasks.forEach((task, streams) ->
+                        logger.atFine().log("Created Task: %s with streams: %s", task, streams));
+
                 connectors.transport.configureWorkers(tasks);
                 while (!generationDone(generation, tasks.keySet())) {
                     Thread.sleep(connectors.sleepBeforeGenerationDoneMs);

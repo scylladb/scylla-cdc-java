@@ -67,7 +67,8 @@ public final class TaskState {
 
     @Override
     public String toString() {
-        return String.format("TaskState(%s, %s, %s)", windowStart, windowEnd, lastConsumedChangeId);
+        return String.format("TaskState(%s (%s), %s (%s), %s)", getWindowStart(), windowStart, getWindowEnd(),
+                windowEnd, lastConsumedChangeId);
     }
 
     /*

@@ -1,12 +1,15 @@
 package com.scylladb.cdc.model;
 
 import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.time.temporal.TemporalUnit;
 import java.util.Date;
 
 import com.google.common.base.Preconditions;
 
 public final class Timestamp implements Comparable<Timestamp> {
+    private static final SimpleDateFormat TIMESTAMP_TO_STRING_FORMATTER
+            = new SimpleDateFormat("dd/MM/yyyy, HH:mm:ss.SSS");
     private final Date value;
 
     public Timestamp(Date value) {
@@ -33,7 +36,7 @@ public final class Timestamp implements Comparable<Timestamp> {
 
     @Override
     public String toString() {
-        return String.format("Timestamp(%s)", DateFormat.getInstance().format(value));
+        return String.format("Timestamp(%s)", TIMESTAMP_TO_STRING_FORMATTER.format(value));
     }
 
     @Override

@@ -98,6 +98,11 @@ public abstract class TaskAction {
                 return connectors.consumer.consume(task, change.get())
                         .thenApply(q -> new UpdateStatusTaskAction(connectors, updatedTask, reader, tryAttempt));
             } else {
+                if (tryAttempt > 0) {
+                    logger.atWarning().log("Successfully finished reading a window after %d tries. Task: %s. " +
+                            "Task state: %s.", tryAttempt, task.id, task.state);
+                }
+
                 CompletableFuture<TaskAction> result = new CompletableFuture<>();
                 result.complete(new MoveToNextWindowTaskAction(connectors, task));
                 return result;
