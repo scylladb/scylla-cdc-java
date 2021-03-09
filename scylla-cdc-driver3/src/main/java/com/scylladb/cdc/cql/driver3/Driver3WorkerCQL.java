@@ -179,4 +179,8 @@ public final class Driver3WorkerCQL implements WorkerCQL {
         return query(stmt, task);
     }
 
+    @Override
+    public CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName) {
+        return Driver3CommonCQL.fetchTableTTL(session, tableName);
+    }
 }

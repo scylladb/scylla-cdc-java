@@ -1,6 +1,10 @@
 package com.scylladb.cdc.model.worker;
 
+import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
@@ -9,7 +13,9 @@ import java.util.stream.Stream;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
+import com.scylladb.cdc.model.Timestamp;
 
 public final class Worker {
 
@@ -45,14 +51,34 @@ public final class Worker {
      * The state is either taken from the Transport if this task was executed before
      * and is now restarted or is created from scratch if the task hasn't executed
      * successfully before.
+     *
+     * Additionally, the state is trimmed according to the table's TTL value.
      */
-    private Stream<Task> createTasksWithState(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
+    private Stream<Task> createTasksWithState(Map<TaskId, SortedSet<StreamId>> groupedStreams) throws ExecutionException, InterruptedException {
         Map<TaskId, TaskState> states = workerConfiguration.transport.getTaskStates(groupedStreams.keySet());
         TaskState initialState = getInitialStateForStreams(groupedStreams, workerConfiguration.queryTimeWindowSizeMs);
+
+        Set<TableName> tableNames = groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet());
+        Date now = new Date();
+
+        // The furthest point in time where there might be
+        // a CDC change, given table's TTL.
+        Map<TableName, Timestamp> minimumWindowStarts = new HashMap<>();
+
+        for (TableName tableName : tableNames) {
+            Optional<Long> ttl = workerConfiguration.cql.fetchTableTTL(tableName).get();
+            Date minimumWindowStart = new Date(0);
+            if (ttl.isPresent()) {
+                minimumWindowStart = new Date(now.getTime() - 1000L * ttl.get()); // TTL is in seconds, getTime() in milliseconds
+            }
+            minimumWindowStarts.put(tableName, new Timestamp(minimumWindowStart));
+        }
+
         return groupedStreams.entrySet().stream().map(taskStreams -> {
             TaskId id = taskStreams.getKey();
             SortedSet<StreamId> streams = taskStreams.getValue();
             TaskState state = states.getOrDefault(id, initialState);
+            state = state.trimTaskState(minimumWindowStarts.get(id.getTable()), workerConfiguration.queryTimeWindowSizeMs);
             return new Task(id, streams, state);
         });
     }
@@ -63,7 +89,7 @@ public final class Worker {
      * This includes fetching saved state of each task or creating a new initial
      * state for tasks that haven't run successfully before.
      */
-    private TaskActionsQueue queueFirstActionForEachTask(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
+    private TaskActionsQueue queueFirstActionForEachTask(Map<TaskId, SortedSet<StreamId>> groupedStreams) throws ExecutionException, InterruptedException {
         return new TaskActionsQueue(createTasksWithState(groupedStreams)
                 .map(task -> TaskAction.createFirstAction(workerConfiguration, task)).collect(Collectors.toSet()));
     }
