@@ -17,4 +17,6 @@ public interface WorkerCQL {
     void prepare(Set<TableName> tables) throws InterruptedException, ExecutionException;
 
     CompletableFuture<Reader> createReader(Task task);
+
+    CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName);
 }

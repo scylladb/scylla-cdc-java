@@ -80,4 +80,21 @@ public final class TaskState {
         Timestamp generationStart = generation.getGenerationStart();
         return new TaskState(generationStart, generationStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
     }
+
+    /* If the state is before |minimumWindowStart| then this method returns a state
+     * starting at |minimumWindowStart| and spanning for |windowSizeMs| milliseconds.
+     * Otherwise, the original state is returned. An intended use for |minimumWindowStart|
+     * is when you are sure that there aren't any changes before |minimumWindowStart|
+     * (for example due to TTL) and don't want to have a state that will span a range
+     * without any changes.
+     */
+    public TaskState trimTaskState(Timestamp minimumWindowStart, long windowSizeMs) {
+        // If the entire state is before minimumWindowStart,
+        // return a new state starting at minimumWindowStart.
+        if (this.windowEnd.compareTo(minimumWindowStart) < 0) {
+            return new TaskState(minimumWindowStart, minimumWindowStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
+        }
+
+        return this;
+    }
 }
