@@ -105,11 +105,15 @@ public class ScyllaConnectorTask extends BaseSourceTask {
 
     private ScyllaOffsetContext getPreviousOffsets(ScyllaConnectorConfig connectorConfig, List<Pair<TaskId, SortedSet<StreamId>>> tasks) {
         SourceInfo sourceInfo = new SourceInfo(connectorConfig);
+        List<Map<String, String>> partitions = tasks.stream()
+                .map(t -> sourceInfo.partition(t.getLeft()))
+                .collect(Collectors.toList());
+        Map<Map<String, String>, Map<String, Object>> offsetMap = context.offsetStorageReader().offsets(partitions);
         tasks.forEach(t -> {
             TaskId taskId = t.getLeft();
 
             Map<String, String> partition = sourceInfo.partition(taskId);
-            Map<String, Object> offset = context.offsetStorageReader().offset(partition);
+            Map<String, Object> offset = offsetMap.get(partition);
 
             if (offset != null) {
                 Timestamp windowStart = new Timestamp(new Date(UUIDs.unixTimestamp(UUID.fromString((String) offset.get(SourceInfo.WINDOW_START)))));
