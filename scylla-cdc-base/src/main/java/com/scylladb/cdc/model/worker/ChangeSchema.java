@@ -204,17 +204,25 @@ public class ChangeSchema {
 
     public static final class ColumnDefinition {
         private final String columnName;
+        private final int index;
         private final DataType cdcLogDataType;
+        private final DataType baseTableDataType;
         private final ColumnType baseTableColumnType;
         private final boolean baseIsNonfrozenList;
 
-        public ColumnDefinition(String columnName, DataType cdcLogDataType, ColumnType baseTableColumnType, boolean baseIsNonfrozenList) {
+        public ColumnDefinition(String columnName, int index, DataType cdcLogDataType, DataType baseTableDataType, ColumnType baseTableColumnType, boolean baseIsNonfrozenList) {
             this.columnName = columnName;
+            this.index = index;
             this.cdcLogDataType = cdcLogDataType;
+            this.baseTableDataType = baseTableDataType;
             this.baseTableColumnType = baseTableColumnType;
             this.baseIsNonfrozenList = baseIsNonfrozenList;
         }
 
+        public int getIndex() {
+            return index;
+        }
+        
         public boolean isCdcColumn() {
             return this.columnName.startsWith("cdc$");
         }
@@ -227,6 +235,10 @@ public class ChangeSchema {
             return cdcLogDataType;
         }
 
+        public DataType getBaseTableDataType() {
+            return baseTableDataType;
+        }
+        
         public ColumnType getBaseTableColumnType() {
             if (isCdcColumn()) {
                 throw new IllegalStateException("Cannot get base table column type for CDC columns.");
@@ -243,20 +255,45 @@ public class ChangeSchema {
             return baseIsNonfrozenList;
         }
 
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            ColumnDefinition that = (ColumnDefinition) o;
-            return columnName.equals(that.columnName) &&
-                    cdcLogDataType == that.cdcLogDataType &&
-                    baseTableColumnType == that.baseTableColumnType;
+        public ColumnDefinition getDeletedColumn(ChangeSchema schema) {
+            if (baseTableDataType == null) {
+                throw new IllegalStateException("Cannot get deleted elements column for CDC columns.");
+            }
+            return schema.getColumnDefinition("cdc$deleted_" + columnName);
+        }
+
+        public ColumnDefinition getDeletedElementsColumn(ChangeSchema schema) {
+            if (baseTableDataType == null) {
+                throw new IllegalStateException("Cannot get deleted elements column for CDC columns.");
+            }
+            if (baseTableDataType.isAtomic()) {
+                throw new IllegalStateException(
+                        "Cannot get deleted elements column for frozen or non-collection columns.");
+            }
+            return schema.getColumnDefinition("cdc$deleted_elements_" + columnName);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(columnName, cdcLogDataType, baseTableColumnType);
+            return Objects.hash(baseIsNonfrozenList, baseTableColumnType, baseTableDataType, cdcLogDataType, columnName,
+                    index);
         }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof ColumnDefinition)) {
+                return false;
+            }
+            ColumnDefinition other = (ColumnDefinition) obj;
+            return baseIsNonfrozenList == other.baseIsNonfrozenList && baseTableColumnType == other.baseTableColumnType
+                    && Objects.equals(baseTableDataType, other.baseTableDataType)
+                    && Objects.equals(cdcLogDataType, other.cdcLogDataType)
+                    && Objects.equals(columnName, other.columnName) && index == other.index;
+        }
+        
     }
 
     private final List<ColumnDefinition> columnDefinitions;
@@ -277,6 +314,10 @@ public class ChangeSchema {
     public List<ColumnDefinition> getNonCdcColumnDefinitions() {
         return columnDefinitions.stream().filter(c -> !c.isCdcColumn())
                 .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
+    }
+
+    public ColumnDefinition getColumnDefinition(int i) {
+        return columnDefinitions.get(i);
     }
 
     public ColumnDefinition getColumnDefinition(String columnName) {
