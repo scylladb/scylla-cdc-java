@@ -83,13 +83,17 @@ public class Driver3SchemaBuilder {
 
         List<ColumnDefinitions.Definition> driverColumnDefinitions = row.getColumnDefinitions().asList();
         ImmutableList.Builder<ChangeSchema.ColumnDefinition> builder = ImmutableList.builder();
-        driverColumnDefinitions.stream().map(this::translateColumnDefinition).forEach(builder::add);
+        int i = 0; 
+        for (ColumnDefinitions.Definition c : driverColumnDefinitions) {
+            builder.add(translateColumnDefinition(c, i++));
+        }
         return builder.build();
     }
 
-    private ChangeSchema.ColumnDefinition translateColumnDefinition(ColumnDefinitions.Definition driverDefinition) {
+    private ChangeSchema.ColumnDefinition translateColumnDefinition(ColumnDefinitions.Definition driverDefinition, int index) {
         String columnName = driverDefinition.getName();
         ChangeSchema.DataType dataType = translateColumnDataType(driverDefinition.getType());
+        ChangeSchema.DataType baseType = null;
         ChangeSchema.ColumnType baseTableColumnType = ChangeSchema.ColumnType.REGULAR;
         boolean baseIsNonfrozenList = false;
         if (baseTablePartitionKeyColumnNames.contains(columnName)) {
@@ -115,8 +119,8 @@ public class Driver3SchemaBuilder {
             // TODO: this sets it only for value columns (and not e.g. for `cdc$deleted_` columns), but maybe it's enough?
             ColumnMetadata baseColumnMetadata = baseTableMetadata.getColumn(columnName);
             if (baseColumnMetadata != null) {
-                DataType baseType = baseColumnMetadata.getType();
-                baseIsNonfrozenList = baseType.getName() == DataType.Name.LIST && !baseType.isFrozen();
+                baseType = translateColumnDataType(baseColumnMetadata.getType());
+                baseIsNonfrozenList = baseType.getCqlType() == ChangeSchema.CqlType.LIST && !baseType.isFrozen();
 
                 // some sanity checking:
                 if (baseIsNonfrozenList && (
@@ -130,7 +134,7 @@ public class Driver3SchemaBuilder {
                 }
             }
         }
-        return new ChangeSchema.ColumnDefinition(columnName, dataType, baseTableColumnType, baseIsNonfrozenList);
+        return new ChangeSchema.ColumnDefinition(columnName, index, dataType, baseType, baseTableColumnType, baseIsNonfrozenList);
     }
 
     private ChangeSchema.DataType translateColumnDataType(DataType driverType) {
