@@ -34,7 +34,6 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.scylladb.cdc.cql.BaseMasterCQL;
-import com.scylladb.cdc.model.FutureUtils;
 import com.scylladb.cdc.model.TableName;
 
 public final class Driver3MasterCQL extends BaseMasterCQL {
