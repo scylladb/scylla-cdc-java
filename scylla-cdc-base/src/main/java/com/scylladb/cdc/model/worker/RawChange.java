@@ -42,6 +42,15 @@ public interface RawChange {
         return OperationType.parse(operation);
     }
 
+    default boolean isEndOfBatch() {
+        Boolean eob = getCell("cdc$end_of_batch").getBoolean();
+        return eob != null && eob.booleanValue();
+    }
+
+    default int getBatchSequenceNumber() {
+        return getCell("cdc$batch_seq_no").getInt();
+    }
+    
     default Long getTTL() {
         return getCell("cdc$ttl").getLong();
     }
