@@ -3,7 +3,7 @@
     <parent>
         <groupId>com.scylladb</groupId>
         <artifactId>scylla-cdc</artifactId>
-        <version>1.0.1-SNAPSHOT</version>
+        <version>1.1.0-SNAPSHOT</version>
     </parent>
     <artifactId>scylla-cdc-lib</artifactId>
     <name>Java Library for Scylla CDC - lib</name>
