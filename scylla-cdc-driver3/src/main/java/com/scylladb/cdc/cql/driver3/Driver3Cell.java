@@ -50,7 +50,7 @@ class Driver3Cell implements Cell {
 
     @Override
     public boolean isDeleted() {
-        return change.getIsDeleted(columnDefinition.getColumnName());
+        return change.isDeleted(columnDefinition);
     }
 
     @Override
