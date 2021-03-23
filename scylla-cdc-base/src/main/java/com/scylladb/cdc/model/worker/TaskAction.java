@@ -9,7 +9,7 @@ import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
 
-public abstract class TaskAction {
+abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     public abstract CompletableFuture<TaskAction> run();
