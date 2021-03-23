@@ -28,13 +28,8 @@ The latest release of scylla-cdc-java is available on Maven Central. You can int
 ```xml
 <dependency>
     <groupId>com.scylladb</groupId>
-    <artifactId>scylla-cdc-base</artifactId>
-    <version>1.0.0</version>
-</dependency>
-<dependency>
-    <groupId>com.scylladb</groupId>
     <artifactId>scylla-cdc-lib</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
