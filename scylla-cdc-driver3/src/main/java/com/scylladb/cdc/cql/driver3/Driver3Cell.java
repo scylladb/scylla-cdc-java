@@ -1,6 +1,5 @@
 package com.scylladb.cdc.cql.driver3;
 
-import java.nio.ByteBuffer;
 import java.util.Set;
 
 import com.scylladb.cdc.model.worker.ChangeSchema;
@@ -29,5 +28,27 @@ class Driver3Cell implements Cell {
     @Override
     public DataType getDataType() {
         return columnDefinition.getCdcLogDataType();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public Set<Field> getDeletedElements() {
+        if (!hasDeletedElements()) {
+            return null;
+        }
+        return (Set<Field>) change.getAsObject(columnDefinition.getDeletedElementsColumn(change.getSchema()));
+    }
+
+    @Override
+    public boolean hasDeletedElements() {
+        if (!columnDefinition.getBaseTableDataType().isAtomic()) {
+            return false;
+        }
+        return !change.isNull(columnDefinition.getDeletedElementsColumn(change.getSchema()));
+    }
+
+    @Override
+    public boolean isDeleted() {
+        return change.getIsDeleted(columnDefinition.getColumnName());
     }
 }
