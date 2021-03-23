@@ -1,5 +1,6 @@
 package com.scylladb.cdc.cql.driver3;
 
+import java.nio.ByteBuffer;
 import java.util.Set;
 
 import com.scylladb.cdc.model.worker.ChangeSchema;
@@ -50,5 +51,10 @@ class Driver3Cell implements Cell {
     @Override
     public boolean isDeleted() {
         return change.getIsDeleted(columnDefinition.getColumnName());
+    }
+
+    @Override
+    public ByteBuffer getUnsafeBytes() {
+        return change.getUnsafeBytes(columnDefinition);
     }
 }
