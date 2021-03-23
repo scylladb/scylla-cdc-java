@@ -9,7 +9,7 @@ import com.scylladb.cdc.model.worker.cql.Cell;
  * without any post-processing.
  */
 public interface RawChange {
-    enum OperationType {
+    public enum OperationType {
         PRE_IMAGE((byte) 0),
         ROW_UPDATE((byte) 1),
         ROW_INSERT((byte) 2),
@@ -21,17 +21,17 @@ public interface RawChange {
         ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND((byte) 8),
         POST_IMAGE((byte) 9);
 
-        // Assumes that operationId are consecutive and start from 0.
-        private static final OperationType[] enumValues = OperationType.values();
-
         byte operationId;
         OperationType(byte operationId) {
             this.operationId = operationId;
         }
 
         public static OperationType parse(byte value) {
-            // TODO - validation
-            return enumValues[value];
+            try {
+                return OperationType.values()[value];
+            } catch (ArrayIndexOutOfBoundsException e) {
+                throw new IllegalArgumentException(Byte.toString(value), e);
+            }
         }
     }
 
