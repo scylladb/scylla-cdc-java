@@ -75,9 +75,22 @@ public interface RawChange {
 
     ByteBuffer getUnsafeBytes(ChangeSchema.ColumnDefinition c);
 
-    default boolean getIsDeleted(String columnName) {
-        String deletedColumnName = "cdc$deleted_" + columnName;
-        Boolean value = getCell(deletedColumnName).getBoolean();
+    default boolean isDeleted(String columnName) {
+        return isDeleted(getSchema().getColumnDefinition(columnName));
+    }
+
+    default boolean isDeleted(ChangeSchema.ColumnDefinition c) {
+        ChangeSchema.DataType type = c.getBaseTableDataType();
+        if (type != null && type.isAtomic()) {
+            return isNull(c);
+        }
+        // if type == null, this will throw
+        Boolean value = getCell(c.getDeletedColumn(getSchema())).getBoolean();
         return value != null && value;
+    }
+
+    @Deprecated
+    default boolean getIsDeleted(String columnName) {
+        return isDeleted(columnName);
     }
 }
