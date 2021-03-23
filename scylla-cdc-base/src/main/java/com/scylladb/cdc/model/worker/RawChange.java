@@ -1,5 +1,7 @@
 package com.scylladb.cdc.model.worker;
 
+import java.nio.ByteBuffer;
+
 import com.scylladb.cdc.model.worker.cql.Cell;
 
 /*
@@ -52,7 +54,7 @@ public interface RawChange {
     default Object getAsObject(String columnName) {
         return getAsObject(getSchema().getColumnDefinition(columnName));
     }
-
+    
     Object getAsObject(ChangeSchema.ColumnDefinition c);
 
     default Cell getCell(String columnName) {
@@ -62,10 +64,16 @@ public interface RawChange {
     Cell getCell(ChangeSchema.ColumnDefinition c);
 
     default boolean isNull(String columnName) {
-        return isNull(getSchema().getColumnDefinition(columnName));                
+        return isNull(getSchema().getColumnDefinition(columnName));
     }
 
     boolean isNull(ChangeSchema.ColumnDefinition c);
+
+    default ByteBuffer getUnsafeBytes(String columnName) {
+        return getUnsafeBytes(getSchema().getColumnDefinition(columnName));
+    }
+    
+    ByteBuffer getUnsafeBytes(ChangeSchema.ColumnDefinition c);
 
     default boolean getIsDeleted(String columnName) {
         String deletedColumnName = "cdc$deleted_" + columnName;
