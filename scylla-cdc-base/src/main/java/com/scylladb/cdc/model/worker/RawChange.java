@@ -10,7 +10,7 @@ import com.scylladb.cdc.model.worker.cql.Cell;
  * Represents a single CDC log row,
  * without any post-processing.
  */
-public interface RawChange extends Iterable<Cell> {
+public interface RawChange extends Iterable<Cell>, Change {
     public enum OperationType {
         PRE_IMAGE((byte) 0),
         ROW_UPDATE((byte) 1),
@@ -37,8 +37,6 @@ public interface RawChange extends Iterable<Cell> {
         }
     }
 
-    ChangeId getId();
-
     default OperationType getOperationType() {
         Byte operation = getCell("cdc$operation").getByte();
         return OperationType.parse(operation);
@@ -56,9 +54,7 @@ public interface RawChange extends Iterable<Cell> {
     default Long getTTL() {
         return getCell("cdc$ttl").getLong();
     }
-
-    ChangeSchema getSchema();
-
+    
     /*
      * Gets the value of column as Java Object.
      */
