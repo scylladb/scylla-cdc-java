@@ -185,13 +185,13 @@ public class Driver3SchemaBuilder {
                 return new ChangeSchema.DataType(ChangeSchema.CqlType.DURATION);
             case LIST:
                 Preconditions.checkArgument(typeArguments.size() == 1);
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, typeArguments);
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, typeArguments, driverType.isFrozen());
             case MAP:
                 Preconditions.checkArgument(typeArguments.size() == 2);
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, typeArguments);
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, typeArguments, driverType.isFrozen());
             case SET:
                 Preconditions.checkArgument(typeArguments.size() == 1);
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.SET, typeArguments);
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.SET, typeArguments, driverType.isFrozen());
             case UDT:
                 Preconditions.checkArgument(driverType instanceof UserType);
                 UserType userType = (UserType) driverType;
@@ -200,14 +200,14 @@ public class Driver3SchemaBuilder {
                     fieldsBuilder.put(f.getName(), translateColumnDataType(f.getType()));
                 }
                 ChangeSchema.DataType.UdtType udtType = new ChangeSchema.DataType.UdtType(fieldsBuilder.build(), userType.getKeyspace(), userType.getTypeName());
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.UDT, udtType);
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.UDT, udtType, driverType.isFrozen());
             case TUPLE:
                 Preconditions.checkArgument(driverType instanceof TupleType);
                 TupleType tupleType = (TupleType) driverType;
                 typeArguments = tupleType.getComponentTypes().stream().map(this::translateColumnDataType)
                         .collect(Collectors.collectingAndThen(Collectors.toList(), ImmutableList::copyOf));
                 Preconditions.checkArgument(!typeArguments.isEmpty());
-                return new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, typeArguments);
+                return new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, typeArguments, driverType.isFrozen());
             default:
                 throw new RuntimeException(String.format("Data type %s is currently not supported.", driverType.getName()));
         }
