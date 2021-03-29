@@ -8,7 +8,6 @@ import java.util.stream.Collectors;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 
 public class ChangeSchema {
     public enum CqlType {
@@ -42,6 +41,7 @@ public class ChangeSchema {
 
     public static class DataType {
         private final CqlType cqlType;
+        private final boolean frozen;
 
         /*
          * Used in MAP, LIST, SET and TUPLE.
@@ -94,24 +94,25 @@ public class ChangeSchema {
         private final UdtType udtType;
 
         public DataType(CqlType cqlType) {
-            this(cqlType, null, null);
+            this(cqlType, null, null, false);
         }
 
-        public DataType(CqlType cqlType, List<DataType> typeArguments) {
-            this(cqlType, typeArguments, null);
+        public DataType(CqlType cqlType, List<DataType> typeArguments, boolean frozen) {
+            this(cqlType, typeArguments, null, frozen);
         }
 
-        public DataType(CqlType cqlType, UdtType udtType) {
-            this(cqlType, null, udtType);
+        public DataType(CqlType cqlType, UdtType udtType, boolean frozen) {
+            this(cqlType, null, udtType, frozen);
         }
 
-        public DataType(CqlType cqlType, List<DataType> typeArguments, UdtType udtType) {
+        public DataType(CqlType cqlType, List<DataType> typeArguments, UdtType udtType, boolean frozen) {
             Preconditions.checkArgument(typeArguments == null || udtType == null,
                     "Cannot have both non-null type arguments and UdtType.");
 
             this.cqlType = cqlType;
             this.typeArguments = typeArguments;
             this.udtType = udtType;
+            this.frozen = frozen;
 
             boolean hasTypeArguments = typeArguments != null;
             boolean shouldHaveTypeArguments = cqlType == CqlType.MAP
@@ -128,11 +129,23 @@ public class ChangeSchema {
         }
 
         public static DataType list(DataType valueType) {
-            return new DataType(CqlType.LIST, ImmutableList.of(valueType));
+            return list(valueType, false);
+        }
+
+        public static DataType list(DataType valueType, boolean frozen) {
+            return new DataType(CqlType.LIST, ImmutableList.of(valueType), frozen);
         }
 
         public CqlType getCqlType() {
             return cqlType;
+        }
+
+        public boolean isFrozen() {
+            return frozen;
+        }
+
+        public boolean isAtomic() {
+            return cqlType.compareTo(CqlType.LIST) < 0 || isFrozen();
         }
 
         public List<DataType> getTypeArguments() {
