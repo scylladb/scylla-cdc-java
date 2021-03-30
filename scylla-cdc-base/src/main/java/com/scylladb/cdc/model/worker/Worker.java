@@ -112,7 +112,7 @@ public final class Worker {
     }
 
     private Callable<Object> makeCallable(TaskAction a) {
-        return () -> a.run().handleAsync((na, ex) -> {
+        return () -> a.run().handle((na, ex) -> {
             if (ex != null) {
                 logger.atSevere().withCause(ex).log("Unhandled exception in Worker.");
             } else if (!shouldStop()) {
@@ -147,13 +147,6 @@ public final class Worker {
             } while (!shouldStop() && !executorService.isTerminated());
         } catch (InterruptedException e) {
             logger.atWarning().log("Worker interrupted");
-        }
-
-        // Stop all "sleeping" futures.
-        try {
-            workerConfiguration.delayedFutureService.stop();
-        } catch (InterruptedException e) {
-            // Ignore InterruptedException
         }
     }
 

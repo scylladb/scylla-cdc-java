@@ -24,13 +24,10 @@ public final class WorkerConfiguration {
 
     public final RetryBackoff workerRetryBackoff;
 
-    public final DelayedFutureService delayedFutureService;
-
     private final ScheduledExecutorService executorService;
     
-    private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer,
-                               long queryTimeWindowSizeMs, long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff,
-                                DelayedFutureService delayedFutureService, ScheduledExecutorService executorService) {
+    private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer, long queryTimeWindowSizeMs,
+            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
@@ -39,7 +36,6 @@ public final class WorkerConfiguration {
         Preconditions.checkArgument(confidenceWindowSizeMs > 0);
         this.confidenceWindowSizeMs = confidenceWindowSizeMs;
         this.workerRetryBackoff = Preconditions.checkNotNull(workerRetryBackoff);
-        this.delayedFutureService = Preconditions.checkNotNull(delayedFutureService);
         this.executorService = executorService;
     }
     
@@ -119,8 +115,8 @@ public final class WorkerConfiguration {
             if (executorService == null) {
                 executorService = Executors.newScheduledThreadPool(1);
             }
-            return new WorkerConfiguration(transport, cql, consumer,
-                    queryTimeWindowSizeMs, confidenceWindowSizeMs, workerRetryBackoff, new DelayedFutureService(), executorService);
+            return new WorkerConfiguration(transport, cql, consumer, queryTimeWindowSizeMs, confidenceWindowSizeMs,
+                    workerRetryBackoff, executorService);
         }
     }
 }
