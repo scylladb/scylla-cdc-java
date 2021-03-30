@@ -57,4 +57,10 @@ class Driver3Cell implements Cell {
     public ByteBuffer getUnsafeBytes() {
         return change.getUnsafeBytes(columnDefinition);
     }
+
+    @Override
+    public String toString() {
+        return String.format("%s = %s", getColumnDefinition().getColumnName(),
+                new Driver3Field(getDataType(), getAsObject()));
+    }
 }
