@@ -44,28 +44,28 @@ class Driver3ToLibraryTranslator {
 
         // TODO - use dataType instead of instanceof
         if (driverObject instanceof List) {
-            List<Object> driverList = (List<Object>) driverObject;
+            List<?> driverList = (List<?>) driverObject;
             ChangeSchema.DataType innerType = dataType.getTypeArguments().get(0);
 
             return driverList.stream().map(o -> translate(o, innerType))
-                    .map(o -> new Field(innerType, o)).collect(Collectors.toList());
+                    .map(o -> new Driver3Field(innerType, o)).collect(Collectors.toList());
         } else if (driverObject instanceof Set) {
-            Set<Object> driverSet = (Set<Object>) driverObject;
+            Set<?> driverSet = (Set<?>) driverObject;
             ChangeSchema.DataType innerType = dataType.getTypeArguments().get(0);
 
             // Deliberately using LinkedHashSet to preserve the same order as driverObject.
             return driverSet.stream().map(o -> translate(o, innerType))
-                    .map(o -> new Field(innerType, o)).collect(Collectors.toCollection(LinkedHashSet::new));
+                    .map(o -> new Driver3Field(innerType, o)).collect(Collectors.toCollection(LinkedHashSet::new));
         } else if (driverObject instanceof Map) {
-            Map<Object, Object> driverMap = (Map<Object, Object>) driverObject;
+            Map<?, ?> driverMap = (Map<?, ?>) driverObject;
             ChangeSchema.DataType keyType = dataType.getTypeArguments().get(0);
             ChangeSchema.DataType valueType = dataType.getTypeArguments().get(1);
 
             // Deliberately using LinkedHashMap to preserve the same order as driverObject.
             Map<Field, Field> translatedMap = new LinkedHashMap<>();
-            for (Map.Entry<Object, Object> entry : driverMap.entrySet()) {
-                Field key = new Field(keyType, translate(entry.getKey(), keyType));
-                Field value = new Field(valueType, translate(entry.getValue(), valueType));
+            for (Map.Entry<?, ?> entry : driverMap.entrySet()) {
+                Field key = new Driver3Field(keyType, translate(entry.getKey(), keyType));
+                Field value = new Driver3Field(valueType, translate(entry.getValue(), valueType));
                 translatedMap.put(key, value);
             }
             return translatedMap;
@@ -78,7 +78,7 @@ class Driver3ToLibraryTranslator {
             Map<String, Field> translatedMap = new LinkedHashMap<>();
             for (Map.Entry<String, ChangeSchema.DataType> entry : dataType.getUdtType().getFields().entrySet()) {
                 Object translatedObject = translate(driverUDT.getObject(entry.getKey()), entry.getValue());
-                Field field = new Field(entry.getValue(), translatedObject);
+                Field field = new Driver3Field(entry.getValue(), translatedObject);
                 translatedMap.put(entry.getKey(), field);
             }
             return translatedMap;
@@ -88,7 +88,7 @@ class Driver3ToLibraryTranslator {
             int idx = 0;
             for (ChangeSchema.DataType fieldType : dataType.getTypeArguments()) {
                 Object translatedObject = translate(driverTuple.getObject(idx), fieldType);
-                translatedTuple.add(new Field(fieldType, translatedObject));
+                translatedTuple.add(new Driver3Field(fieldType, translatedObject));
                 idx++;
             }
             return translatedTuple;

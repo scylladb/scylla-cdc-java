@@ -48,45 +48,45 @@ public class Driver3FromLibraryTranslator {
         switch (libraryDataType.getCqlType()) {
             // Unboxing from Field: LIST, SET, MAP
             case LIST: {
-                List<Field> libraryList = (List<Field>) libraryObject;
+                List<?> libraryList = (List<?>) libraryObject;
                 ChangeSchema.DataType innerType = libraryDataType.getTypeArguments().get(0);
-                return libraryList.stream().map(f -> translate(f.getAsObject(), innerType)).collect(Collectors.toList());
+                return libraryList.stream().map(f -> translate(((Field)f).getAsObject(), innerType)).collect(Collectors.toList());
             }
             case SET: {
-                Set<Field> librarySet = (Set<Field>) libraryObject;
+                Set<?> librarySet = (Set<?>) libraryObject;
                 ChangeSchema.DataType innerType = libraryDataType.getTypeArguments().get(0);
-                return librarySet.stream().map(f -> translate(f.getAsObject(), innerType)).collect(Collectors.toCollection(LinkedHashSet::new));
+                return librarySet.stream().map(f -> translate(((Field)f).getAsObject(), innerType)).collect(Collectors.toCollection(LinkedHashSet::new));
             }
             case MAP: {
-                Map<Field, Field> libraryMap = (Map<Field, Field>) libraryObject;
+                Map<?, ?> libraryMap = (Map<?, ?>) libraryObject;
                 ChangeSchema.DataType keyType = libraryDataType.getTypeArguments().get(0);
                 ChangeSchema.DataType valueType = libraryDataType.getTypeArguments().get(1);
 
                 Map<Object, Object> translatedMap = new LinkedHashMap<>();
-                for (Map.Entry<Field, Field> entry : libraryMap.entrySet()) {
-                    Object translatedKey = translate(entry.getKey().getAsObject(), keyType);
-                    Object translatedValue = translate(entry.getValue().getAsObject(), valueType);
+                for (Map.Entry<?, ?> entry : libraryMap.entrySet()) {
+                    Object translatedKey = translate(((Field)entry.getKey()).getAsObject(), keyType);
+                    Object translatedValue = translate(((Field)entry.getValue()).getAsObject(), valueType);
                     translatedMap.put(translatedKey, translatedValue);
                 }
                 return translatedMap;
             }
             // Java-Driver-specific types
             case UDT: {
-                Map<String, Field> libraryUDT = (Map<String, Field>) libraryObject;
+                Map<?, ?> libraryUDT = (Map<?, ?>) libraryObject;
                 UserType driverUDTType = clusterMetadata.getKeyspace(libraryDataType.getUdtType().getKeyspace()).getUserType(libraryDataType.getUdtType().getName());
                 UDTValue driverUDTValue = driverUDTType.newValue();
                 for (Map.Entry<String, ChangeSchema.DataType> entry : libraryDataType.getUdtType().getFields().entrySet()) {
-                    Object fieldObject = translate(libraryUDT.get(entry.getKey()).getAsObject(), entry.getValue());
+                    Object fieldObject = translate(((Field)libraryUDT.get(entry.getKey())).getAsObject(), entry.getValue());
                     driverUDTValue.set(entry.getKey(), fieldObject, getTypeCodec(driverUDTType.getFieldType(entry.getKey())));
                 }
                 return driverUDTValue;
             }
             case TUPLE: {
-                List<Field> libraryTuple = (List<Field>) libraryObject;
+                List<?> libraryTuple = (List<?>) libraryObject;
                 TupleType driverTupleType = (TupleType) getDriverDataType(libraryDataType);
                 TupleValue driverTupleValue = driverTupleType.newValue();
                 for (int i = 0; i < libraryTuple.size(); i++) {
-                    Field field = libraryTuple.get(i);
+                    Field field = (Field)libraryTuple.get(i);
                     ChangeSchema.DataType fieldLibraryType = field.getDataType();
                     DataType fieldDriverType = getDriverDataType(fieldLibraryType);
                     Object driverObject = translate(field.getAsObject(), fieldLibraryType);
