@@ -25,6 +25,8 @@ named arguments:
                          Table name
   -s SOURCE, --source SOURCE
                          Address of a node in source cluster (default: 127.0.0.1)
+  -e, --events
+  						 Print CDC batch sequence events
 ```
 
 ## Do it yourself!
@@ -35,52 +37,69 @@ Let's go through the Printer code and learn how to use the library. You can see 
 To consume changes, we specify a class which implements `RawChangeConsumer` interface (here by using a lambda). The consumer returns a `CompletableFuture`, so you can react to CDC changes and perform some I/O or longer processing.
 
 ```java
-RawChangeConsumer changeConsumer = change -> {
+Consumer c;
+
+if (!events) {
+    RawChangeConsumer rc = change -> {
+        // Print the change. See printChange()
+        // for more information on how to
+        // access its details.
+        printChange(change);
+        return CompletableFuture.completedFuture(null);
+    };
+    c = Consumer.forRawChangeConsumer(rc);
+} else {
+    BatchSequenceConsumer bc = e -> {
+        printSequence(e);
+        return CompletableFuture.completedFuture(null);
+    };
+    c = Consumer.forBatchSequenceConsumer(bc);
+}
+
+```
+
+The CDC consumer executed in a `ScheduledExecutorService` in an arbitrary number of threads (controllable by user). The reading will be divided into distinct subsets of the CDC log (partitioned based on Vnodes). Those multiple task sets will cumulatively read the entire CDC log. All changes related to the same row (more generally the same partition key) will appear sequentially, but may occur on different threads, thus a consumer needs to be thread safe. Note that after a topology change (adding or removing nodes from the Scylla cluster) this task set division will be reset.
+
+Next, we create an instance of `Consumer` based on a callback object. This instance is shared by all threads in the executor.
+
+In the printer demo case, we optionally use two different callback types:
+
+1. A `RawChangeConsumer` callback, which is called for each CDC row read (in order per stream group). single consumer shared by all threads. 
+
+```java
+Consumer c;
+
+...
+
+RawChangeConsumer rc = change -> {
     // Print the change. See printChange()
     // for more information on how to
     // access its details.
     printChange(change);
     return CompletableFuture.completedFuture(null);
 };
+c = Consumer.forRawChangeConsumer(rc);
+
 ```
 
-The CDC consumer is started multi-threaded, with a configurable number of threads. Each thread will read a distinct subset of the CDC log (partitioned based on Vnodes). Those multiple threads will cumulatively read the entire CDC log. All changes related to the same row (more generally the same partition key) will appear on the same thread. Note that after a topology change (adding or removing nodes from the Scylla cluster) this mapping will be reset.
+2. A `BatchSequenceConsumer` callback, which is called for each CDC batch sequence when fully read. This callback type provides "grouping" of the reported data by the distinct CDC event that caused it. These two are guaranteed to be reported in order within the CDC stream group of the task set (i.e. Vnode), but is still potentially called on many, and different threads and must also be thread safe.
 
-Next, we create an instance of `RawChangeConsumerProvider` which returns a `RawChangeConsumer` for each thread. We could write the provider in two ways:
-
-1. A single consumer shared by all threads. With such a provider, a single consumer will receive rows read from all worker threads that read the CDC log. Note that the consumer should be thread-safe. Below is an example of such a provider:
 ```java
-// Build a shared consumer of changes.
-RawChangeConsumer sharedChangeConsumer = change -> {
-    // Print the change. 
-    printChange(change);
+Consumer c;
+
+...
+
+BatchSequenceConsumer bc = e -> {
+    printSequence(e);
     return CompletableFuture.completedFuture(null);
 };
-
-// Build a provider of this shared consumer. 
-RawChangeConsumerProvider changeConsumerProvider = threadId -> {
-    return sharedChangeConsumer;
-};
-```
-
-2. Separate consumer for each thread. With such a provider, a separate consumer will be created for each worker thread. Those multiple consumers will cumulatively read the entire CDC log. Because each consumer receives changes from a single worker thread, they don’t have to be thread-safe. Note that after the topology change (adding or removing a node from the Scylla cluster), consumers are recreated. Below is an example of such a provider:
-```java
-// Build a provider of consumers. 
-RawChangeConsumerProvider changeConsumerProvider = threadId -> {
-    // Build a consumer of changes.
-    RawChangeConsumer changeConsumer = change -> {
-        // Print the change. 
-        printChange(change);
-        return CompletableFuture.completedFuture(null);
-    };
-    return changeConsumer;
-};
+c = Consumer.forBatchSequenceConsumer(bc);
 ```
 
 Finally, we can build a `CDCConsumer` instance and start it! When using `CDCConsumer.builder()` you should provide the following configuration:
 - Contact points (`addContactPoint()`) used to connect to the Scylla cluster.
 - Tables to read (`addTable()`). The provided name should be of a base table, *not* the CDC log tables (e.g. `ks.t` not `ks.t_scylla_cdc_log`).
-- Consumer provider (`withConsumerProvider()`) which will receive the CDC changes.
+- Consumer instance (`withConsumer()`) which will receive the CDC changes.
 
 You can stop the `CDCConsumer` by calling the `stop()` method or by constructing the `CDCConsumer` in `try` (try-with-resources), which will stop it after the `try` block.
 
@@ -101,10 +120,7 @@ try (CDCConsumer consumer = CDCConsumer.builder()
     // It is consuming the CDC log and providing read changes
     // to the consumers.
 
-    // Wait for SIGINT (blocking wait)
-    CountDownLatch terminationLatch = new CountDownLatch(1);
-    Signal.handle(new Signal("INT"), signal -> terminationLatch.countDown());
-    terminationLatch.await();
+    waitForCtrlC(consumer); // helper
 }
 
 // The CDCConsumer is gracefully stopped after try-with-resources.
@@ -116,10 +132,15 @@ Let's implement the `printChange(RawChange change)` method and see what informat
 
 ```java
 private static void printChange(RawChange change) {
+    printChange(Type.Row, change, change.getOperationType(), Collections.singleton(change));
+}
+
+private static void printChange(Type type, Change change, OperationType optype, Collection<RawChange> rows) {
     // Get the ID of the change which contains stream_id and time.
     ChangeId changeId = change.getId();
     StreamId streamId = changeId.getStreamId();
     ChangeTime changeTime = changeId.getChangeTime();
+
 ```
 
 Those accessors correspond to `cdc$stream_id` and `cdc$time` columns.
