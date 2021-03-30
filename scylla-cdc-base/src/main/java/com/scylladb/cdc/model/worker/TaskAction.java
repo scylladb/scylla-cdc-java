@@ -3,6 +3,7 @@ package com.scylladb.cdc.model.worker;
 import java.util.Date;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
@@ -11,6 +12,21 @@ import com.scylladb.cdc.model.FutureUtils;
 
 abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+    protected final WorkerConfiguration workerConfiguration;
+    protected final Task task;
+
+    protected TaskAction(WorkerConfiguration workerConfiguration, Task task) {
+        this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
+        this.task = Preconditions.checkNotNull(task);
+    }
+
+    protected CompletableFuture<Void> delay(long millis) {
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        this.workerConfiguration.getExecutorService().schedule(() -> {
+            result.complete(null);
+        }, millis, TimeUnit.MILLISECONDS);
+        return result;
+    }
 
     public abstract CompletableFuture<TaskAction> run();
 
@@ -19,13 +35,10 @@ abstract class TaskAction {
     }
 
     private static final class ReadNewWindowTaskAction extends TaskAction {
-        private final WorkerConfiguration workerConfiguration;
-        private final Task task;
         private final int tryAttempt;
 
         protected ReadNewWindowTaskAction(WorkerConfiguration workerConfiguration, Task task, int tryAttempt) {
-            this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
-            this.task = Preconditions.checkNotNull(task);
+            super(workerConfiguration, task);
             Preconditions.checkArgument(tryAttempt >= 0);
             this.tryAttempt = tryAttempt;
         }
@@ -36,7 +49,7 @@ abstract class TaskAction {
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
             logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
                     "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-            return workerConfiguration.delayedFutureService.delayedFuture(backoffTime)
+            return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }
 
@@ -69,22 +82,19 @@ abstract class TaskAction {
             Date now = new Date();
             long toWait = end.getTime() - now.getTime() + workerConfiguration.confidenceWindowSizeMs;
             if (toWait > 0) {
-                return workerConfiguration.delayedFutureService.delayedFuture(toWait);
+                return delay(toWait);
             }
             return CompletableFuture.completedFuture(null);
         }
     }
 
     private static class ReadChangeTaskAction extends TaskAction {
-        private final WorkerConfiguration workerConfiguration;
-        private final Task task;
         private final Reader reader;
         private final int tryAttempt;
         private final TaskState newState;
 
         public ReadChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, int tryAttempt, TaskState newState) {
-            this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
-            this.task = Preconditions.checkNotNull(task);
+            super(workerConfiguration, task);
             this.reader = Preconditions.checkNotNull(reader);
             Preconditions.checkArgument(tryAttempt >= 0);
             this.tryAttempt = tryAttempt;
@@ -97,7 +107,7 @@ abstract class TaskAction {
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
             logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
                     "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-            return workerConfiguration.delayedFutureService.delayedFuture(backoffTime)
+            return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }
 
@@ -117,15 +127,12 @@ abstract class TaskAction {
     }
 
     private static final class ConsumeChangeTaskAction extends TaskAction {
-        private final WorkerConfiguration workerConfiguration;
-        private final Task task;
         private final Reader reader;
         private final Optional<RawChange> change;
         private final int tryAttempt;
 
         public ConsumeChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, Optional<RawChange> change, int tryAttempt) {
-            this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
-            this.task = Preconditions.checkNotNull(task);
+            super(workerConfiguration, task);
             this.reader = Preconditions.checkNotNull(reader);
             this.change = Preconditions.checkNotNull(change);
             Preconditions.checkArgument(tryAttempt >= 0);
@@ -138,7 +145,7 @@ abstract class TaskAction {
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
             logger.atSevere().withCause(ex).log("Error while executing consume() method provided to the library. Task: %s. " +
                     "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
-            return workerConfiguration.delayedFutureService.delayedFuture(backoffTime)
+            return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }
 
@@ -167,12 +174,8 @@ abstract class TaskAction {
     }
 
     private static final class MoveToNextWindowTaskAction extends TaskAction {
-        private final WorkerConfiguration workerConfiguration;
-        private final Task task;
-
         public MoveToNextWindowTaskAction(WorkerConfiguration workerConfiguration, Task task) {
-            this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
-            this.task = Preconditions.checkNotNull(task);
+            super(workerConfiguration, task);
         }
 
         @Override
@@ -184,4 +187,3 @@ abstract class TaskAction {
         }
     }
 }
-
