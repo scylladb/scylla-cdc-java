@@ -1,33 +1,116 @@
 package com.scylladb.cdc.model.worker.cql;
 
-import com.google.common.base.Preconditions;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
 import com.scylladb.cdc.model.worker.ChangeSchema;
 
-import java.util.Objects;
+public interface Field {
+    public Object getAsObject();
 
-public class Field extends AbstractField {
-    private final ChangeSchema.DataType dataType;
+    public ChangeSchema.DataType getDataType();
 
-    public Field(ChangeSchema.DataType dataType, Object value) {
-        super(value);
-        this.dataType = Preconditions.checkNotNull(dataType);
+    default boolean isNull() {
+        return getAsObject() == null;
+    }
+    
+    default ByteBuffer getBytes() {
+        return (ByteBuffer) getAsObject();
     }
 
-    public ChangeSchema.DataType getDataType() {
-        return dataType;
+    default String getString() {
+        return (String) getAsObject();
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        if (!super.equals(o)) return false;
-        Field field = (Field) o;
-        return dataType.equals(field.dataType);
+    default BigInteger getVarint() {
+        return (BigInteger) getAsObject();
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), dataType);
+    default BigDecimal getDecimal() {
+        return (BigDecimal) getAsObject();
+    }
+
+    default UUID getUUID() {
+        return (UUID) getAsObject();
+    }
+
+    default InetAddress getInet() {
+        return (InetAddress) getAsObject();
+    }
+
+    default Float getFloat() {
+        return (Float) getAsObject();
+    }
+
+    default Double getDouble() {
+        return (Double) getAsObject();
+    }
+
+    default Long getLong() {
+        return (Long) getAsObject();
+    }
+
+    default Integer getInt() {
+        return (Integer) getAsObject();
+    }
+
+    default Short getShort() {
+        return (Short) getAsObject();
+    }
+
+    default Byte getByte() {
+        return (Byte) getAsObject();
+    }
+
+    default Boolean getBoolean() {
+        return (Boolean) getAsObject();
+    }
+
+    @SuppressWarnings("unchecked")
+    default Map<Field, Field> getMap() {
+        return (Map<Field, Field>) getAsObject();
+    }
+
+    @SuppressWarnings("unchecked")
+    default Set<Field> getSet() {
+        return (Set<Field>) getAsObject();
+    }
+
+    @SuppressWarnings("unchecked")
+    default List<Field> getList() {
+        return (List<Field>) getAsObject();
+    }
+
+    @SuppressWarnings("unchecked")
+    default Map<String, Field> getUDT() {
+        return (Map<String, Field>) getAsObject();
+    }
+
+    @SuppressWarnings("unchecked")
+    default List<Field> getTuple() {
+        return (List<Field>) getAsObject();
+    }
+
+    default Date getTimestamp() {
+        return (Date) getAsObject();
+    }
+
+    default Long getTime() {
+        return (Long) getAsObject();
+    }
+
+    default CqlDuration getDuration() {
+        return (CqlDuration) getAsObject();
+    }
+
+    default CqlDate getDate() {
+        return (CqlDate) getAsObject();
     }
 }

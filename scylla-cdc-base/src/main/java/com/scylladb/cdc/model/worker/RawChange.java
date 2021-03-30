@@ -2,8 +2,6 @@ package com.scylladb.cdc.model.worker;
 
 import com.scylladb.cdc.model.worker.cql.Cell;
 
-import java.util.Objects;
-
 /*
  * Represents a single CDC log row,
  * without any post-processing.
@@ -51,12 +49,23 @@ public interface RawChange {
     /*
      * Gets the value of column as Java Object.
      */
-    Object getAsObject(String columnName);
+    default Object getAsObject(String columnName) {
+        return getAsObject(getSchema().getColumnDefinition(columnName));
+    }
+
+    Object getAsObject(ChangeSchema.ColumnDefinition c);
 
     default Cell getCell(String columnName) {
-        ChangeSchema.ColumnDefinition columnDefinition = getSchema().getColumnDefinition(columnName);
-        return new Cell(columnDefinition, getAsObject(columnName));
+        return getCell(getSchema().getColumnDefinition(columnName));        
     }
+
+    Cell getCell(ChangeSchema.ColumnDefinition c);
+
+    default boolean isNull(String columnName) {
+        return isNull(getSchema().getColumnDefinition(columnName));                
+    }
+
+    boolean isNull(ChangeSchema.ColumnDefinition c);
 
     default boolean getIsDeleted(String columnName) {
         String deletedColumnName = "cdc$deleted_" + columnName;
