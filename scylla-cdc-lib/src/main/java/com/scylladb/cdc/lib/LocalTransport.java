@@ -7,36 +7,33 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Supplier;
 
 import com.google.common.base.Preconditions;
-import com.scylladb.cdc.cql.driver3.Driver3Session;
-import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
-import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
+import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.model.GenerationId;
-import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
-import com.scylladb.cdc.model.worker.RawChangeConsumer;
-import com.scylladb.cdc.model.worker.WorkerConfiguration;
 import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumerAdapter;
 import com.scylladb.cdc.model.worker.TaskState;
+import com.scylladb.cdc.model.worker.Worker;
+import com.scylladb.cdc.model.worker.WorkerConfiguration;
 import com.scylladb.cdc.transport.MasterTransport;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 class LocalTransport implements MasterTransport, WorkerTransport {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
     private final ThreadGroup workersThreadGroup;
-    private volatile boolean stopped = true;
     private final WorkerConfiguration.Builder workerConfigurationBuilder;
     private final RawChangeConsumerProvider consumerProvider;
     private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
-    private volatile int workersCount;
-    private Thread[] workerThreads;
     private Optional<GenerationId> currentGenerationId = Optional.empty();
+    private Supplier<InterruptedException> stopWorker = null;
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, int workersCount, WorkerConfiguration.Builder workerConfigurationBuilder, RawChangeConsumerProvider consumerProvider) {
-        Preconditions.checkArgument(workersCount > 0);
-        this.workersCount = workersCount;
+    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder, RawChangeConsumerProvider consumerProvider) {
         workersThreadGroup = new ThreadGroup(cdcThreadGroup, "Scylla-CDC-Worker-Threads");
         this.workerConfigurationBuilder = Preconditions.checkNotNull(workerConfigurationBuilder);
         this.consumerProvider = Preconditions.checkNotNull(consumerProvider);
@@ -72,34 +69,28 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         currentGenerationId = workerConfigurations.keySet().stream()
                 .findAny().map(TaskId::getGenerationId);
         stop();
-        stopped = false;
-        int wCount = Math.min(workersCount, workerConfigurations.size());
-        workerThreads = new Thread[wCount];
-        Map<TaskId, SortedSet<StreamId>>[] tasks = split(workerConfigurations, wCount);
-        for (int i = 0; i < wCount; ++i) {
-            WorkerConfiguration workerConfiguration =
-                    workerConfigurationBuilder
-                            .withTransport(this)
-                            .withConsumer(new TaskAndRawChangeConsumerAdapter(consumerProvider.getForThread(i)))
-                            .build();
 
-            workerThreads[i] = new WorkerThread(workersThreadGroup, i, workerConfiguration, tasks[i]);
-            workerThreads[i].start();
-        }
-    }
+        WorkerConfiguration workerConfiguration = workerConfigurationBuilder.withTransport(this)
+                .withConsumer(new TaskAndRawChangeConsumerAdapter(consumerProvider.getForThread(0))).build();
 
-    private static Map<TaskId, SortedSet<StreamId>>[] split(Map<TaskId, SortedSet<StreamId>> tasks, int wCount) {
-        @SuppressWarnings("unchecked")
-        Map<TaskId, SortedSet<StreamId>>[] result = new Map[wCount];
-        for (int i = 0; i < wCount; ++i) {
-            result[i] = new HashMap<>();
-        }
-        int pos = 0;
-        for (Map.Entry<TaskId, SortedSet<StreamId>> e : tasks.entrySet()) {
-            result[pos].put(e.getKey(), e.getValue());
-            pos = (pos + 1) % wCount;
-        }
-        return result;
+        Worker w = new Worker(workerConfiguration);
+        Thread t = new Thread(workersThreadGroup, () -> {
+            try {
+                w.run(workerConfigurations);
+            } catch (InterruptedException | ExecutionException e) {
+                logger.atSevere().withCause(e).log("Unhandled exception");
+            } 
+        });
+        stopWorker = () -> {
+            w.stop();
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                return e;
+            }
+            return null;
+        };
+        t.start();
     }
 
     @Override
@@ -124,27 +115,19 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         taskStates.put(task, newState);
     }
 
-    @Override
-    public boolean shouldStop() {
-        return stopped;
-    }
-
     public void stop() throws InterruptedException {
-        stopped = true;
-        if (workerThreads != null) {
-            for (Thread t : workerThreads) {
-                t.join();
+        Supplier<InterruptedException> s = stopWorker;
+        stopWorker = null;
+        if (s != null) {
+            InterruptedException e = s.get();
+            if (e != null) {
+                throw e;
             }
         }
-        workerThreads = null;
-    }
-
-    public void setWorkersCount(int count) {
-        workersCount = count;
     }
 
     public boolean isReadyToStart() {
-        return workerThreads == null;
+        return stopWorker == null;
     }
 
 }
