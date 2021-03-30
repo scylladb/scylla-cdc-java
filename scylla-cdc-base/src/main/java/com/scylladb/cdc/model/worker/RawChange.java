@@ -1,6 +1,8 @@
 package com.scylladb.cdc.model.worker;
 
 import java.nio.ByteBuffer;
+import java.util.Iterator;
+import java.util.stream.Stream;
 
 import com.scylladb.cdc.model.worker.cql.Cell;
 
@@ -8,7 +10,7 @@ import com.scylladb.cdc.model.worker.cql.Cell;
  * Represents a single CDC log row,
  * without any post-processing.
  */
-public interface RawChange {
+public interface RawChange extends Iterable<Cell> {
     public enum OperationType {
         PRE_IMAGE((byte) 0),
         ROW_UPDATE((byte) 1),
@@ -93,4 +95,30 @@ public interface RawChange {
     default boolean getIsDeleted(String columnName) {
         return isDeleted(columnName);
     }
+
+    @Override
+    default Iterator<Cell> iterator() {
+        return stream().iterator();
+    }
+    
+    default Iterator<Cell> data() {
+        return dataStream().iterator();
+    }
+
+    default Iterator<Cell> metadata() {
+        return dataStream().iterator();
+    }
+    
+    default Stream<Cell> stream() {
+        return getSchema().getAllColumnDefinitions().stream().map(c -> getCell(c));
+    }
+
+    default Stream<Cell> dataStream() {
+        return getSchema().getNonCdcColumnDefinitions().stream().map(c -> getCell(c));
+    }
+
+    default Stream<Cell> metadataStream() {
+        return getSchema().getCdcColumnDefinitions().stream().map(c -> getCell(c));
+    }
+
 }
