@@ -3,6 +3,7 @@ package com.scylladb.cdc.cql.driver3;
 import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 
 import java.nio.ByteBuffer;
+import java.util.stream.Collectors;
 
 import com.datastax.driver.core.Row;
 import com.google.common.base.Preconditions;
@@ -55,22 +56,7 @@ public final class Driver3RawChange implements RawChange {
 
     @Override
     public String toString() {
-        StringBuilder result = new StringBuilder();
-        result.append("Driver3RawChange(");
-        boolean first = true;
-        for (ChangeSchema.ColumnDefinition columnDefinition : getSchema().getAllColumnDefinitions()) {
-            if (!first) {
-                result.append(",");
-            } else {
-                first = false;
-            }
-
-            String name = columnDefinition.getColumnName();
-            Cell cell = getCell(name);
-            result.append(name).append("=").append(cell);
-        }
-        result.append(")");
-        return result.toString();
+        return stream().map(Object::toString).collect(Collectors.joining(", ", "RawChange(", ")"));
     }
 
     @Override
