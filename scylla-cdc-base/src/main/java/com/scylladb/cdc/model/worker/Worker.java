@@ -1,16 +1,22 @@
 package com.scylladb.cdc.model.worker;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.google.common.base.Preconditions;
+import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -18,8 +24,10 @@ import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
 
 public final class Worker {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final WorkerConfiguration workerConfiguration;
+    private volatile boolean shouldStop = false;
 
     public Worker(WorkerConfiguration workerConfiguration) {
         this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
@@ -89,9 +97,29 @@ public final class Worker {
      * This includes fetching saved state of each task or creating a new initial
      * state for tasks that haven't run successfully before.
      */
-    private TaskActionsQueue queueFirstActionForEachTask(Map<TaskId, SortedSet<StreamId>> groupedStreams) throws ExecutionException, InterruptedException {
-        return new TaskActionsQueue(createTasksWithState(groupedStreams)
-                .map(task -> TaskAction.createFirstAction(workerConfiguration, task)).collect(Collectors.toSet()));
+    private Collection<TaskAction> queueFirstActionForEachTask(Map<TaskId, SortedSet<StreamId>> groupedStreams)
+            throws ExecutionException, InterruptedException {
+        return createTasksWithState(groupedStreams).map(task -> TaskAction.createFirstAction(workerConfiguration, task))
+                .collect(Collectors.toSet());
+    }
+
+    private boolean shouldStop() {
+        return shouldStop;
+    }
+
+    private ScheduledExecutorService getExecutorService() {
+        return workerConfiguration.getExecutorService();
+    }
+
+    private Callable<Object> makeCallable(TaskAction a) {
+        return () -> a.run().handleAsync((na, ex) -> {
+            if (ex != null) {
+                logger.atSevere().withCause(ex).log("Unhandled exception in Worker.");
+            } else if (!shouldStop()) {
+                getExecutorService().submit(makeCallable(na));
+            }
+            return null;
+        });
     }
 
     /*
@@ -100,13 +128,25 @@ public final class Worker {
      * At each iteration, runs a single action from |actions| queue if any
      * available.
      */
-    private void performActionsUntilStopRequested(TaskActionsQueue actions) {
-        while (!workerConfiguration.transport.shouldStop()) {
-            try {
-                actions.runNextAction();
-            } catch (InterruptedException e) {
-                // Ignore InterruptedException
-            }
+    @SuppressWarnings("deprecation")
+    private void performActionsUntilStopRequested(Collection<TaskAction> actions) {
+        if (shouldStop()) {
+            return;
+        }
+
+        ScheduledExecutorService executorService = getExecutorService();
+        try {
+            executorService.invokeAll(actions.stream().map(a -> makeCallable(a)).collect(Collectors.toSet()));
+            do {
+                // pretty short poll, to allow for reasonably fast switchover
+                // iff using "polled" shutdown (WorkerTransport::shouldStop).
+                executorService.awaitTermination(50, MILLISECONDS);
+                if (workerConfiguration.transport.shouldStop()) {
+                    stop();
+                }
+            } while (!shouldStop() && !executorService.isTerminated());
+        } catch (InterruptedException e) {
+            logger.atWarning().log("Worker interrupted");
         }
 
         // Stop all "sleeping" futures.
@@ -115,10 +155,11 @@ public final class Worker {
         } catch (InterruptedException e) {
             // Ignore InterruptedException
         }
+    }
 
-        // Wait for already started actions to gracefully
-        // finish.
-        actions.join();
+    public void stop() {
+        shouldStop = true;
+        getExecutorService().shutdown();
     }
 
     /*
@@ -137,7 +178,7 @@ public final class Worker {
                 "Tasks from different generations");
 
         workerConfiguration.cql.prepare(groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet()));
-        TaskActionsQueue actions = queueFirstActionForEachTask(groupedStreams);
+        Collection<TaskAction> actions = queueFirstActionForEachTask(groupedStreams);
         performActionsUntilStopRequested(actions);
     }
 }
