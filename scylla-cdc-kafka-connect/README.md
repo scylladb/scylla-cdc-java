@@ -62,7 +62,7 @@ Scylla CDC Source Connector exposes many configuration properties. These are the
 | `scylla.user` | No | The username to connect to Scylla with. If not set, no authorization is done. |
 | `scylla.password` | No | The password to connect to Scylla with. If not set, no authorization is done. |
 
-See additional configuration properties in the ["Advanced configuration"](#advanced-configuration) section.
+See additional configuration properties in the ["Advanced administration"](#advanced-administration) section.
 
 Example configuration (as `.properties` file):
 ```
@@ -498,10 +498,23 @@ The connector will generate the following data change event's value (with JSON s
 }
 ```
 
-## Advanced configuration
+## Advanced administration
+
+### Advanced configuration parameters
+
 In addition to the configuration parameters described in the ["Configuration"](#configuration) section, Scylla CDC Source Connector exposes the following (non-required) configuration parameters:
 
 | Property | Description |
 | --- | --- |
 | `scylla.query.time.window.size` | The size of windows queried by the connector. Changes are queried using `SELECT` statements with time restriction with width defined by this parameter. Value expressed in milliseconds. |
 | `scylla.confidence.window.size` | The size of the confidence window. It is necessary for the connector to avoid reading too fresh data from the CDC log due to the eventual consistency of Scylla. The problem could appear when a newer write reaches a replica before some older write. For a short period of time, when reading, it is possible for the replica to return only the newer write. The connector mitigates this problem by not reading a window of most recent changes (controlled by this parameter). Value expressed in milliseconds.|
+
+### Configuration for large Scylla clusters
+#### Offset (progress) storage
+Scylla CDC Source Connector reads the CDC log by quering on [Vnode](https://docs.scylladb.com/architecture/ringarchitecture/) granularity level. It uses Kafka Connect to store current progress (offset) for each Vnode. By default, there are 256 Vnodes per each Scylla node. Kafka Connect stores those offsets in its `connect-offsets` internal topic, but it could grow large in case of big Scylla clusters. You can minimize this topic size, by adjusting the following configuration options on this topic:
+
+1. `segment.bytes` or `segment.ms` - lowering them will make the compaction process trigger more often.
+2. `cleanup.policy=delete` and setting `retention.ms` to at least the TTL value of your Scylla CDC table (in milliseconds; Scylla default is 24 hours). Using this configuration, older offsets will be deleted. By setting `retention.ms` to at least the TTL value of your Scylla CDC table, we make sure to delete only those offsets that have already expired in the source Scylla CDC table.
+
+#### `tasks.max` property
+By adjusting `tasks.max` property, you can configure how many Kafka Connect worker tasks will be started. By scaling up the number of nodes in your Kafka Connect cluster (and `tasks.max` number), you can achieve higher throughput. In general, the `tasks.max` property should be greater or equal the number of nodes in Kafka Connect cluster, to allow the connector to start on each node. `tasks.max` property should also be greater or equal the number of nodes in your Scylla cluster, especially if those nodes have high shard count (32 or greater) as they have a large number of [CDC Streams](https://docs.scylladb.com/using-scylla/cdc/cdc-streams/).
