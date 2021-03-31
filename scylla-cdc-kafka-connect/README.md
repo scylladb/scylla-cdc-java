@@ -10,6 +10,19 @@ The connector reads the CDC log for specified tables and produces Kafka messages
 
 Scylla CDC Source Connector seamlessly handles schema changes and topology changes (adding, removing nodes from Scylla cluster). The connector is fault-tolerant, retrying reading data from Scylla in case of failure. It periodically saves the current position in Scylla CDC log using Kafka Connect offset tracking (configurable by `offset.flush.interval.ms` parameter). If the connector is stopped, it is able to resume reading from previously saved offset. Scylla CDC Source Connector has at-least-once semantics.
 
+The connector has the following capabilities:
+- Kafka Connect connector using Debezium framework
+- Replication of row-level changes from Scylla using [Scylla CDC](https://docs.scylladb.com/using-scylla/cdc/):
+    - `INSERT`
+    - `UPDATE`
+    - `DELETE` (single row deletes)
+- High scalability - able to split work accross multiple Kafka Connect workers
+- Fault tolerant - connector periodically saves its progress and can resume from previously saved offset (with at-least-once semantics)
+- Support for many standard Kafka Connect converters, such as JSON and Avro
+- Compatible with standard Kafka Connect transformations
+- Metadata about CDC events - each generated Kafka message contains information about source, such as timestamp and table name
+- Seamless handling of schema changes and topology changes (adding, removing nodes from Scylla cluster)
+
 The connector has the following limitations:
 - Only Kafka 2.6.0+ is supported
 - Only row-level operations are produced (`INSERT`, `UPDATE`, `DELETE`):
