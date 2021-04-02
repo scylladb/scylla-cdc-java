@@ -163,6 +163,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <debezium.version>1.4.1.Final</debezium.version>
         <kafka.version>2.6.0</kafka.version>
+        <flogger.version>0.5.1</flogger.version>
     </properties>
 
     <dependencies>
@@ -190,6 +191,33 @@
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-api</artifactId>
             <version>${kafka.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger-log4j-backend</artifactId>
+            <version>${flogger.version}</version>
+            <exclusions>
+                <!--
+                This is a known (not fixed) problem, that
+                flogger-log4j-backend pulls some log4j
+                transitive dependencies that have now been
+                removed from Maven due to licensing issues.
+
+                The workaround is to exclude those dependencies.
+                -->
+                <exclusion>
+                    <groupId>com.sun.jmx</groupId>
+                    <artifactId>jmxri</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.sun.jdmk</groupId>
+                    <artifactId>jmxtools</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>javax.jms</groupId>
+                    <artifactId>jms</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 </project>
