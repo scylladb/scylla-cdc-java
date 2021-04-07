@@ -15,6 +15,9 @@ import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
 import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.master.MasterConfiguration;
+import com.scylladb.cdc.model.worker.Consumer;
+import com.scylladb.cdc.model.worker.RawChangeConsumer;
+import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumer;
 import com.scylladb.cdc.model.worker.WorkerConfiguration;
 
 public final class CDCConsumer implements AutoCloseable {
@@ -26,19 +29,16 @@ public final class CDCConsumer implements AutoCloseable {
     private MasterThread master;
 
     private CDCConsumer(CQLConfiguration cqlConfiguration, MasterConfiguration.Builder masterConfigurationBuilder,
-                       WorkerConfiguration.Builder workerConfigurationBuilder,
-                       RawChangeConsumerProvider consumerProvider) {
+                       WorkerConfiguration.Builder workerConfigurationBuilder) {
         Preconditions.checkNotNull(cqlConfiguration);
         Preconditions.checkNotNull(masterConfigurationBuilder);
         Preconditions.checkNotNull(workerConfigurationBuilder);
-        Preconditions.checkNotNull(consumerProvider);
 
         this.cdcThreadGroup = new ThreadGroup("Scylla-CDC-Threads");
 
         this.session = new Driver3Session(cqlConfiguration);
         workerConfigurationBuilder.withCQL(new Driver3WorkerCQL(session));
-        this.transport = new LocalTransport(cdcThreadGroup,
-                workerConfigurationBuilder, consumerProvider);
+        this.transport = new LocalTransport(cdcThreadGroup, workerConfigurationBuilder);
 
         MasterCQL masterCQL = new Driver3MasterCQL(session);
         this.masterConfiguration = masterConfigurationBuilder
@@ -97,12 +97,37 @@ public final class CDCConsumer implements AutoCloseable {
         private final WorkerConfiguration.Builder workerConfigurationBuilder
                 = WorkerConfiguration.builder();
 
-        private RawChangeConsumerProvider consumerProvider;
         private int workersCount = getDefaultWorkersCount();
         private ScheduledExecutorService executorService;
 
+        @SuppressWarnings("deprecation")
         public Builder withConsumerProvider(RawChangeConsumerProvider consumerProvider) {
-            this.consumerProvider = Preconditions.checkNotNull(consumerProvider);
+            withConsumer(consumerProvider.getForThread(0));
+            return this;
+        }
+        
+        public Builder withConsumer(Consumer consumer) {
+            workerConfigurationBuilder.withConsumer(consumer);
+            return this;
+        }
+
+        public Builder withConsumer(TaskAndRawChangeConsumer consumer) {
+            workerConfigurationBuilder.withConsumer(consumer);
+            return this;
+        }
+
+        public Builder withTaskAndRawChangeConsumer(TaskAndRawChangeConsumer consumer) {
+            workerConfigurationBuilder.withTaskAndRawChangeConsumer(consumer);
+            return this;
+        }
+
+        public Builder withConsumer(RawChangeConsumer consumer) {
+            workerConfigurationBuilder.withConsumer(consumer);
+            return this;
+        }
+
+        public Builder withRawChangeConsumer(RawChangeConsumer consumer) {
+            workerConfigurationBuilder.withRawChangeConsumer(consumer);
             return this;
         }
 
@@ -210,8 +235,7 @@ public final class CDCConsumer implements AutoCloseable {
             }
             workerConfigurationBuilder.withExecutorService(executorService);
             return new CDCConsumer(cqlConfigurationBuilder.build(),
-                    masterConfigurationBuilder, workerConfigurationBuilder,
-                    consumerProvider);
+                    masterConfigurationBuilder, workerConfigurationBuilder);
         }
 
         private static int getDefaultWorkersCount() {
