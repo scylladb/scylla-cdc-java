@@ -120,7 +120,7 @@ abstract class TaskAction {
         public CompletableFuture<TaskAction> run() {
             if (change.isPresent()) {
                 Task updatedTask = task.updateState(change.get().getId());
-                CompletableFuture<TaskAction> taskActionFuture = workerConfiguration.consumer.consume(task, change.get())
+                CompletableFuture<TaskAction> taskActionFuture = workerConfiguration.consumer.getTaskAndRawChangeConsumer().consume(task, change.get())
                         .thenApply(q -> new ReadChangeTaskAction(workerConfiguration, updatedTask, reader, tryAttempt));
 
                 return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
