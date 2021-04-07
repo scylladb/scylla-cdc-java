@@ -17,7 +17,7 @@ public final class WorkerConfiguration {
 
     public final WorkerTransport transport;
     public final WorkerCQL cql;
-    public final TaskAndRawChangeConsumer consumer;
+    public final Consumer consumer;
 
     public final long queryTimeWindowSizeMs;
     public final long confidenceWindowSizeMs;
@@ -28,7 +28,7 @@ public final class WorkerConfiguration {
 
     private final ScheduledExecutorService executorService;
     
-    private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, TaskAndRawChangeConsumer consumer,
+    private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer,
                                long queryTimeWindowSizeMs, long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff,
                                 DelayedFutureService delayedFutureService, ScheduledExecutorService executorService) {
         this.transport = Preconditions.checkNotNull(transport);
@@ -54,7 +54,7 @@ public final class WorkerConfiguration {
     public static class Builder {
         private WorkerTransport transport;
         private WorkerCQL cql;
-        private TaskAndRawChangeConsumer consumer;
+        private Consumer consumer;
         private ScheduledExecutorService executorService;
 
         private long queryTimeWindowSizeMs = DEFAULT_QUERY_TIME_WINDOW_SIZE_MS;
@@ -72,9 +72,25 @@ public final class WorkerConfiguration {
             return this;
         }
 
-        public Builder withConsumer(TaskAndRawChangeConsumer consumer) {
-            this.consumer = Preconditions.checkNotNull(consumer);
+        public Builder withConsumer(Consumer consumer) {
+            this.consumer = consumer;
             return this;
+        }
+
+        public Builder withConsumer(TaskAndRawChangeConsumer consumer) {
+            return withTaskAndRawChangeConsumer(consumer);
+        }
+
+        public Builder withTaskAndRawChangeConsumer(TaskAndRawChangeConsumer consumer) {
+            return withConsumer(Consumer.forTaskAndRawChangeConsumer(Preconditions.checkNotNull(consumer)));
+        }
+
+        public Builder withConsumer(RawChangeConsumer consumer) {
+            return withRawChangeConsumer(consumer);
+        }
+
+        public Builder withRawChangeConsumer(RawChangeConsumer consumer) {
+            return withConsumer(Consumer.forRawChangeConsumer(Preconditions.checkNotNull(consumer)));
         }
 
         public Builder withQueryTimeWindowSizeMs(long queryTimeWindowSizeMs) {

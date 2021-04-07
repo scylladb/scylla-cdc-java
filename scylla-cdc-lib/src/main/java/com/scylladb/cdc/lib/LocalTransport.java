@@ -16,7 +16,6 @@ import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
-import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumerAdapter;
 import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.model.worker.Worker;
 import com.scylladb.cdc.model.worker.WorkerConfiguration;
@@ -28,15 +27,13 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     private final ThreadGroup workersThreadGroup;
     private final WorkerConfiguration.Builder workerConfigurationBuilder;
-    private final RawChangeConsumerProvider consumerProvider;
     private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
     private Optional<GenerationId> currentGenerationId = Optional.empty();
     private Supplier<InterruptedException> stopWorker = null;
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder, RawChangeConsumerProvider consumerProvider) {
+    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder) {
         workersThreadGroup = new ThreadGroup(cdcThreadGroup, "Scylla-CDC-Worker-Threads");
         this.workerConfigurationBuilder = Preconditions.checkNotNull(workerConfigurationBuilder);
-        this.consumerProvider = Preconditions.checkNotNull(consumerProvider);
     }
 
     @Override
@@ -70,8 +67,7 @@ class LocalTransport implements MasterTransport, WorkerTransport {
                 .findAny().map(TaskId::getGenerationId);
         stop();
 
-        WorkerConfiguration workerConfiguration = workerConfigurationBuilder.withTransport(this)
-                .withConsumer(new TaskAndRawChangeConsumerAdapter(consumerProvider.getForThread(0))).build();
+        WorkerConfiguration workerConfiguration = workerConfigurationBuilder.withTransport(this).build();
 
         Worker w = new Worker(workerConfiguration);
         Thread t = new Thread(workersThreadGroup, () -> {
