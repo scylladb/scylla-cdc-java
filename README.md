@@ -11,9 +11,9 @@ The repository contains two example applications that use the library:
 - [Replicator](scylla-cdc-replicator): replicates a table from a source Scylla cluster to a destination Scylla cluster by reading the CDC log.
 
 ## Scylla CDC Source Connector
-[Scylla CDC Source Connector](scylla-cdc-kafka-connect) is a source connector capturing row-level changes in the tables of a Scylla cluster. It is a Debezium connector, compatible with Kafka Connect (with Kafka 2.6.0+) and built on top of scylla-cdc-java library.
+[Scylla CDC Source Connector](https://github.com/scylladb/scylla-cdc-source-connector) is a source connector capturing row-level changes in the tables of a Scylla cluster. It is a Debezium connector, compatible with Kafka Connect (with Kafka 2.6.0+) and built on top of scylla-cdc-java library.
 
-Read [here](scylla-cdc-kafka-connect) more about the Connector and how to install and configure it.
+Read [here](https://github.com/scylladb/scylla-cdc-source-connector) more about the Connector and how to install and configure it.
 
 ## Why Use a Library?
 Scylla's design of CDC is based on the concept of CDC log tables. For every table whose changes you wish to track, an associated CDC log table is created. We refer to this new table as the CDC log table and the original table as a base table. Every time you modify your data in the base table — insert, update or delete — this fact is recorded by inserting one or more rows to the corresponding CDC log table.
