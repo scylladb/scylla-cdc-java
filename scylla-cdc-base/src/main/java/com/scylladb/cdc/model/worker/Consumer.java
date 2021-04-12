@@ -1,15 +1,21 @@
 package com.scylladb.cdc.model.worker;
 
+import static java.util.concurrent.CompletableFuture.completedFuture;
+
 import java.util.concurrent.CompletableFuture;
 
 /**
  * Opaque wrapper around any of the available consumer interfaces
- * 
+ *
  * @author calle
  *
  */
 public class Consumer {
-    private final TaskAndRawChangeConsumer taskAndRawChangeConsumer;
+    private final ConsumerDispatch consumerDispatch;
+
+    private Consumer(ConsumerDispatch consumerDispatch) {
+        this.consumerDispatch = consumerDispatch;
+    }
 
     public Consumer(RawChangeConsumer rawChangeConsumer) {
         this(new TaskAndRawChangeConsumer() {
@@ -21,7 +27,12 @@ public class Consumer {
     }
 
     public Consumer(TaskAndRawChangeConsumer taskAndRawChangeConsumer) {
-        this.taskAndRawChangeConsumer = taskAndRawChangeConsumer;
+        this(new ConsumerDispatch() {
+            @Override
+            public CompletableFuture<TaskState> consume(Task task, RawChange change, Task nextTask) {
+                return taskAndRawChangeConsumer.consume(task, change).thenCompose(v -> completedFuture(nextTask.state));
+            }
+        });
     }
 
     public static Consumer forTaskAndRawChangeConsumer(TaskAndRawChangeConsumer c) {
@@ -32,8 +43,7 @@ public class Consumer {
         return new Consumer(c);
     }
 
-    TaskAndRawChangeConsumer getTaskAndRawChangeConsumer() {
-        return taskAndRawChangeConsumer;
+    ConsumerDispatch getConsumerDispatch() {
+        return consumerDispatch;
     }
-
 }
