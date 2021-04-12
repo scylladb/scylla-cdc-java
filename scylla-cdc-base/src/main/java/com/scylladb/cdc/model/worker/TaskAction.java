@@ -45,7 +45,7 @@ abstract class TaskAction {
 
             CompletableFuture<Reader> readerFuture = waitFuture.thenCompose(w -> workerConfiguration.cql.createReader(task));
             CompletableFuture<TaskAction> taskActionFuture = readerFuture
-                    .thenApply(reader -> new ReadChangeTaskAction(workerConfiguration, task, reader, tryAttempt));
+                    .thenApply(reader -> new ReadChangeTaskAction(workerConfiguration, task, reader, tryAttempt, task.state));
             return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
                 // Exception occured while starting up the reader. Retry by starting
                 // this TaskAction once again.
@@ -73,19 +73,23 @@ abstract class TaskAction {
         private final Task task;
         private final Reader reader;
         private final int tryAttempt;
-
-        public ReadChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, int tryAttempt) {
+        private final TaskState newState;
+        
+        public ReadChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, int tryAttempt, TaskState newState) {
             this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
             this.task = Preconditions.checkNotNull(task);
             this.reader = Preconditions.checkNotNull(reader);
             Preconditions.checkArgument(tryAttempt >= 0);
             this.tryAttempt = tryAttempt;
+            this.newState = newState;
         }
         
         @Override
         public CompletableFuture<TaskAction> run() {
-            workerConfiguration.transport.setState(task.id, task.state);
-
+            if (newState != null) {
+                workerConfiguration.transport.setState(task.id, newState);
+            }
+            
             CompletableFuture<TaskAction> taskActionFuture = reader.nextChange().
                     thenApply(change -> new ConsumeChangeTaskAction(workerConfiguration, task, reader, change, tryAttempt));
             return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
@@ -120,8 +124,9 @@ abstract class TaskAction {
         public CompletableFuture<TaskAction> run() {
             if (change.isPresent()) {
                 Task updatedTask = task.updateState(change.get().getId());
-                CompletableFuture<TaskAction> taskActionFuture = workerConfiguration.consumer.getTaskAndRawChangeConsumer().consume(task, change.get())
-                        .thenApply(q -> new ReadChangeTaskAction(workerConfiguration, updatedTask, reader, tryAttempt));
+
+                CompletableFuture<TaskAction> taskActionFuture = workerConfiguration.consumer.getConsumerDispatch().consume(task, change.get())
+                        .thenApply(newState -> new ReadChangeTaskAction(workerConfiguration, updatedTask, reader, tryAttempt, newState));
 
                 return FutureUtils.thenComposeExceptionally(taskActionFuture, ex -> {
                     // Exception occured while consuming the change, we will have to restart
