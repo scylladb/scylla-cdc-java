@@ -24,7 +24,7 @@ import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.transport.MasterTransport;
 import com.scylladb.cdc.transport.WorkerTransport;
 
-public class LocalTransport implements MasterTransport, WorkerTransport {
+class LocalTransport implements MasterTransport, WorkerTransport {
     private final ThreadGroup workersThreadGroup;
     private volatile boolean stopped = true;
     private final WorkerConfiguration.Builder workerConfigurationBuilder;
