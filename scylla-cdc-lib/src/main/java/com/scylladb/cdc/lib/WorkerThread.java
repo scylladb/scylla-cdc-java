@@ -10,7 +10,7 @@ import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.worker.WorkerConfiguration;
 import com.scylladb.cdc.model.worker.Worker;
 
-public class WorkerThread extends Thread {
+class WorkerThread extends Thread {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Worker worker;

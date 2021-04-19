@@ -1,19 +1,13 @@
 package com.scylladb.cdc.lib;
 
-import java.time.Clock;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
-import com.scylladb.cdc.cql.MasterCQL;
-import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.master.MasterConfiguration;
 import com.scylladb.cdc.model.master.Master;
-import com.scylladb.cdc.transport.MasterTransport;
+import com.scylladb.cdc.model.master.MasterConfiguration;
 
-public final class MasterThread extends Thread {
+final class MasterThread extends Thread {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Master master;
@@ -41,5 +35,4 @@ public final class MasterThread extends Thread {
             logger.atSevere().withCause(e).log("Master thread failed in run().");
         }
     }
-
 }
