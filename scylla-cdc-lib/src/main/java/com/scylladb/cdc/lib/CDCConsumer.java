@@ -136,6 +136,10 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        public Builder addTable(String keyspace, String table) {
+            return addTable(new TableName(keyspace, table));
+        }
+
         public Builder addTables(Collection<TableName> tables) {
             masterConfigurationBuilder.addTables(tables);
             return this;
