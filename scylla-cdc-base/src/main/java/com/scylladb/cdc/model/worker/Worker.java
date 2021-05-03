@@ -67,7 +67,7 @@ public final class Worker {
         TaskState initialState = getInitialStateForStreams(groupedStreams, workerConfiguration.queryTimeWindowSizeMs);
 
         Set<TableName> tableNames = groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet());
-        Date now = new Date();
+        Date now = Date.from(workerConfiguration.getClock().instant());
 
         // The furthest point in time where there might be
         // a CDC change, given table's TTL.
