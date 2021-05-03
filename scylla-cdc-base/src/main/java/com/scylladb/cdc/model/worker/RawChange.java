@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.stream.Stream;
 
+import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.worker.cql.Cell;
 
 /*
@@ -37,7 +38,10 @@ public interface RawChange extends Iterable<Cell> {
         }
     }
 
-    ChangeId getId();
+    default ChangeId getId() {
+        return new ChangeId(new StreamId(getCell("cdc$stream_id").getBytes()),
+                new ChangeTime(getCell("cdc$time").getUUID()));
+    }
 
     default OperationType getOperationType() {
         Byte operation = getCell("cdc$operation").getByte();

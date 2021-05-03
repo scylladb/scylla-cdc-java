@@ -25,12 +25,6 @@ public final class Driver3RawChange implements RawChange {
     }
 
     @Override
-    public ChangeId getId() {
-        return new ChangeId(new StreamId(row.getBytes(quoteIfNecessary("cdc$stream_id"))),
-                new ChangeTime(row.getUUID(quoteIfNecessary("cdc$time"))));
-    }
-
-    @Override
     public ChangeSchema getSchema() {
         return schema;
     }
