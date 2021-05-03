@@ -6,6 +6,7 @@ import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.VNodeId;
 import com.scylladb.cdc.model.master.GenerationMetadata;
+import com.scylladb.cdc.model.master.MockGenerationMetadata;
 import org.awaitility.core.ConditionFactory;
 
 import java.util.HashMap;
@@ -35,21 +36,7 @@ public class ConfigureWorkersTracker {
     }
 
     public void awaitConfigureWorkers(GenerationMetadata generationMetadata, Set<TableName> tableNames) {
-        Map<TaskId, SortedSet<StreamId>> expectedConfigureWorkers = new HashMap<>();
-        List<VNodeId> vNodes = generationMetadata.getStreams().stream()
-                .map(StreamId::getVNodeId).distinct().collect(Collectors.toList());
-
-        // FIXME - quadratic complexity (|vNodes|^2)
-        for (TableName tableName : tableNames) {
-            for (VNodeId vNodeId : vNodes) {
-                TaskId taskId = new TaskId(generationMetadata.getId(), vNodeId, tableName);
-                SortedSet<StreamId> streamIds = generationMetadata.getStreams().stream()
-                        .filter(s -> s.getVNodeId().equals(vNodeId)).collect(Collectors.toCollection(TreeSet::new));
-                expectedConfigureWorkers.put(taskId, streamIds);
-            }
-        }
-
-        awaitConfigureWorkers(expectedConfigureWorkers);
+        awaitConfigureWorkers(MockGenerationMetadata.generationMetadataToTaskMap(generationMetadata, tableNames));
     }
 
     public void checkNoAdditionalConfigureWorkers() {
