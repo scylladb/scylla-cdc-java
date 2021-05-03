@@ -28,6 +28,19 @@ public final class TaskState {
         return TimeUUID.startOf(windowStart.toDate().getTime());
     }
 
+    /**
+     * Returns the timestamp of the start of the query window.
+     * <p>
+     * This timestamp represents a inclusive lower bound
+     * of changes defined by this <code>TaskState</code>.
+     *
+     * @return the timestamp of the start of the query window.
+     * @see #getWindowEndTimestamp()
+     */
+    public Timestamp getWindowStartTimestamp() {
+        return windowStart;
+    }
+
     public boolean hasPassed(Timestamp t) {
         return windowStart.compareTo(t) > 0;
     }
