@@ -93,7 +93,8 @@ public interface RawChange extends Iterable<Cell> {
     }
 
     default boolean isDeleted(ChangeSchema.ColumnDefinition c) {
-        Boolean value = getCell(c.getDeletedColumn(getSchema())).getBoolean();
+        ChangeSchema.ColumnDefinition deletedColumnDefinition = getSchema().getDeletedColumnDefinition(c);
+        Boolean value = getCell(deletedColumnDefinition).getBoolean();
         return value != null && value;
     }
 

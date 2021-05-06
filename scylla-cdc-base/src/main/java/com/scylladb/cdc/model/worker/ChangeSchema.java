@@ -260,24 +260,6 @@ public class ChangeSchema {
             return baseIsNonfrozenList;
         }
 
-        public ColumnDefinition getDeletedColumn(ChangeSchema schema) {
-            if (baseTableDataType == null) {
-                throw new IllegalStateException("Cannot get deleted elements column for CDC columns.");
-            }
-            return schema.getColumnDefinition("cdc$deleted_" + columnName);
-        }
-
-        public ColumnDefinition getDeletedElementsColumn(ChangeSchema schema) {
-            if (baseTableDataType == null) {
-                throw new IllegalStateException("Cannot get deleted elements column for CDC columns.");
-            }
-            if (baseTableDataType.isAtomic()) {
-                throw new IllegalStateException(
-                        "Cannot get deleted elements column for frozen or non-collection columns.");
-            }
-            return schema.getColumnDefinition("cdc$deleted_elements_" + columnName);
-        }
-
         @Override
         public int hashCode() {
             return Objects.hash(baseIsNonfrozenList, baseTableColumnType, baseTableDataType, cdcLogDataType, columnName,
@@ -329,6 +311,22 @@ public class ChangeSchema {
         // TODO - do not linearly search
         Optional<ColumnDefinition> result = columnDefinitions.stream().filter(c -> c.getColumnName().equals(columnName)).findFirst();
         return result.orElseThrow(() -> new IllegalArgumentException("Column name " + columnName + " is not present in change schema."));
+    }
+
+    public ColumnDefinition getDeletedColumnDefinition(String columnName) {
+        return getColumnDefinition("cdc$deleted_" + columnName);
+    }
+
+    public ColumnDefinition getDeletedColumnDefinition(ColumnDefinition c) {
+        return getDeletedColumnDefinition(c.getColumnName());
+    }
+
+    public ColumnDefinition getDeletedElementsColumnDefinition(String columnName) {
+        return getColumnDefinition("cdc$deleted_elements_" + columnName);
+    }
+
+    public ColumnDefinition getDeletedElementsColumnDefinition(ColumnDefinition c) {
+        return getDeletedElementsColumnDefinition(c);
     }
 
     // TODO - add getTableName() here.
