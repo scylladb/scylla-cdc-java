@@ -32,7 +32,7 @@ class Driver3Cell implements Cell {
     }
 
     @Override
-    public ByteBuffer getUnsafeBytes() {
+    public ByteBuffer getAsUnsafeBytes() {
         return change.getUnsafeBytes(columnDefinition);
     }
 
