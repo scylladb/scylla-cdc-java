@@ -93,11 +93,6 @@ public interface RawChange extends Iterable<Cell> {
     }
 
     default boolean isDeleted(ChangeSchema.ColumnDefinition c) {
-        ChangeSchema.DataType type = c.getBaseTableDataType();
-        if (type != null && type.isAtomic()) {
-            return isNull(c);
-        }
-        // if type == null, this will throw
         Boolean value = getCell(c.getDeletedColumn(getSchema())).getBoolean();
         return value != null && value;
     }
