@@ -2,10 +2,12 @@ package com.scylladb.cdc.model.worker;
 
 import java.nio.ByteBuffer;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.worker.cql.Cell;
+import com.scylladb.cdc.model.worker.cql.Field;
 
 /*
  * Represents a single CDC log row,
@@ -175,6 +177,61 @@ public interface RawChange extends Iterable<Cell> {
     default boolean isDeleted(ChangeSchema.ColumnDefinition columnDefinition) {
         Boolean value = getCell(columnDefinition.getDeletedColumn(getSchema())).getBoolean();
         return value != null && value;
+    }
+
+    /**
+     * Returns the value of the deleted elements column for the given column name.
+     * <p>
+     * This method returns the value of the <code>cdc$deleted_elements_</code> column
+     * for the given column name. It is only relevant for the regular columns
+     * (columns not in a primary key) of the base table with non-frozen collection
+     * type (for example {@code SET<INT>}).
+     * <p>
+     * The value of the deleted elements column is a set of {@link Field} that
+     * represents which elements were removed from the collection. See
+     * <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     * for more details how to interpret the returned set for different data types.
+     * <p>
+     * Because Scylla does not distinguish a missing value or a <code>NULL</code>
+     * value from an empty set, this method returns an empty set instead of returning
+     * <code>null</code>.
+     *
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     * @param columnName the column name for which to retrieve the deleted elements column.
+     * @return the value of the deleted elements column as a set of {@link Field}. If the
+     *         deleted elements column is <code>NULL</code>, this method returns an empty
+     *         set.
+     */
+    default Set<Field> getDeletedElements(String columnName) {
+        return getDeletedElements(getSchema().getColumnDefinition(columnName));
+    }
+
+    /**
+     * Returns the value of the deleted elements column for the given column.
+     * <p>
+     * This method returns the value of the <code>cdc$deleted_elements_</code> column
+     * for the given column. It is only relevant for the regular columns
+     * (columns not in a primary key) of the base table with non-frozen collection
+     * type (for example {@code SET<INT>}).
+     * <p>
+     * The value of the deleted elements column is a set of {@link Field} that
+     * represents which elements were removed from the collection. See
+     * <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     * for more details how to interpret the returned set for different data types.
+     * <p>
+     * Because Scylla does not distinguish a missing value or a <code>NULL</code>
+     * value from an empty set, this method returns an empty set instead of returning
+     * <code>null</code>.
+     *
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     * @param columnDefinition the column for which to retrieve the deleted elements column.
+     * @return the value of the deleted elements column as a set of {@link Field}. If the
+     *         deleted elements column is <code>NULL</code>, this method returns an empty
+     *         set.
+     */
+    default Set<Field> getDeletedElements(ChangeSchema.ColumnDefinition columnDefinition) {
+        ChangeSchema.ColumnDefinition deletedElementsColumnDefinition = columnDefinition.getDeletedElementsColumn(getSchema());
+        return getCell(deletedElementsColumnDefinition).getSet();
     }
 
     @Deprecated
