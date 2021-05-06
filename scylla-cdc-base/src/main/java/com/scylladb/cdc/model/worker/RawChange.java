@@ -2,9 +2,11 @@ package com.scylladb.cdc.model.worker;
 
 import java.nio.ByteBuffer;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import com.scylladb.cdc.model.worker.cql.Cell;
+import com.scylladb.cdc.model.worker.cql.Field;
 
 /*
  * Represents a single CDC log row,
@@ -98,6 +100,15 @@ public interface RawChange extends Iterable<Cell> {
         // if type == null, this will throw
         Boolean value = getCell(c.getDeletedColumn(getSchema())).getBoolean();
         return value != null && value;
+    }
+
+    default Set<Field> getDeletedElements(String columnName) {
+        return getDeletedElements(getSchema().getColumnDefinition(columnName));
+    }
+
+    default Set<Field> getDeletedElements(ChangeSchema.ColumnDefinition c) {
+        ChangeSchema.ColumnDefinition deletedElementsColumnDefinition = getSchema().getDeletedElementsColumnDefinition(c);
+        return getCell(deletedElementsColumnDefinition).getSet();
     }
 
     @Deprecated
