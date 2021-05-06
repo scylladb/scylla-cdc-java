@@ -213,15 +213,13 @@ public class ChangeSchema {
         private final DataType cdcLogDataType;
         private final DataType baseTableDataType;
         private final ColumnType baseTableColumnType;
-        private final boolean baseIsNonfrozenList;
 
-        public ColumnDefinition(String columnName, int index, DataType cdcLogDataType, DataType baseTableDataType, ColumnType baseTableColumnType, boolean baseIsNonfrozenList) {
+        public ColumnDefinition(String columnName, int index, DataType cdcLogDataType, DataType baseTableDataType, ColumnType baseTableColumnType) {
             this.columnName = columnName;
             this.index = index;
             this.cdcLogDataType = cdcLogDataType;
             this.baseTableDataType = baseTableDataType;
             this.baseTableColumnType = baseTableColumnType;
-            this.baseIsNonfrozenList = baseIsNonfrozenList;
         }
 
         public int getIndex() {
@@ -251,19 +249,9 @@ public class ChangeSchema {
             return baseTableColumnType;
         }
 
-        public boolean baseIsNonfrozenList() {
-            if (isCdcColumn()) {
-                // TODO: actually, this may make sense for cdc$deleted_ and cdc$deleted_elements_ columns as well
-                // but ensure that whoever constructs `ColumnDefinition` passes a correct value
-                throw new IllegalStateException("Cannot get base table column type for CDC columns.");
-            }
-            return baseIsNonfrozenList;
-        }
-
         @Override
         public int hashCode() {
-            return Objects.hash(baseIsNonfrozenList, baseTableColumnType, baseTableDataType, cdcLogDataType, columnName,
-                    index);
+            return Objects.hash(baseTableColumnType, baseTableDataType, cdcLogDataType, columnName, index);
         }
 
         @Override
@@ -275,7 +263,7 @@ public class ChangeSchema {
                 return false;
             }
             ColumnDefinition other = (ColumnDefinition) obj;
-            return baseIsNonfrozenList == other.baseIsNonfrozenList && baseTableColumnType == other.baseTableColumnType
+            return baseTableColumnType == other.baseTableColumnType
                     && Objects.equals(baseTableDataType, other.baseTableDataType)
                     && Objects.equals(cdcLogDataType, other.cdcLogDataType)
                     && Objects.equals(columnName, other.columnName) && index == other.index;

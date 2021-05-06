@@ -92,49 +92,24 @@ public class Driver3SchemaBuilder {
 
     private ChangeSchema.ColumnDefinition translateColumnDefinition(ColumnDefinitions.Definition driverDefinition, int index) {
         String columnName = driverDefinition.getName();
+
         ChangeSchema.DataType dataType = translateColumnDataType(driverDefinition.getType());
-        ChangeSchema.DataType baseType = null;
+        TableMetadata baseTableMetadata = baseTableMetadata();
+
         ChangeSchema.ColumnType baseTableColumnType = ChangeSchema.ColumnType.REGULAR;
-        boolean baseIsNonfrozenList = false;
         if (baseTablePartitionKeyColumnNames.contains(columnName)) {
             baseTableColumnType = ChangeSchema.ColumnType.PARTITION_KEY;
         } else if (baseTableClusteringKeyColumnNames.contains(columnName)) {
             baseTableColumnType = ChangeSchema.ColumnType.CLUSTERING_KEY;
-        } else {
-            /* Calculate whether corresponding base column is a non-frozen list.
-             *
-             * See comment in `generatePrimaryKeyColumns` about us racing with schema changes.
-             * Luckily, it's not possible to change the type of a column that is a non-frozen list,
-             * and after removing such a column, it's not possible to re-add a column of the same name
-             * (true for all non-frozen types; see https://docs.scylladb.com/getting-started/ddl/#alter-table-statement).
-             * Also we're considering removing altering column types altogether (https://github.com/scylladb/scylla/issues/4550).
-             *
-             * Still, it's possible to drop a table and create a new with different schema, so the base table metadata
-             * could potentially come from the old schema. Also, it's possible to delete or rename a column.
-             * For deleted columns, stale base table metadata is not a problem, but it would be a problem if OUR metadata is stale
-             * and base table metadata is newer (so we have a column, but the base doesn't) - can this happen?
-             *
-             */
-            TableMetadata baseTableMetadata = baseTableMetadata();
-            // TODO: this sets it only for value columns (and not e.g. for `cdc$deleted_` columns), but maybe it's enough?
-            ColumnMetadata baseColumnMetadata = baseTableMetadata.getColumn(columnName);
-            if (baseColumnMetadata != null) {
-                baseType = translateColumnDataType(baseColumnMetadata.getType());
-                baseIsNonfrozenList = baseType.getCqlType() == ChangeSchema.CqlType.LIST && !baseType.isFrozen();
-
-                // some sanity checking:
-                if (baseIsNonfrozenList && (
-                        dataType.getCqlType() != ChangeSchema.CqlType.MAP ||
-                        dataType.getTypeArguments().get(0).getCqlType() != ChangeSchema.CqlType.TIMEUUID ||
-                        !driverDefinition.getType().getTypeArguments().get(1).equals(baseType.getTypeArguments().get(0)))) {
-                    throw new IllegalStateException(
-                            String.format("expected CDC value column type map<timeuuid, %s> for base column type list<%s>, got map<%s, %s>",
-                                    dataType.getTypeArguments().get(1).getCqlType().toString(), baseType.getTypeArguments().get(0).toString(),
-                                    dataType.getTypeArguments().get(0).getCqlType().toString(), dataType.getTypeArguments().get(1).getCqlType().toString()));
-                }
-            }
         }
-        return new ChangeSchema.ColumnDefinition(columnName, index, dataType, baseType, baseTableColumnType, baseIsNonfrozenList);
+
+        ColumnMetadata baseColumnMetadata = baseTableMetadata.getColumn(columnName);
+        ChangeSchema.DataType baseType = null;
+        if (baseColumnMetadata != null) {
+            baseType = translateColumnDataType(baseColumnMetadata.getType());
+        }
+
+        return new ChangeSchema.ColumnDefinition(columnName, index, dataType, baseType, baseTableColumnType);
     }
 
     private ChangeSchema.DataType translateColumnDataType(DataType driverType) {
