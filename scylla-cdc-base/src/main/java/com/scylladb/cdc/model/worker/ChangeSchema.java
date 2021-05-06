@@ -249,24 +249,6 @@ public class ChangeSchema {
             return baseTableColumnType;
         }
 
-        public ColumnDefinition getDeletedColumn(ChangeSchema schema) {
-            if (baseTableDataType == null) {
-                throw new IllegalStateException("Cannot get deleted elements column for CDC columns.");
-            }
-            return schema.getColumnDefinition("cdc$deleted_" + columnName);
-        }
-
-        public ColumnDefinition getDeletedElementsColumn(ChangeSchema schema) {
-            if (baseTableDataType == null) {
-                throw new IllegalStateException("Cannot get deleted elements column for CDC columns.");
-            }
-            if (baseTableDataType.isAtomic()) {
-                throw new IllegalStateException(
-                        "Cannot get deleted elements column for frozen or non-collection columns.");
-            }
-            return schema.getColumnDefinition("cdc$deleted_elements_" + columnName);
-        }
-
         @Override
         public int hashCode() {
             return Objects.hash(baseTableColumnType, baseTableDataType, cdcLogDataType, columnName, index);
@@ -317,6 +299,88 @@ public class ChangeSchema {
         // TODO - do not linearly search
         Optional<ColumnDefinition> result = columnDefinitions.stream().filter(c -> c.getColumnName().equals(columnName)).findFirst();
         return result.orElseThrow(() -> new IllegalArgumentException("Column name " + columnName + " is not present in change schema."));
+    }
+
+    /**
+     * Returns the column definition of the deleted column for the provided
+     * column name.
+     * <p>
+     * This method returns the column definition of the <code>cdc$deleted_</code>
+     * column for the given column name. It is only relevant for the regular columns
+     * (columns not in a primary key) of the base table, because only
+     * those columns have a corresponding deleted column. See
+     * <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-basic-operations/">Basic operations in CDC</a> page for
+     * more details.
+     *
+     * @param columnName the column name for which to retrieve the deleted column definition.
+     * @return the column definition of the deleted column for the given column name.
+     * @see RawChange#isDeleted(String)
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-basic-operations/">Basic operations in CDC</a>
+     */
+    public ColumnDefinition getDeletedColumnDefinition(String columnName) {
+        return getColumnDefinition("cdc$deleted_" + columnName);
+    }
+
+    /**
+     * Returns the column definition of the deleted column for the provided
+     * column definition.
+     * <p>
+     * This method returns the column definition of the <code>cdc$deleted_</code>
+     * column for the given column definition. It is only relevant for the regular columns
+     * (columns not in a primary key) of the base table, because only
+     * those columns have a corresponding deleted column. See
+     * <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-basic-operations/">Basic operations in CDC</a> page for
+     * more details.
+     *
+     * @param columnDefinition the column definition for which to retrieve the deleted column definition.
+     * @return the column definition of the deleted column for the given column definition.
+     * @see RawChange#isDeleted(ColumnDefinition)
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-basic-operations/">Basic operations in CDC</a>
+     */
+    public ColumnDefinition getDeletedColumnDefinition(ColumnDefinition columnDefinition) {
+        return getDeletedColumnDefinition(columnDefinition.getColumnName());
+    }
+
+    /**
+     * Returns the column definition of the deleted elements column for the provided
+     * column name.
+     * <p>
+     * This method returns the column definition of the <code>cdc$deleted_elements_</code>
+     * column for the given column name. It is only relevant for the regular columns
+     * (columns not in a primary key) of the base table with a non-frozen collection
+     * type (for example {@code SET<INT>}). Other columns don't have a
+     * corresponding deleted elements column. See
+     * <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a> page for
+     * more details.
+     *
+     * @param columnName the column name for which to retrieve the deleted elements column definition.
+     * @return the column definition of the deleted elements column for the given column name.
+     * @see RawChange#getDeletedElements(String)
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     */
+    public ColumnDefinition getDeletedElementsColumnDefinition(String columnName) {
+        return getColumnDefinition("cdc$deleted_elements_" + columnName);
+    }
+
+    /**
+     * Returns the column definition of the deleted elements column for the provided
+     * column definition.
+     * <p>
+     * This method returns the column definition of the <code>cdc$deleted_elements_</code>
+     * column for the given column definition. It is only relevant for the regular columns
+     * (columns not in a primary key) of the base table with a non-frozen collection
+     * type (for example {@code SET<INT>}). Other columns don't have a
+     * corresponding deleted elements column. See
+     * <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a> page for
+     * more details.
+     *
+     * @param columnDefinition the column definition for which to retrieve the deleted elements column definition.
+     * @return the column definition of the deleted elements column for the given column definition.
+     * @see RawChange#getDeletedElements(ColumnDefinition)
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     */
+    public ColumnDefinition getDeletedElementsColumnDefinition(ColumnDefinition columnDefinition) {
+        return getDeletedElementsColumnDefinition(columnDefinition.getColumnName());
     }
 
     // TODO - add getTableName() here.

@@ -29,7 +29,7 @@ public class RawChangeTest {
 
         assertFalse(insert1.isDeleted("v"));
         assertThrows(IllegalArgumentException.class, () -> insert1.isDeleted("pk"));
-        assertThrows(IllegalStateException.class, () -> insert1.isDeleted("cdc$operation"));
+        assertThrows(IllegalArgumentException.class, () -> insert1.isDeleted("cdc$operation"));
 
         // INSERT INTO ks.simple(pk, ck, v) VALUES (1, 2, NULL);
         MockRawChange insert2 = MockRawChange.builder()
@@ -111,7 +111,7 @@ public class RawChangeTest {
 
         // v is not a nonfrozen collection, so it doesn't have
         // a cdc$deleted_elements_ column.
-        assertThrows(IllegalStateException.class, () -> insert1.getDeletedElements("v"));
+        assertThrows(IllegalArgumentException.class, () -> insert1.getDeletedElements("v"));
 
         // INSERT INTO ks.nonfrozen_collections(pk, ck, v, v2) VALUES (1, 2, {3, 5}, null);
         MockRawChange insert2 = MockRawChange.builder()
