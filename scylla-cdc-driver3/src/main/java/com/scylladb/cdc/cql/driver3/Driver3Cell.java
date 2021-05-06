@@ -31,28 +31,6 @@ class Driver3Cell implements Cell {
         return columnDefinition.getCdcLogDataType();
     }
 
-    @SuppressWarnings("unchecked")
-    @Override
-    public Set<Field> getDeletedElements() {
-        if (!hasDeletedElements()) {
-            return null;
-        }
-        return (Set<Field>) change.getAsObject(columnDefinition.getDeletedElementsColumn(change.getSchema()));
-    }
-
-    @Override
-    public boolean hasDeletedElements() {
-        if (!columnDefinition.getBaseTableDataType().isAtomic()) {
-            return false;
-        }
-        return !change.isNull(columnDefinition.getDeletedElementsColumn(change.getSchema()));
-    }
-
-    @Override
-    public boolean isDeleted() {
-        return change.isDeleted(columnDefinition);
-    }
-
     @Override
     public ByteBuffer getAsUnsafeBytes() {
         return change.getAsUnsafeBytes(columnDefinition);

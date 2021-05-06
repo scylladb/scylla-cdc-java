@@ -7,12 +7,6 @@ import com.scylladb.cdc.model.worker.ChangeSchema;
 
 public interface Cell extends Field {
     ChangeSchema.ColumnDefinition getColumnDefinition();
-
-    Set<Field> getDeletedElements();
-
-    boolean hasDeletedElements();
-
-    boolean isDeleted();
     
     /**
      * Returns the value of a binary representation of this cell as a <code>ByteBuffer</code>.

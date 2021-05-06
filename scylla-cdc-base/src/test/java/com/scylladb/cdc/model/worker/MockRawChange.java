@@ -173,21 +173,6 @@ public class MockRawChange implements RawChange {
             }
 
             @Override
-            public Set<Field> getDeletedElements() {
-                throw new UnsupportedOperationException("Not implemented yet");
-            }
-
-            @Override
-            public boolean hasDeletedElements() {
-                throw new UnsupportedOperationException("Not implemented yet");
-            }
-
-            @Override
-            public boolean isDeleted() {
-                throw new UnsupportedOperationException("Not implemented yet");
-            }
-
-            @Override
             public ByteBuffer getAsUnsafeBytes() {
                 throw new UnsupportedOperationException("Not implemented yet");
             }
