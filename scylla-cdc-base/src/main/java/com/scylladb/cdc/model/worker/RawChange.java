@@ -110,23 +110,23 @@ public interface RawChange extends Iterable<Cell> {
         return stream().iterator();
     }
 
-    default Iterator<Cell> data() {
-        return dataStream().iterator();
+    default Iterator<Cell> nonCdcColumnsIterator() {
+        return nonCdcColumnsStream().iterator();
     }
 
-    default Iterator<Cell> metadata() {
-        return metadataStream().iterator();
+    default Iterator<Cell> cdcColumnsIterator() {
+        return cdcColumnsStream().iterator();
     }
 
     default Stream<Cell> stream() {
         return getSchema().getAllColumnDefinitions().stream().map(c -> getCell(c));
     }
 
-    default Stream<Cell> dataStream() {
+    default Stream<Cell> nonCdcColumnsStream() {
         return getSchema().getNonCdcColumnDefinitions().stream().map(c -> getCell(c));
     }
 
-    default Stream<Cell> metadataStream() {
+    default Stream<Cell> cdcColumnsStream() {
         return getSchema().getCdcColumnDefinitions().stream().map(c -> getCell(c));
     }
 
