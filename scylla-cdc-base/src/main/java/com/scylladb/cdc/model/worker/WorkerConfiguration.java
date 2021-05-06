@@ -1,5 +1,8 @@
 package com.scylladb.cdc.model.worker;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
@@ -14,18 +17,17 @@ public final class WorkerConfiguration {
 
     public final WorkerTransport transport;
     public final WorkerCQL cql;
-    public final TaskAndRawChangeConsumer consumer;
+    public final Consumer consumer;
 
     public final long queryTimeWindowSizeMs;
     public final long confidenceWindowSizeMs;
 
     public final RetryBackoff workerRetryBackoff;
 
-    public final DelayedFutureService delayedFutureService;
-
-    private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, TaskAndRawChangeConsumer consumer,
-                               long queryTimeWindowSizeMs, long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff,
-                                DelayedFutureService delayedFutureService) {
+    private final ScheduledExecutorService executorService;
+    
+    private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer, long queryTimeWindowSizeMs,
+            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
@@ -34,7 +36,11 @@ public final class WorkerConfiguration {
         Preconditions.checkArgument(confidenceWindowSizeMs > 0);
         this.confidenceWindowSizeMs = confidenceWindowSizeMs;
         this.workerRetryBackoff = Preconditions.checkNotNull(workerRetryBackoff);
-        this.delayedFutureService = Preconditions.checkNotNull(delayedFutureService);
+        this.executorService = executorService;
+    }
+    
+    public ScheduledExecutorService getExecutorService() {
+        return executorService;
     }
 
     public static Builder builder() {
@@ -44,7 +50,8 @@ public final class WorkerConfiguration {
     public static class Builder {
         private WorkerTransport transport;
         private WorkerCQL cql;
-        private TaskAndRawChangeConsumer consumer;
+        private Consumer consumer;
+        private ScheduledExecutorService executorService;
 
         private long queryTimeWindowSizeMs = DEFAULT_QUERY_TIME_WINDOW_SIZE_MS;
         private long confidenceWindowSizeMs = DEFAULT_CONFIDENCE_WINDOW_SIZE_MS;
@@ -61,9 +68,25 @@ public final class WorkerConfiguration {
             return this;
         }
 
-        public Builder withConsumer(TaskAndRawChangeConsumer consumer) {
-            this.consumer = Preconditions.checkNotNull(consumer);
+        public Builder withConsumer(Consumer consumer) {
+            this.consumer = consumer;
             return this;
+        }
+
+        public Builder withConsumer(TaskAndRawChangeConsumer consumer) {
+            return withTaskAndRawChangeConsumer(consumer);
+        }
+
+        public Builder withTaskAndRawChangeConsumer(TaskAndRawChangeConsumer consumer) {
+            return withConsumer(Consumer.forTaskAndRawChangeConsumer(Preconditions.checkNotNull(consumer)));
+        }
+
+        public Builder withConsumer(RawChangeConsumer consumer) {
+            return withRawChangeConsumer(consumer);
+        }
+
+        public Builder withRawChangeConsumer(RawChangeConsumer consumer) {
+            return withConsumer(Consumer.forRawChangeConsumer(Preconditions.checkNotNull(consumer)));
         }
 
         public Builder withQueryTimeWindowSizeMs(long queryTimeWindowSizeMs) {
@@ -82,10 +105,18 @@ public final class WorkerConfiguration {
             this.workerRetryBackoff = Preconditions.checkNotNull(workerRetryBackoff);
             return this;
         }
+        
+        public Builder withExecutorService(ScheduledExecutorService executorService) {
+            this.executorService = executorService;
+            return this;
+        }
 
         public WorkerConfiguration build() {
-            return new WorkerConfiguration(transport, cql, consumer,
-                    queryTimeWindowSizeMs, confidenceWindowSizeMs, workerRetryBackoff, new DelayedFutureService());
+            if (executorService == null) {
+                executorService = Executors.newScheduledThreadPool(1);
+            }
+            return new WorkerConfiguration(transport, cql, consumer, queryTimeWindowSizeMs, confidenceWindowSizeMs,
+                    workerRetryBackoff, executorService);
         }
     }
 }

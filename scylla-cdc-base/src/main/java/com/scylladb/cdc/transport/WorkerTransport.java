@@ -13,5 +13,13 @@ public interface WorkerTransport {
     Map<TaskId, TaskState> getTaskStates(Set<TaskId> tasks);
     void setState(TaskId task, TaskState newState);
     void moveStateToNextWindow(TaskId task, TaskState newState);
-    boolean shouldStop();
+
+    /**
+     * @deprecated Use {@link Worker.stop()} instead")
+     * @return
+     */
+    @Deprecated
+    default boolean shouldStop() {
+        return false;
+    }
 }

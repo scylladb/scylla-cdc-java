@@ -3,7 +3,8 @@ package com.scylladb.cdc.lib;
 import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Optional;
-import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.CQLConfiguration;
@@ -11,14 +12,12 @@ import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.cql.driver3.Driver3MasterCQL;
 import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
-import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.master.Master;
 import com.scylladb.cdc.model.master.MasterConfiguration;
+import com.scylladb.cdc.model.worker.Consumer;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;
 import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumer;
-import com.scylladb.cdc.model.worker.Worker;
 import com.scylladb.cdc.model.worker.WorkerConfiguration;
 
 public final class CDCConsumer implements AutoCloseable {
@@ -30,20 +29,16 @@ public final class CDCConsumer implements AutoCloseable {
     private MasterThread master;
 
     private CDCConsumer(CQLConfiguration cqlConfiguration, MasterConfiguration.Builder masterConfigurationBuilder,
-                       WorkerConfiguration.Builder workerConfigurationBuilder,
-                       RawChangeConsumerProvider consumerProvider, int workersCount) {
+                       WorkerConfiguration.Builder workerConfigurationBuilder) {
         Preconditions.checkNotNull(cqlConfiguration);
         Preconditions.checkNotNull(masterConfigurationBuilder);
         Preconditions.checkNotNull(workerConfigurationBuilder);
-        Preconditions.checkNotNull(consumerProvider);
 
         this.cdcThreadGroup = new ThreadGroup("Scylla-CDC-Threads");
-        Preconditions.checkArgument(workersCount > 0);
 
         this.session = new Driver3Session(cqlConfiguration);
         workerConfigurationBuilder.withCQL(new Driver3WorkerCQL(session));
-        this.transport = new LocalTransport(cdcThreadGroup, workersCount,
-                workerConfigurationBuilder, consumerProvider);
+        this.transport = new LocalTransport(cdcThreadGroup, workerConfigurationBuilder);
 
         MasterCQL masterCQL = new Driver3MasterCQL(session);
         this.masterConfiguration = masterConfigurationBuilder
@@ -85,13 +80,6 @@ public final class CDCConsumer implements AutoCloseable {
         }
     }
 
-    public void reconfigure(int workersCount) throws InterruptedException {
-        Preconditions.checkArgument(workersCount > 0);
-        stop();
-        transport.setWorkersCount(workersCount);
-        start();
-    }
-
     @Override
     public void close() throws InterruptedException {
         this.stop();
@@ -109,17 +97,47 @@ public final class CDCConsumer implements AutoCloseable {
         private final WorkerConfiguration.Builder workerConfigurationBuilder
                 = WorkerConfiguration.builder();
 
-        private RawChangeConsumerProvider consumerProvider;
         private int workersCount = getDefaultWorkersCount();
+        private ScheduledExecutorService executorService;
 
+        @SuppressWarnings("deprecation")
         public Builder withConsumerProvider(RawChangeConsumerProvider consumerProvider) {
-            this.consumerProvider = Preconditions.checkNotNull(consumerProvider);
+            withConsumer(consumerProvider.getForThread(0));
+            return this;
+        }
+        
+        public Builder withConsumer(Consumer consumer) {
+            workerConfigurationBuilder.withConsumer(consumer);
+            return this;
+        }
+
+        public Builder withConsumer(TaskAndRawChangeConsumer consumer) {
+            workerConfigurationBuilder.withConsumer(consumer);
+            return this;
+        }
+
+        public Builder withTaskAndRawChangeConsumer(TaskAndRawChangeConsumer consumer) {
+            workerConfigurationBuilder.withTaskAndRawChangeConsumer(consumer);
+            return this;
+        }
+
+        public Builder withConsumer(RawChangeConsumer consumer) {
+            workerConfigurationBuilder.withConsumer(consumer);
+            return this;
+        }
+
+        public Builder withRawChangeConsumer(RawChangeConsumer consumer) {
+            workerConfigurationBuilder.withRawChangeConsumer(consumer);
             return this;
         }
 
         public Builder addTable(TableName table) {
             masterConfigurationBuilder.addTable(table);
             return this;
+        }
+
+        public Builder addTable(String keyspace, String table) {
+            return addTable(new TableName(keyspace, table));
         }
 
         public Builder addTables(Collection<TableName> tables) {
@@ -188,15 +206,45 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
-        private static int getDefaultWorkersCount() {
-            int result = Runtime.getRuntime().availableProcessors() - 1;
-            return result > 0 ? result : 1;
+        /**
+         * Sets the executor service to use for task scheduling.
+         *
+         * Note: CDC library uses delayed/scheduled operations in some cases.
+         * To ensure the fastest possible terminaton/shutdown of a running
+         * worker, you should utilize a {@link ScheduledExecutorService} that
+         * does not wait for non-started tasks scheduled in the future
+         * when shutting down.
+         *
+         * The default exeutor uses a {@link ScheduledThreadPoolExecutor}
+         * with {@link ScheduledThreadPoolExecutor#setExecuteExistingDelayedTasksAfterShutdownPolicy(boolean)}
+         * set to false
+         *
+         * @see ScheduledThreadPoolExecutor
+         * @see ScheduledThreadPoolExecutor#setExecuteExistingDelayedTasksAfterShutdownPolicy(boolean)
+         *
+         * @param executorService
+         * @return
+         */
+        public Builder withExecutorService(ScheduledExecutorService executorService) {
+            this.executorService = executorService;
+            return this;
         }
 
         public CDCConsumer build() {
+            if (executorService == null) {
+                final ScheduledThreadPoolExecutor s = new ScheduledThreadPoolExecutor(
+                        workersCount);
+                s.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+                executorService = s;
+            }
+            workerConfigurationBuilder.withExecutorService(executorService);
             return new CDCConsumer(cqlConfigurationBuilder.build(),
-                    masterConfigurationBuilder, workerConfigurationBuilder,
-                    consumerProvider, workersCount);
+                    masterConfigurationBuilder, workerConfigurationBuilder);
+        }
+
+        private static int getDefaultWorkersCount() {
+            int result = Runtime.getRuntime().availableProcessors() - 1;
+            return result > 0 ? result : 1;
         }
     }
 }
