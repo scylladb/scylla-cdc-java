@@ -52,7 +52,7 @@ public interface RawChange extends Iterable<Cell> {
     default int getBatchSequenceNumber() {
         return getCell("cdc$batch_seq_no").getInt();
     }
-    
+
     default Long getTTL() {
         return getCell("cdc$ttl").getLong();
     }
@@ -109,15 +109,15 @@ public interface RawChange extends Iterable<Cell> {
     default Iterator<Cell> iterator() {
         return stream().iterator();
     }
-    
+
     default Iterator<Cell> data() {
         return dataStream().iterator();
     }
 
     default Iterator<Cell> metadata() {
-        return dataStream().iterator();
+        return metadataStream().iterator();
     }
-    
+
     default Stream<Cell> stream() {
         return getSchema().getAllColumnDefinitions().stream().map(c -> getCell(c));
     }
