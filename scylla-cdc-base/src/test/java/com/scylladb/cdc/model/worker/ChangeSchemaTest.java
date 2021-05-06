@@ -7,6 +7,8 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ChangeSchemaTest {
     // CDC table for:
@@ -175,5 +177,37 @@ public class ChangeSchemaTest {
         assertFalse(NONFROZEN_MAP_DOUBLE_TEXT.isAtomic());
         // tuple<inet, int>
         assertFalse(NONFROZEN_TUPLE_INET_INT.isAtomic());
+    }
+
+    @Test
+    public void testSchemaGetDeletedColumnDefinition() {
+        ChangeSchema.ColumnDefinition deletedV = TEST_SCHEMA_SIMPLE.getDeletedColumnDefinition("v");
+        assertEquals("cdc$deleted_v", deletedV.getColumnName());
+        assertEquals(ChangeSchema.CqlType.BOOLEAN, deletedV.getCdcLogDataType().getCqlType());
+        assertTrue(deletedV.isCdcColumn());
+
+        ChangeSchema.ColumnDefinition v3 = TEST_SCHEMA_FROZEN_COLLECTIONS.getColumnDefinition("v3");
+        ChangeSchema.ColumnDefinition deletedV3 = TEST_SCHEMA_FROZEN_COLLECTIONS.getDeletedColumnDefinition(v3);
+        assertEquals("cdc$deleted_v3", deletedV3.getColumnName());
+
+        // Clustering keys don't have a cdc$deleted_ column.
+        assertThrows(IllegalArgumentException.class, () -> TEST_SCHEMA_FROZEN_COLLECTIONS.getDeletedColumnDefinition("ck"));
+    }
+
+    @Test
+    public void testSchemaGetDeletedElementsColumnDefinition() {
+        // v set<int>
+        // cdc$deleted_elements_v frozen<set<int>>
+        ChangeSchema.ColumnDefinition deletedElementsV =
+                TEST_SCHEMA_NONFROZEN_COLLECTIONS.getDeletedElementsColumnDefinition("v");
+        assertEquals("cdc$deleted_elements_v", deletedElementsV.getColumnName());
+        assertEquals(ChangeSchema.CqlType.SET, deletedElementsV.getCdcLogDataType().getCqlType());
+        assertTrue(deletedElementsV.getCdcLogDataType().isFrozen());
+        assertEquals(ChangeSchema.CqlType.INT, deletedElementsV.getCdcLogDataType().getTypeArguments().get(0).getCqlType());
+
+        // v3 frozen<map<double, text>>
+        // no cdc$deleted_elements_v3
+        ChangeSchema.ColumnDefinition v3 = TEST_SCHEMA_FROZEN_COLLECTIONS.getColumnDefinition("v3");
+        assertThrows(IllegalArgumentException.class, () -> TEST_SCHEMA_FROZEN_COLLECTIONS.getDeletedElementsColumnDefinition(v3));
     }
 }
