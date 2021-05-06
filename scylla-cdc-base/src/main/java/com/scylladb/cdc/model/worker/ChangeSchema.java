@@ -32,6 +32,11 @@ public class ChangeSchema {
         SMALLINT,
         TINYINT,
         DURATION,
+
+        // All types up to this point
+        // are atomic types. This order
+        // is important, as this fact is used in
+        // isAtomic.
         LIST,
         MAP,
         SET,
