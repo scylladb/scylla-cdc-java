@@ -51,7 +51,7 @@ public class MockRawChange implements RawChange {
             }
 
             @Override
-            public ByteBuffer getUnsafeBytes() {
+            public ByteBuffer getAsUnsafeBytes() {
                 throw new UnsupportedOperationException("Not implemented yet");
             }
 
@@ -73,7 +73,7 @@ public class MockRawChange implements RawChange {
     }
 
     @Override
-    public ByteBuffer getUnsafeBytes(ChangeSchema.ColumnDefinition c) {
+    public ByteBuffer getAsUnsafeBytes(ChangeSchema.ColumnDefinition c) {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 

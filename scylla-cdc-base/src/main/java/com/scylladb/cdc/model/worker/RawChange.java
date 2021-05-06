@@ -84,11 +84,45 @@ public interface RawChange extends Iterable<Cell> {
 
     boolean isNull(ChangeSchema.ColumnDefinition c);
 
-    default ByteBuffer getUnsafeBytes(String columnName) {
-        return getUnsafeBytes(getSchema().getColumnDefinition(columnName));
+    /**
+     * Returns the value of a binary representation of the specified column as a <code>ByteBuffer</code>.
+     * <p>
+     * This method returns a binary representation of the specified column as it was received
+     * by the underlying Scylla driver. This representation may vary between different
+     * versions of this library and <code>WorkerCQL</code> implementations.
+     * <p>
+     * This method can be called for any type of column, not only <code>BLOB</code>.
+     * If you want to read the value of a <code>BLOB</code> column, please use the
+     * {@link #getCell(String)} method and call {@link Cell#getBytes()}.
+     * <p>
+     * If a value of this column is <code>NULL</code>, this method returns <code>null</code>.
+     *
+     * @param columnName the column name to retrieve.
+     * @return the value of a binary representation of the specified column.
+     *         If the value of this column is <code>NULL</code>, <code>null</code> is returned.
+     */
+    default ByteBuffer getAsUnsafeBytes(String columnName) {
+        return getAsUnsafeBytes(getSchema().getColumnDefinition(columnName));
     }
 
-    ByteBuffer getUnsafeBytes(ChangeSchema.ColumnDefinition c);
+    /**
+     * Returns the value of a binary representation of the specified column as a <code>ByteBuffer</code>.
+     * <p>
+     * This method returns a binary representation of the specified column as it was received
+     * by the underlying Scylla driver. This representation may vary between different
+     * versions of this library and <code>WorkerCQL</code> implementations.
+     * <p>
+     * This method can be called for any type of column, not only <code>BLOB</code>.
+     * If you want to read the value of a <code>BLOB</code> column, please use the
+     * {@link #getCell(ChangeSchema.ColumnDefinition)} )} method and call {@link Cell#getBytes()}.
+     * <p>
+     * If a value of this column is <code>NULL</code>, this method returns <code>null</code>.
+     *
+     * @param columnDefinition the column to retrieve.
+     * @return the value of a binary representation of the specified column.
+     *         If the value of this column is <code>NULL</code>, <code>null</code> is returned.
+     */
+    ByteBuffer getAsUnsafeBytes(ChangeSchema.ColumnDefinition columnDefinition);
 
     default boolean isDeleted(String columnName) {
         return isDeleted(getSchema().getColumnDefinition(columnName));

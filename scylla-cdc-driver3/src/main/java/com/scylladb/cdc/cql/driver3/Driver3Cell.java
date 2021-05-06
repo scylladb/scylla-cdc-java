@@ -54,8 +54,8 @@ class Driver3Cell implements Cell {
     }
 
     @Override
-    public ByteBuffer getUnsafeBytes() {
-        return change.getUnsafeBytes(columnDefinition);
+    public ByteBuffer getAsUnsafeBytes() {
+        return change.getAsUnsafeBytes(columnDefinition);
     }
 
     @Override

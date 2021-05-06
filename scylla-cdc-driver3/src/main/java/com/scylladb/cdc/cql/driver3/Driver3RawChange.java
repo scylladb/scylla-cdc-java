@@ -44,7 +44,7 @@ public final class Driver3RawChange implements RawChange {
     }
 
     @Override
-    public ByteBuffer getUnsafeBytes(ColumnDefinition c) {
+    public ByteBuffer getAsUnsafeBytes(ColumnDefinition c) {
         return row.getBytesUnsafe(c.getIndex());
     }
 
