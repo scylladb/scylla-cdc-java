@@ -87,9 +87,9 @@ public class ChangeSchemaTest {
     ));
 
     // CDC table for:
-    // CREATE TABLE ks.unfrozen_collections(pk int, ck int, v set<int>, v2 list<int>, v3 map<double, text>, v4 tuple<inet, int>, PRIMARY KEY(pk, ck)) WITH cdc = {'enabled': true};
+    // CREATE TABLE ks.nonfrozen_collections(pk int, ck int, v set<int>, v2 list<int>, v3 map<double, text>, v4 tuple<inet, int>, PRIMARY KEY(pk, ck)) WITH cdc = {'enabled': true};
     //
-    // CREATE TABLE ks.unfrozen_collections_scylla_cdc_log (
+    // CREATE TABLE ks.nonfrozen_collections_scylla_cdc_log (
     //    "cdc$stream_id" blob,
     //    "cdc$time" timeuuid,
     //    "cdc$batch_seq_no" int,
@@ -114,14 +114,14 @@ public class ChangeSchemaTest {
     private static final ChangeSchema.DataType FROZEN_SET_TIMEUUID = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID)), true);
     private static final ChangeSchema.DataType FROZEN_SET_DOUBLE = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.DOUBLE)), true);
 
-    private static final ChangeSchema.DataType UNFROZEN_SET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
-    private static final ChangeSchema.DataType UNFROZEN_LIST_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
-    private static final ChangeSchema.DataType UNFROZEN_MAP_DOUBLE_TEXT = new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, Lists.newArrayList(
+    private static final ChangeSchema.DataType NONFROZEN_SET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
+    private static final ChangeSchema.DataType NONFROZEN_LIST_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
+    private static final ChangeSchema.DataType NONFROZEN_MAP_DOUBLE_TEXT = new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, Lists.newArrayList(
             new ChangeSchema.DataType(ChangeSchema.CqlType.DOUBLE), new ChangeSchema.DataType(ChangeSchema.CqlType.TEXT)), false);
-    private static final ChangeSchema.DataType UNFROZEN_TUPLE_INET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, Lists.newArrayList(
+    private static final ChangeSchema.DataType NONFROZEN_TUPLE_INET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, Lists.newArrayList(
             new ChangeSchema.DataType(ChangeSchema.CqlType.INET), new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
 
-    private static final ChangeSchema TEST_SCHEMA_UNFROZEN_COLLECTIONS = new ChangeSchema(Lists.newArrayList(
+    private static final ChangeSchema TEST_SCHEMA_NONFROZEN_COLLECTIONS = new ChangeSchema(Lists.newArrayList(
             new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null, false),
             new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null, false),
             new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null, false),
@@ -137,10 +137,10 @@ public class ChangeSchemaTest {
             new ChangeSchema.ColumnDefinition("cdc$ttl", 12, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null, false),
             new ChangeSchema.ColumnDefinition("ck", 13, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY, false),
             new ChangeSchema.ColumnDefinition("pk", 14, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY, false),
-            new ChangeSchema.ColumnDefinition("v", 15, FROZEN_SET_INT, UNFROZEN_SET_INT, ChangeSchema.ColumnType.REGULAR, false),
-            new ChangeSchema.ColumnDefinition("v2", 16, FROZEN_LIST_INT, UNFROZEN_LIST_INT, ChangeSchema.ColumnType.REGULAR, true),
-            new ChangeSchema.ColumnDefinition("v3", 17, FROZEN_MAP_DOUBLE_TEXT, UNFROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnType.REGULAR, false),
-            new ChangeSchema.ColumnDefinition("v4", 18, FROZEN_TUPLE_INET_INT, UNFROZEN_TUPLE_INET_INT, ChangeSchema.ColumnType.REGULAR, false)
+            new ChangeSchema.ColumnDefinition("v", 15, FROZEN_SET_INT, NONFROZEN_SET_INT, ChangeSchema.ColumnType.REGULAR, false),
+            new ChangeSchema.ColumnDefinition("v2", 16, FROZEN_LIST_INT, NONFROZEN_LIST_INT, ChangeSchema.ColumnType.REGULAR, true),
+            new ChangeSchema.ColumnDefinition("v3", 17, FROZEN_MAP_DOUBLE_TEXT, NONFROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnType.REGULAR, false),
+            new ChangeSchema.ColumnDefinition("v4", 18, FROZEN_TUPLE_INET_INT, NONFROZEN_TUPLE_INET_INT, ChangeSchema.ColumnType.REGULAR, false)
     ));
 
     @Test
@@ -165,15 +165,15 @@ public class ChangeSchemaTest {
         // frozen<tuple<inet, int>>
         assertTrue(FROZEN_TUPLE_INET_INT.isAtomic());
 
-        // Unfrozen types:
+        // Nonfrozen types:
 
         // set<int>
-        assertFalse(UNFROZEN_SET_INT.isAtomic());
+        assertFalse(NONFROZEN_SET_INT.isAtomic());
         // list<int>
-        assertFalse(UNFROZEN_LIST_INT.isAtomic());
+        assertFalse(NONFROZEN_LIST_INT.isAtomic());
         // map<double, text>
-        assertFalse(UNFROZEN_MAP_DOUBLE_TEXT.isAtomic());
+        assertFalse(NONFROZEN_MAP_DOUBLE_TEXT.isAtomic());
         // tuple<inet, int>
-        assertFalse(UNFROZEN_TUPLE_INET_INT.isAtomic());
+        assertFalse(NONFROZEN_TUPLE_INET_INT.isAtomic());
     }
 }
