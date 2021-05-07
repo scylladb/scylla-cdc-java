@@ -14,6 +14,11 @@
 
     <properties>
         <scylla.driver.version>3.10.2-scylla-1</scylla.driver.version>
+
+        <!-- Integration tests. -->
+        <docker.skip>false</docker.skip>
+        <scylla.docker.port>4301</scylla.docker.port>
+        <scylla.docker.version>latest</scylla.docker.version>
     </properties>
 
     <dependencies>
@@ -60,6 +65,88 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>0.34.1</version>
+
+                <configuration>
+                    <imagePullPolicy>Always</imagePullPolicy>
+                    <images>
+                        <image>
+                            <alias>scylla</alias>
+                            <name>scylladb/scylla:${scylla.docker.version}</name>
+                            <run>
+                                <ports>
+                                    <port>${scylla.docker.port}:9042</port>
+                                </ports>
+                                <wait>
+                                    <!-- Wait for Scylla to start up. -->
+                                    <log>init - serving</log>
+                                    <time>90000</time>
+                                </wait>
+                                <cpuSet>0</cpuSet>
+                            </run>
+                        </image>
+                    </images>
+                </configuration>
+
+                <executions>
+                    <execution>
+                        <id>start</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>start</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>stop</id>
+                        <phase>post-integration-test</phase>
+                        <goals>
+                            <goal>stop</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.0.0-M5</version>
+
+                <configuration>
+                    <systemPropertyVariables>
+                        <scylla.docker.hostname>${docker.host.address}</scylla.docker.hostname>
+                        <scylla.docker.port>${scylla.docker.port}</scylla.docker.port>
+                    </systemPropertyVariables>
+                </configuration>
+
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>skip-integration-tests</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+                <property>
+                    <name>skipITs</name>
+                </property>
+            </activation>
+            <properties>
+                <docker.skip>true</docker.skip>
+            </properties>
+        </profile>
+    </profiles>
 </project>

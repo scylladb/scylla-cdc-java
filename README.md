@@ -40,6 +40,9 @@ cd scylla-cdc-java
 mvn clean install
 ```
 
+By default, during the installation, a suite of Docker integration tests are run. If you wish to disable them, pass a
+`-DskipITs` flag: `mvn clean install -DskipITs`.
+
 ## Getting started
 
 The following code snippet establishes a connection to local Scylla cluster (`127.0.0.1`) and starts printing CDC log rows from CDC table of `ks.table`.
