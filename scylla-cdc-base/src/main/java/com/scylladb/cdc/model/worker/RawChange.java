@@ -124,12 +124,56 @@ public interface RawChange extends Iterable<Cell> {
      */
     ByteBuffer getAsUnsafeBytes(ChangeSchema.ColumnDefinition columnDefinition);
 
+    /**
+     * Returns the boolean value of the deleted column for the given column name.
+     * <p>
+     * This method returns the value of the <code>cdc$deleted_</code> column for
+     * the given column name. It is only relevant for the regular columns
+     * (columns not in a primary key) of the base table, because only
+     * those columns have a corresponding deleted column.
+     * <p>
+     * If a column in a delta row is <code>NULL</code> and this method returns <code>true</code> for this
+     * column, it means that a <code>NULL</code> value was written in this CDC
+     * operation.
+     * <p>
+     * The meaning of the deleted column is different for preimage rows
+     * and mutations of non-frozen collections. See <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     * and <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-preimages/">Preimages and postimages</a> pages for more details.
+     *
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-basic-operations/">Basic operations in CDC</a>
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-preimages/">Preimages and postimages</a>
+     * @param columnName the column name for which to retrieve the deleted column.
+     * @return the boolean value of the deleted column for the given column.
+     */
     default boolean isDeleted(String columnName) {
         return isDeleted(getSchema().getColumnDefinition(columnName));
     }
 
-    default boolean isDeleted(ChangeSchema.ColumnDefinition c) {
-        Boolean value = getCell(c.getDeletedColumn(getSchema())).getBoolean();
+    /**
+     * Returns the boolean value of the deleted column for the given column.
+     * <p>
+     * This method returns the value of the <code>cdc$deleted_</code> column for
+     * the given column. It is only relevant for the regular columns
+     * (columns not in a primary key) of the base table, because only
+     * those columns have a corresponding deleted column.
+     * <p>
+     * If a column in a delta row is <code>NULL</code> and this method returns <code>true</code> for this
+     * column, it means that a <code>NULL</code> value was written in this CDC
+     * operation.
+     * <p>
+     * The meaning of the deleted column is different for preimage rows
+     * and mutations of non-frozen collections. See <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     * and <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-preimages/">Preimages and postimages</a> pages for more details.
+     *
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-basic-operations/">Basic operations in CDC</a>
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+     * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-preimages/">Preimages and postimages</a>
+     * @param columnDefinition the column for which to retrieve the deleted column.
+     * @return the boolean value of the deleted column for the given column.
+     */
+    default boolean isDeleted(ChangeSchema.ColumnDefinition columnDefinition) {
+        Boolean value = getCell(columnDefinition.getDeletedColumn(getSchema())).getBoolean();
         return value != null && value;
     }
 
