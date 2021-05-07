@@ -1,6 +1,5 @@
 # scylla-cdc-java
-
-## Overview
+[![Tests](https://img.shields.io/github/workflow/status/scylladb/scylla-cdc-java/Tests/master?label=Tests)](https://github.com/scylladb/scylla-cdc-java/actions/workflows/tests.yml) [![Release](https://img.shields.io/maven-central/v/com.scylladb/scylla-cdc-base?label=Release)](https://search.maven.org/search?q=g:com.scylladb%20AND%20a:scylla-cdc*) 
 
 scylla-cdc-java is a library that makes it easy to develop Java applications consuming the [Scylla CDC log](https://docs.scylladb.com/using-scylla/cdc/). The library automatically and transparently handles errors and topology changes of the underlying Scylla cluster. It provides a simple API for reading the CDC log, as well as examples and ready-made tools, such as replicator.
 
