@@ -25,7 +25,7 @@ public class ChangeSchemaTest {
     //    v int,
     //    PRIMARY KEY ("cdc$stream_id", "cdc$time", "cdc$batch_seq_no")
     // )
-    private static final ChangeSchema TEST_SCHEMA_SIMPLE = new ChangeSchema(Lists.newArrayList(
+    public static final ChangeSchema TEST_SCHEMA_SIMPLE = new ChangeSchema(Lists.newArrayList(
             new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null, false),
             new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null, false),
             new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null, false),
@@ -60,14 +60,14 @@ public class ChangeSchemaTest {
     //    v4 frozen<tuple<inet, int>>,
     //    PRIMARY KEY ("cdc$stream_id", "cdc$time", "cdc$batch_seq_no")
     // )
-    private static final ChangeSchema.DataType FROZEN_SET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), true);
-    private static final ChangeSchema.DataType FROZEN_LIST_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), true);
-    private static final ChangeSchema.DataType FROZEN_MAP_DOUBLE_TEXT = new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, Lists.newArrayList(
+    public static final ChangeSchema.DataType FROZEN_SET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), true);
+    public static final ChangeSchema.DataType FROZEN_LIST_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), true);
+    public static final ChangeSchema.DataType FROZEN_MAP_DOUBLE_TEXT = new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, Lists.newArrayList(
             new ChangeSchema.DataType(ChangeSchema.CqlType.DOUBLE), new ChangeSchema.DataType(ChangeSchema.CqlType.TEXT)), true);
-    private static final ChangeSchema.DataType FROZEN_TUPLE_INET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, Lists.newArrayList(
+    public static final ChangeSchema.DataType FROZEN_TUPLE_INET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, Lists.newArrayList(
             new ChangeSchema.DataType(ChangeSchema.CqlType.INET), new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), true);
 
-    private static final ChangeSchema TEST_SCHEMA_FROZEN_COLLECTIONS = new ChangeSchema(Lists.newArrayList(
+    public static final ChangeSchema TEST_SCHEMA_FROZEN_COLLECTIONS = new ChangeSchema(Lists.newArrayList(
             new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null, false),
             new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null, false),
             new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null, false),
@@ -111,17 +111,17 @@ public class ChangeSchemaTest {
     //    v4 frozen<tuple<inet, int>>,
     //    PRIMARY KEY ("cdc$stream_id", "cdc$time", "cdc$batch_seq_no")
     // )
-    private static final ChangeSchema.DataType FROZEN_SET_TIMEUUID = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID)), true);
-    private static final ChangeSchema.DataType FROZEN_SET_DOUBLE = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.DOUBLE)), true);
+    public static final ChangeSchema.DataType FROZEN_SET_TIMEUUID = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID)), true);
+    public static final ChangeSchema.DataType FROZEN_SET_DOUBLE = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.DOUBLE)), true);
 
-    private static final ChangeSchema.DataType NONFROZEN_SET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
-    private static final ChangeSchema.DataType NONFROZEN_LIST_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
-    private static final ChangeSchema.DataType NONFROZEN_MAP_DOUBLE_TEXT = new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, Lists.newArrayList(
+    public static final ChangeSchema.DataType NONFROZEN_SET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.SET, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
+    public static final ChangeSchema.DataType NONFROZEN_LIST_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.LIST, Collections.singletonList(new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
+    public static final ChangeSchema.DataType NONFROZEN_MAP_DOUBLE_TEXT = new ChangeSchema.DataType(ChangeSchema.CqlType.MAP, Lists.newArrayList(
             new ChangeSchema.DataType(ChangeSchema.CqlType.DOUBLE), new ChangeSchema.DataType(ChangeSchema.CqlType.TEXT)), false);
-    private static final ChangeSchema.DataType NONFROZEN_TUPLE_INET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, Lists.newArrayList(
+    public static final ChangeSchema.DataType NONFROZEN_TUPLE_INET_INT = new ChangeSchema.DataType(ChangeSchema.CqlType.TUPLE, Lists.newArrayList(
             new ChangeSchema.DataType(ChangeSchema.CqlType.INET), new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
 
-    private static final ChangeSchema TEST_SCHEMA_NONFROZEN_COLLECTIONS = new ChangeSchema(Lists.newArrayList(
+    public static final ChangeSchema TEST_SCHEMA_NONFROZEN_COLLECTIONS = new ChangeSchema(Lists.newArrayList(
             new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null, false),
             new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null, false),
             new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null, false),
