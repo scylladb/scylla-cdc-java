@@ -149,6 +149,12 @@ public class MockRawChange implements RawChange {
             return this;
         }
 
+        public Builder addNonfrozenSetRegularColumnDelete(String columnName, Set<Object> deletedElements, ChangeSchema.DataType setDataType) {
+            Preconditions.checkNotNull(deletedElements);
+            this.columnValues.put("cdc$deleted_elements_" + columnName, boxObjectsToFields(deletedElements, setDataType));
+            return this;
+        }
+
         public MockRawChange build() {
             return new MockRawChange(changeSchema, columnValues);
         }
