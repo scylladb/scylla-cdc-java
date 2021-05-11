@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.LinkedHashSet;
+import java.util.Collections;
 import java.util.stream.Collectors;
 
 public class MockRawChange implements RawChange {
@@ -107,6 +109,22 @@ public class MockRawChange implements RawChange {
                     return type;
                 }
             };
+        }
+
+        private Set<Field> boxObjectsToFields(Set<Object> set, ChangeSchema.DataType setDataType) {
+            if (set == null) {
+                return null;
+            }
+            // Using LinkedHashSet to preserve the order.
+            return set.stream().map(e -> makeField(e, setDataType))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+        }
+
+        private List<Field> boxObjectsToFields(List<Object> list, ChangeSchema.DataType listDataType) {
+            if (list == null) {
+                return null;
+            }
+            return list.stream().map(e -> makeField(e, listDataType)).collect(Collectors.toList());
         }
 
         public Builder addFrozenSetRegularColumn(String columnName, Set<Object> set, ChangeSchema.DataType setDataType) {
