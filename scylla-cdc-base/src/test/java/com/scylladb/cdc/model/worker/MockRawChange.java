@@ -161,7 +161,26 @@ public class MockRawChange implements RawChange {
 
     @Override
     public Object getAsObject(ChangeSchema.ColumnDefinition c) {
-        return columnValues.get(c.getColumnName());
+        Object value = columnValues.get(c.getColumnName());
+
+        // Scylla does not distinguish an empty SET, LIST, MAP
+        // with NULL. Java Driver 3.x returns an empty collection
+        // in such case, as opposed to null.
+        if (value == null) {
+            switch (c.getCdcLogDataType().getCqlType()) {
+                case SET:
+                    return Collections.emptySet();
+                case LIST:
+                    return Collections.emptyList();
+                case MAP:
+                    return Collections.emptyMap();
+                default:
+                    // If not a collection, return null.
+                    return null;
+            }
+        }
+
+        return value;
     }
 
     @Override
