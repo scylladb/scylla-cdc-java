@@ -95,13 +95,14 @@ public class Driver3SchemaBuilder {
         ChangeSchema.DataType dataType = translateColumnDataType(driverDefinition.getType());
         ChangeSchema.DataType baseType = null;
         ChangeSchema.ColumnType baseTableColumnType = ChangeSchema.ColumnType.REGULAR;
-        boolean baseIsNonfrozenList = false;
         if (baseTablePartitionKeyColumnNames.contains(columnName)) {
             baseTableColumnType = ChangeSchema.ColumnType.PARTITION_KEY;
         } else if (baseTableClusteringKeyColumnNames.contains(columnName)) {
             baseTableColumnType = ChangeSchema.ColumnType.CLUSTERING_KEY;
         } else {
-            /* Calculate whether corresponding base column is a non-frozen list.
+            /* Fill in the baseType field. One of its uses is to determine
+             * if the base column is a non-frozen list. Below is commentary
+             * why it's safe to use this value:
              *
              * See comment in `generatePrimaryKeyColumns` about us racing with schema changes.
              * Luckily, it's not possible to change the type of a column that is a non-frozen list,
@@ -120,21 +121,9 @@ public class Driver3SchemaBuilder {
             ColumnMetadata baseColumnMetadata = baseTableMetadata.getColumn(columnName);
             if (baseColumnMetadata != null) {
                 baseType = translateColumnDataType(baseColumnMetadata.getType());
-                baseIsNonfrozenList = baseType.getCqlType() == ChangeSchema.CqlType.LIST && !baseType.isFrozen();
-
-                // some sanity checking:
-                if (baseIsNonfrozenList && (
-                        dataType.getCqlType() != ChangeSchema.CqlType.MAP ||
-                        dataType.getTypeArguments().get(0).getCqlType() != ChangeSchema.CqlType.TIMEUUID ||
-                        !driverDefinition.getType().getTypeArguments().get(1).equals(baseType.getTypeArguments().get(0)))) {
-                    throw new IllegalStateException(
-                            String.format("expected CDC value column type map<timeuuid, %s> for base column type list<%s>, got map<%s, %s>",
-                                    dataType.getTypeArguments().get(1).getCqlType().toString(), baseType.getTypeArguments().get(0).toString(),
-                                    dataType.getTypeArguments().get(0).getCqlType().toString(), dataType.getTypeArguments().get(1).getCqlType().toString()));
-                }
             }
         }
-        return new ChangeSchema.ColumnDefinition(columnName, index, dataType, baseType, baseTableColumnType, baseIsNonfrozenList);
+        return new ChangeSchema.ColumnDefinition(columnName, index, dataType, baseType, baseTableColumnType);
     }
 
     private ChangeSchema.DataType translateColumnDataType(DataType driverType) {
