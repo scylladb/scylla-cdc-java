@@ -128,40 +128,22 @@ public class MockRawChange implements RawChange {
         }
 
         public Builder addFrozenSetRegularColumn(String columnName, Set<Object> set, ChangeSchema.DataType setDataType) {
-            Set<Field> transformedSet = null;
-            if (set != null) {
-                transformedSet = set.stream().map(e -> makeField(e, setDataType)).collect(Collectors.toSet());
-            }
-            return addAtomicRegularColumn(columnName, transformedSet);
+            return addAtomicRegularColumn(columnName, boxObjectsToFields(set, setDataType));
         }
 
         public Builder addFrozenListRegularColumn(String columnName, List<Object> list, ChangeSchema.DataType listDataType) {
-            List<Field> transformedList = null;
-            if (list != null) {
-                transformedList = list.stream().map(e -> makeField(e, listDataType)).collect(Collectors.toList());
-            }
-            return addAtomicRegularColumn(columnName, transformedList);
+            return addAtomicRegularColumn(columnName, boxObjectsToFields(list, listDataType));
         }
 
         public Builder addNonfrozenSetRegularColumnOverwrite(String columnName, Set<Object> set, ChangeSchema.DataType setDataType) {
-            Set<Field> transformedSet = null;
-            if (set != null) {
-                transformedSet = set.stream().map(e -> makeField(e, setDataType)).collect(Collectors.toSet());
-            }
-
-            this.columnValues.put(columnName, transformedSet);
+            this.columnValues.put(columnName, boxObjectsToFields(set, setDataType));
             this.columnValues.put("cdc$deleted_" + columnName, true);
             // cdc$deleted_elements_ is not set.
             return this;
         }
 
         public Builder addNonfrozenListRegularColumnOverwrite(String columnName, List<Object> list, ChangeSchema.DataType listDataType) {
-            List<Field> transformedList = null;
-            if (list != null) {
-                transformedList = list.stream().map(e -> makeField(e, listDataType)).collect(Collectors.toList());
-            }
-
-            this.columnValues.put(columnName, transformedList);
+            this.columnValues.put(columnName, boxObjectsToFields(list, listDataType));
             this.columnValues.put("cdc$deleted_" + columnName, true);
             // cdc$deleted_elements_ is not set.
             return this;
