@@ -107,9 +107,14 @@ public class PreImageOperationHandler implements CdcOperationHandler {
         return CompletableFuture.completedFuture(null);
     }
 
+    private static boolean isBaseTypeNonfrozenList(ChangeSchema.ColumnDefinition columnDefinition) {
+        ChangeSchema.DataType cellBaseType = columnDefinition.getBaseTableDataType();
+        return cellBaseType.getCqlType() == ChangeSchema.CqlType.LIST && !cellBaseType.isFrozen();
+    }
+
     /* Casts the given preimage cell to a value as if it would appear in a standard CQL read from the base table. */
     private static Object asObject(Cell preimageCell) {
-        if (preimageCell.getColumnDefinition().baseIsNonfrozenList()) {
+        if (isBaseTypeNonfrozenList(preimageCell.getColumnDefinition())) {
             // The keys (timeuuids) define the order of values in a non-frozen list
             // and we store our maps in a way that preserves the order of keys returned by the driver.
             // To get the list as it appears in a CQL base table read, we simply drop all keys:
@@ -119,9 +124,11 @@ public class PreImageOperationHandler implements CdcOperationHandler {
     }
 
     // hack: we're using ChangeSchema.DataType to represent base table types
+    // FIXME: once colDef.getBaseTableDataType() is consistent with colDef.getCdcLogDataType(), remove this
+    //  with colDef.getBaseTableDataType().
     private static ChangeSchema.DataType calculateBaseType(ChangeSchema.ColumnDefinition colDef) {
         ChangeSchema.DataType logType = colDef.getCdcLogDataType();
-        if (colDef.baseIsNonfrozenList()) {
+        if (isBaseTypeNonfrozenList(colDef)) {
             return ChangeSchema.DataType.list(logType.getTypeArguments().get(1));
         }
         return logType;

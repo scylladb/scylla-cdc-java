@@ -26,16 +26,16 @@ public class ChangeSchemaTest {
     //    PRIMARY KEY ("cdc$stream_id", "cdc$time", "cdc$batch_seq_no")
     // )
     public static final ChangeSchema TEST_SCHEMA_SIMPLE = new ChangeSchema(Lists.newArrayList(
-            new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 4, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$operation", 5, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$ttl", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null, false),
-            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY, false),
-            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY, false),
-            new ChangeSchema.ColumnDefinition("v", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.REGULAR, false)
+            new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 4, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$operation", 5, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$ttl", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null),
+            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY),
+            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY),
+            new ChangeSchema.ColumnDefinition("v", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.REGULAR)
     ));
 
     // CDC table for:
@@ -68,22 +68,22 @@ public class ChangeSchemaTest {
             new ChangeSchema.DataType(ChangeSchema.CqlType.INET), new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), true);
 
     public static final ChangeSchema TEST_SCHEMA_FROZEN_COLLECTIONS = new ChangeSchema(Lists.newArrayList(
-            new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v2", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v3", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v4", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 4, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$operation", 5, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$ttl", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null, false),
-            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY, false),
-            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY, false),
-            new ChangeSchema.ColumnDefinition("v", 9, FROZEN_SET_INT, FROZEN_SET_INT, ChangeSchema.ColumnType.REGULAR, false),
-            new ChangeSchema.ColumnDefinition("v2", 10, FROZEN_LIST_INT, FROZEN_LIST_INT, ChangeSchema.ColumnType.REGULAR, false),
-            new ChangeSchema.ColumnDefinition("v3", 11, FROZEN_MAP_DOUBLE_TEXT, FROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnType.REGULAR, false),
-            new ChangeSchema.ColumnDefinition("v4", 12, FROZEN_TUPLE_INET_INT, FROZEN_TUPLE_INET_INT, ChangeSchema.ColumnType.REGULAR, false)
+            new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v2", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v3", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v4", 3, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 4, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$operation", 5, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$ttl", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null),
+            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY),
+            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY),
+            new ChangeSchema.ColumnDefinition("v", 9, FROZEN_SET_INT, FROZEN_SET_INT, ChangeSchema.ColumnType.REGULAR),
+            new ChangeSchema.ColumnDefinition("v2", 10, FROZEN_LIST_INT, FROZEN_LIST_INT, ChangeSchema.ColumnType.REGULAR),
+            new ChangeSchema.ColumnDefinition("v3", 11, FROZEN_MAP_DOUBLE_TEXT, FROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnType.REGULAR),
+            new ChangeSchema.ColumnDefinition("v4", 12, FROZEN_TUPLE_INET_INT, FROZEN_TUPLE_INET_INT, ChangeSchema.ColumnType.REGULAR)
     ));
 
     // CDC table for:
@@ -122,25 +122,25 @@ public class ChangeSchemaTest {
             new ChangeSchema.DataType(ChangeSchema.CqlType.INET), new ChangeSchema.DataType(ChangeSchema.CqlType.INT)), false);
 
     public static final ChangeSchema TEST_SCHEMA_NONFROZEN_COLLECTIONS = new ChangeSchema(Lists.newArrayList(
-            new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_elements_v", 3, FROZEN_SET_INT, null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_elements_v2", 4, FROZEN_SET_TIMEUUID, null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_elements_v3", 5, FROZEN_SET_DOUBLE, null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v2", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v3", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$deleted_v4", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 10, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$operation", 11, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null, false),
-            new ChangeSchema.ColumnDefinition("cdc$ttl", 12, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null, false),
-            new ChangeSchema.ColumnDefinition("ck", 13, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY, false),
-            new ChangeSchema.ColumnDefinition("pk", 14, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY, false),
-            new ChangeSchema.ColumnDefinition("v", 15, FROZEN_SET_INT, NONFROZEN_SET_INT, ChangeSchema.ColumnType.REGULAR, false),
-            new ChangeSchema.ColumnDefinition("v2", 16, FROZEN_LIST_INT, NONFROZEN_LIST_INT, ChangeSchema.ColumnType.REGULAR, true),
-            new ChangeSchema.ColumnDefinition("v3", 17, FROZEN_MAP_DOUBLE_TEXT, NONFROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnType.REGULAR, false),
-            new ChangeSchema.ColumnDefinition("v4", 18, FROZEN_TUPLE_INET_INT, NONFROZEN_TUPLE_INET_INT, ChangeSchema.ColumnType.REGULAR, false)
+            new ChangeSchema.ColumnDefinition("cdc$stream_id", 0, new ChangeSchema.DataType(ChangeSchema.CqlType.BLOB), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$time", 1, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMEUUID), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$batch_seq_no", 2, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_elements_v", 3, FROZEN_SET_INT, null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_elements_v2", 4, FROZEN_SET_TIMEUUID, null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_elements_v3", 5, FROZEN_SET_DOUBLE, null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v2", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v3", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$deleted_v4", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 10, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$operation", 11, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null),
+            new ChangeSchema.ColumnDefinition("cdc$ttl", 12, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null),
+            new ChangeSchema.ColumnDefinition("ck", 13, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY),
+            new ChangeSchema.ColumnDefinition("pk", 14, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY),
+            new ChangeSchema.ColumnDefinition("v", 15, FROZEN_SET_INT, NONFROZEN_SET_INT, ChangeSchema.ColumnType.REGULAR),
+            new ChangeSchema.ColumnDefinition("v2", 16, FROZEN_LIST_INT, NONFROZEN_LIST_INT, ChangeSchema.ColumnType.REGULAR),
+            new ChangeSchema.ColumnDefinition("v3", 17, FROZEN_MAP_DOUBLE_TEXT, NONFROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnType.REGULAR),
+            new ChangeSchema.ColumnDefinition("v4", 18, FROZEN_TUPLE_INET_INT, NONFROZEN_TUPLE_INET_INT, ChangeSchema.ColumnType.REGULAR)
     ));
 
     @Test
