@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0 - 14 May 2021
+
+### Breaking changes
+- `RawChangeConsumerProvider` is now deprecated. Previously it allowed having a separate consumer per each thread. Due to new Executor backend (described later in the changelog), this functionality is now not possible. The library now uses only a single consumer that is shared between all Executor threads.
+
+### Major changes
+- **Executors.** The core of the library is now using Executors instead of threads. It makes the code more modern and provides some performance boost.
+- **Consumers class.** This new class brings together all possible ways of consuming the CDC log. It makes it easier to write non-asynchronous consumers (`Consumers::syncRawChangeConsumer`).
+- **Configurable consistency level and configurable local DC.** It is now possible to configure the consistency level (`CQLConfiguration.Builder::withConsistencyLevel`). This configuration option determines the consistency level the CDC log table is queried with. You can also set the local DC name (`CQLConfiguration.Builder::withLocalDCName`), which prioritizes sending the requests to a local DC. 
+
+### Minor changes
+- **New API methods.** `ChangeSchema` now includes information about the base table data type (not only the CDC log data type). The data type now contains the information whether the column is frozen or atomic. Two utility methods: `getDeletedElementsColumnDefinition` and `getDeletedColumnDefinition` were added to `ChangeSchema`. You can now access raw bytes (as returned by the Scylla driver) by using `getAsUnsafeBytes()` on `Cell`. New methods were added to `RawChange`: `getDeletedElements()`, `isEndOfBatch()`, `getBatchSequenceNumber()`, `streams()`, `iterator()`. 
+- **Under the hood changes.** There were multiple unit tests added, as well as new integration tests of driver code and JavaDocs for a number of methods.
+
 ## 1.1.0 - 23 March 2021
 
 ### Breaking changes
