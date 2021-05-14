@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.function.Supplier;
 
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.CQLConfiguration;
@@ -29,7 +30,7 @@ public final class CDCConsumer implements AutoCloseable {
     private MasterThread master;
 
     private CDCConsumer(CQLConfiguration cqlConfiguration, MasterConfiguration.Builder masterConfigurationBuilder,
-                       WorkerConfiguration.Builder workerConfigurationBuilder) {
+                       WorkerConfiguration.Builder workerConfigurationBuilder, Supplier<ScheduledExecutorService> executorServiceSupplier) {
         Preconditions.checkNotNull(cqlConfiguration);
         Preconditions.checkNotNull(masterConfigurationBuilder);
         Preconditions.checkNotNull(workerConfigurationBuilder);
@@ -38,7 +39,7 @@ public final class CDCConsumer implements AutoCloseable {
 
         this.session = new Driver3Session(cqlConfiguration);
         workerConfigurationBuilder.withCQL(new Driver3WorkerCQL(session));
-        this.transport = new LocalTransport(cdcThreadGroup, workerConfigurationBuilder);
+        this.transport = new LocalTransport(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier);
 
         MasterCQL masterCQL = new Driver3MasterCQL(session);
         this.masterConfiguration = masterConfigurationBuilder
@@ -98,7 +99,7 @@ public final class CDCConsumer implements AutoCloseable {
                 = WorkerConfiguration.builder();
 
         private int workersCount = getDefaultWorkersCount();
-        private ScheduledExecutorService executorService;
+        private Supplier<ScheduledExecutorService> executorServiceSupplier = getDefaultExecutorServiceSupplier(workersCount);
 
         @SuppressWarnings("deprecation")
         public Builder withConsumerProvider(RawChangeConsumerProvider consumerProvider) {
@@ -206,45 +207,23 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
-        /**
-         * Sets the executor service to use for task scheduling.
-         *
-         * Note: CDC library uses delayed/scheduled operations in some cases.
-         * To ensure the fastest possible terminaton/shutdown of a running
-         * worker, you should utilize a {@link ScheduledExecutorService} that
-         * does not wait for non-started tasks scheduled in the future
-         * when shutting down.
-         *
-         * The default exeutor uses a {@link ScheduledThreadPoolExecutor}
-         * with {@link ScheduledThreadPoolExecutor#setExecuteExistingDelayedTasksAfterShutdownPolicy(boolean)}
-         * set to false
-         *
-         * @see ScheduledThreadPoolExecutor
-         * @see ScheduledThreadPoolExecutor#setExecuteExistingDelayedTasksAfterShutdownPolicy(boolean)
-         *
-         * @param executorService
-         * @return
-         */
-        public Builder withExecutorService(ScheduledExecutorService executorService) {
-            this.executorService = executorService;
-            return this;
-        }
-
         public CDCConsumer build() {
-            if (executorService == null) {
-                final ScheduledThreadPoolExecutor s = new ScheduledThreadPoolExecutor(
-                        workersCount);
-                s.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
-                executorService = s;
-            }
-            workerConfigurationBuilder.withExecutorService(executorService);
             return new CDCConsumer(cqlConfigurationBuilder.build(),
-                    masterConfigurationBuilder, workerConfigurationBuilder);
+                    masterConfigurationBuilder, workerConfigurationBuilder, executorServiceSupplier);
         }
 
         private static int getDefaultWorkersCount() {
             int result = Runtime.getRuntime().availableProcessors() - 1;
             return result > 0 ? result : 1;
+        }
+
+        private static Supplier<ScheduledExecutorService> getDefaultExecutorServiceSupplier(int workersCount) {
+            return () -> {
+                final ScheduledThreadPoolExecutor executor =
+                        new ScheduledThreadPoolExecutor(workersCount);
+                executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+                return executor;
+            };
         }
     }
 }
