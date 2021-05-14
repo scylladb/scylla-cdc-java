@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Supplier;
 
 import com.google.common.base.Preconditions;
@@ -28,12 +29,15 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     private final ThreadGroup workersThreadGroup;
     private final WorkerConfiguration.Builder workerConfigurationBuilder;
     private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
+    private final Supplier<ScheduledExecutorService> executorServiceSupplier;
     private Optional<GenerationId> currentGenerationId = Optional.empty();
     private Supplier<InterruptedException> stopWorker = null;
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder) {
+    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
+                          Supplier<ScheduledExecutorService> executorServiceSupplier) {
         workersThreadGroup = new ThreadGroup(cdcThreadGroup, "Scylla-CDC-Worker-Threads");
         this.workerConfigurationBuilder = Preconditions.checkNotNull(workerConfigurationBuilder);
+        this.executorServiceSupplier = Preconditions.checkNotNull(executorServiceSupplier);
     }
 
     @Override
@@ -67,7 +71,10 @@ class LocalTransport implements MasterTransport, WorkerTransport {
                 .findAny().map(TaskId::getGenerationId);
         stop();
 
-        WorkerConfiguration workerConfiguration = workerConfigurationBuilder.withTransport(this).build();
+        WorkerConfiguration workerConfiguration = workerConfigurationBuilder
+                .withTransport(this)
+                .withExecutorService(executorServiceSupplier.get())
+                .build();
 
         Worker w = new Worker(workerConfiguration);
         Thread t = new Thread(workersThreadGroup, () -> {
