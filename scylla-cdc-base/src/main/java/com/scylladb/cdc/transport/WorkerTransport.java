@@ -5,6 +5,7 @@ import java.util.Set;
 
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.worker.TaskState;
+import com.scylladb.cdc.model.worker.Worker;
 
 /*
  * It is safe to assume that this interface will be called from a single thread only
@@ -15,7 +16,7 @@ public interface WorkerTransport {
     void moveStateToNextWindow(TaskId task, TaskState newState);
 
     /**
-     * @deprecated Use {@link Worker.stop()} instead")
+     * @deprecated Use {@link Worker#stop()} instead")
      * @return
      */
     @Deprecated

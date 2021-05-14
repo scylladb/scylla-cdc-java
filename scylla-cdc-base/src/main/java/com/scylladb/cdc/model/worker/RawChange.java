@@ -116,7 +116,7 @@ public interface RawChange extends Iterable<Cell> {
      * <p>
      * This method can be called for any type of column, not only <code>BLOB</code>.
      * If you want to read the value of a <code>BLOB</code> column, please use the
-     * {@link #getCell(ChangeSchema.ColumnDefinition)} )} method and call {@link Cell#getBytes()}.
+     * {@link #getCell(ChangeSchema.ColumnDefinition)} method and call {@link Cell#getBytes()}.
      * <p>
      * If a value of this column is <code>NULL</code>, this method returns <code>null</code>.
      *
