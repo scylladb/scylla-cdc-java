@@ -133,6 +133,17 @@ public class ChangeSchema {
                     "Unexpected value of UdtType for this CQL type: " + cqlType.name());
         }
 
+        /**
+         * Constructs a new data type based on a given data type,
+         * but with a different value of frozen.
+         *
+         * @param dataType the data type that the constructed data type will be based on.
+         * @param isFrozen whether the constructed type will be frozen.
+         */
+        public DataType(DataType dataType, boolean isFrozen) {
+            this(dataType.cqlType, dataType.typeArguments, dataType.udtType, isFrozen);
+        }
+
         public static DataType list(DataType valueType) {
             return list(valueType, false);
         }
@@ -145,10 +156,46 @@ public class ChangeSchema {
             return cqlType;
         }
 
+        /**
+         * Returns whether this data type is frozen.
+         * <p>
+         * This method is only relevant for collection types
+         * (such as {@code SET<INT>}), UDTs and tuples. For all
+         * other types (native types), this method always
+         * returns <code>false</code>. If a type is frozen,
+         * it can only be updated as a whole (i.e. a single
+         * element cannot be added to a frozen list).
+         *
+         * @return whether this data type is frozen.
+         * @see <a href="https://docs.scylladb.com/getting-started/types/#noteworthy-characteristics">Data Types</a>
+         * @see #isAtomic()
+         */
         public boolean isFrozen() {
             return frozen;
         }
 
+        /**
+         * Returns whether this data type is atomic.
+         * <p>
+         * A data type is atomic, if it is a
+         * <a href="https://docs.scylladb.com/getting-started/types/#native-types">native type</a>
+         * (for example <code>INT</code>) or it is a
+         * frozen collection (such as {@code FROZEN<SET<INT>>}),
+         * frozen UDT or frozen tuple.
+         * <p>
+         * Columns with non-atomic types can be updated
+         * partially (without overriding the whole value), for
+         * example by inserting a single element to a {@code SET<INT>}.
+         * Due to this fact, CDC operations on such columns
+         * are represented differently in the CDC log. See
+         * <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+         * for more details.
+         *
+         * @return whether this data type is atomic.
+         * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
+         * @see <a href="https://docs.scylladb.com/getting-started/types/">Data Types</a>
+         * @see #isFrozen()
+         */
         public boolean isAtomic() {
             return cqlType.compareTo(CqlType.LIST) < 0 || isFrozen();
         }
@@ -173,18 +220,22 @@ public class ChangeSchema {
             if (o == null || getClass() != o.getClass()) return false;
             DataType dataType = (DataType) o;
             return cqlType == dataType.cqlType &&
+                    frozen == dataType.frozen &&
                     Objects.equals(typeArguments, dataType.typeArguments) &&
                     Objects.equals(udtType, dataType.udtType);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(cqlType, typeArguments, udtType);
+            return Objects.hash(cqlType, frozen, typeArguments, udtType);
         }
 
         @Override
         public String toString() {
             StringBuilder result = new StringBuilder();
+            if (frozen) {
+                result.append("FROZEN<");
+            }
             result.append(cqlType.name());
             if (typeArguments != null) {
                 result.append('<');
@@ -197,6 +248,9 @@ public class ChangeSchema {
                 result.append(udtType.getFields().entrySet().stream().map(e -> e.getKey() + " " + e.getValue())
                         .collect(Collectors.joining(", ")));
                 result.append('}');
+            }
+            if (frozen) {
+                result.append('>');
             }
             return result.toString();
         }
