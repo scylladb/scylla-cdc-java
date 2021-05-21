@@ -121,6 +121,7 @@
                         <scylla.docker.hostname>${docker.host.address}</scylla.docker.hostname>
                         <scylla.docker.port>${scylla.docker.port}</scylla.docker.port>
                     </systemPropertyVariables>
+                    <trimStackTrace>false</trimStackTrace>
                 </configuration>
 
                 <executions>
