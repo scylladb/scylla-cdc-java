@@ -15,13 +15,11 @@ import java.util.concurrent.TimeoutException;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class Driver3MasterCQLIT extends BaseScyllaIntegrationTest {
-    private static final long SCYLLA_TIMEOUT_MS = 3000;
-
     @Test
     public void testMasterFetchesFirstGenerationId() throws InterruptedException, ExecutionException, TimeoutException {
         // Check that Driver3MasterCQL can fetch the first generation id.
 
-        MasterCQL masterCQL = new Driver3MasterCQL(librarySession);
+        MasterCQL masterCQL = new Driver3MasterCQL(buildLibrarySession());
         Optional<GenerationId> firstGeneration =
                 masterCQL.fetchFirstGenerationId().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
