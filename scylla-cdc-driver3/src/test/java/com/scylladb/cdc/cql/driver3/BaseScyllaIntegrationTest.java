@@ -9,7 +9,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.MasterCQL;
+import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.*;
+import com.scylladb.cdc.model.worker.ChangeSchema;
+import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 import com.scylladb.cdc.model.worker.TaskState;
 import org.junit.jupiter.api.AfterEach;
@@ -75,6 +78,65 @@ public class BaseScyllaIntegrationTest {
         }
 
         return librarySession;
+    }
+
+    /**
+     * Creates a {@link Task} which contains the first row in the CDC log.
+     * <p>
+     * The created {@link Task} queries a single stream id
+     * and spans from the beginning of epoch time to the current time. The
+     * selected stream id is taken from the first row in the CDC log.
+     * <p>
+     * A common scenario is to insert a single row to a base table
+     * (or multiple within a single partition) and then use this method
+     * to build a {@link Task}, which will allow you to read all those
+     * inserted changes.
+     * <p>
+     * Warning: this method will not work properly if the first
+     * row in the CDC log was inserted in a non-first CDC generation.
+     *
+     * @param table the table name for which to create the task.
+     * @return the task containing the first row in the CDC log.
+     */
+    protected Task getTaskWithFirstRow(TableName table) throws ExecutionException, InterruptedException, TimeoutException {
+        // Figure out the cdc$stream_id of the first change:
+        Row cdcRow = driverSession.execute(QueryBuilder.select().all()
+                .from(table.keyspace, table.name + "_scylla_cdc_log")).one();
+        ByteBuffer streamIdBytes = cdcRow.getBytes("cdc$stream_id");
+
+        // Get the first generation id.
+        MasterCQL masterCQL = new Driver3MasterCQL(buildLibrarySession());
+        GenerationId generationId = masterCQL.fetchFirstGenerationId().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS).get();
+
+        StreamId streamId = new StreamId(streamIdBytes);
+        VNodeId vnode = streamId.getVNodeId();
+
+        return new Task(new TaskId(generationId, vnode, table),
+                Sets.newTreeSet(Collections.singleton(streamId)),
+                new TaskState(new Timestamp(new Date(0)), new Timestamp(new Date()), Optional.empty()));
+    }
+
+    /**
+     * Reads a first {@link RawChange} in the CDC log for the given table.
+     * <p>
+     * A common scenario is to insert a single row to a base table
+     * and then use this method to read it back from the CDC log.
+     * <p>
+     * Warning: this method will not work properly if the first
+     * row in the CDC log was inserted in a non-first CDC generation.
+     *
+     * @param table the table name for which to read the first change.
+     * @return the first change in the CDC log for the given table.
+     */
+    protected RawChange getFirstRawChange(TableName table) throws ExecutionException, InterruptedException, TimeoutException {
+        Task readTask = getTaskWithFirstRow(table);
+
+        // Read the inserted row using WorkerCQL.
+        WorkerCQL workerCQL = new Driver3WorkerCQL(buildLibrarySession());
+        workerCQL.prepare(Collections.singleton(table));
+        WorkerCQL.Reader reader = workerCQL.createReader(readTask).get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+        return reader.nextChange().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS).get();
     }
 
     @AfterEach
