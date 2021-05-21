@@ -311,6 +311,9 @@ public class ChangeSchema {
         }
 
         public DataType getBaseTableDataType() {
+            if (isCdcColumn()) {
+                throw new IllegalStateException("Cannot get base table data type for CDC columns.");
+            }
             return baseTableDataType;
         }
         
