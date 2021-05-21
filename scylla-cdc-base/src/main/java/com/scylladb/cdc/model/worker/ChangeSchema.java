@@ -34,9 +34,9 @@ public class ChangeSchema {
         DURATION,
 
         // All types up to this point
-        // are atomic types. This order
+        // are native types. This order
         // is important, as this fact is used in
-        // isAtomic.
+        // isNative.
         LIST,
         MAP,
         SET,
@@ -194,10 +194,28 @@ public class ChangeSchema {
          * @return whether this data type is atomic.
          * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-advanced-types/">Advanced column types</a>
          * @see <a href="https://docs.scylladb.com/getting-started/types/">Data Types</a>
+         * @see #isNative()
          * @see #isFrozen()
          */
         public boolean isAtomic() {
-            return cqlType.compareTo(CqlType.LIST) < 0 || isFrozen();
+            return isNative() || isFrozen();
+        }
+
+        /**
+         * Returns whether this data type is native.
+         * <p>
+         * The native types (such as <code>INT</code>) represent
+         * only a single value (as opposed to collections, UDTs or tuples).
+         * For collections, UDTs or tuples, this method will return <code>true</code> and
+         * for all other types it will return <code>false</code>.
+         * See <a href="https://docs.scylladb.com/getting-started/types/#native-types">Data types</a>
+         * for the full list of available native types.
+         *
+         * @return whether this data type is native.
+         * @see <a href="https://docs.scylladb.com/getting-started/types/#native-types">Data types</a>
+         */
+        public boolean isNative() {
+            return cqlType.compareTo(CqlType.LIST) < 0;
         }
 
         public List<DataType> getTypeArguments() {
