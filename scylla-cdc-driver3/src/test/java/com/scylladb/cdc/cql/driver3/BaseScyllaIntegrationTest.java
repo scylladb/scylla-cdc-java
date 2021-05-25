@@ -7,6 +7,7 @@ import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.schemabuilder.SchemaBuilder;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
+import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.cql.WorkerCQL;
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class BaseScyllaIntegrationTest {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
     protected static final long SCYLLA_TIMEOUT_MS = 3000;
 
     protected Session driverSession;
@@ -33,14 +35,18 @@ public class BaseScyllaIntegrationTest {
 
     private String hostname;
     private int port;
+    private String scyllaVersion;
     private Driver3Session librarySession;
 
+    private boolean hasWaitedForFirstGeneration = false;
+
     @BeforeEach
-    public void beforeEach() {
+    public void beforeEach() throws ExecutionException, InterruptedException, TimeoutException {
         Properties systemProperties = System.getProperties();
 
         hostname = Preconditions.checkNotNull(systemProperties.getProperty("scylla.docker.hostname"));
         port = Integer.parseInt(systemProperties.getProperty("scylla.docker.port"));
+        scyllaVersion = Preconditions.checkNotNull(systemProperties.getProperty("scylla.docker.version"));
 
         driverCluster = Cluster.builder()
                 .addContactPointsWithPorts(new InetSocketAddress(hostname, port))
@@ -56,6 +62,57 @@ public class BaseScyllaIntegrationTest {
                 put("class", "SimpleStrategy");
                 put("replication_factor", "1");
         }}));
+
+        maybeWaitForFirstGeneration();
+    }
+
+    /**
+     * Waits for first CDC generation to start
+     * up. This method is only relevant for
+     * Scylla 4.3, as starting with Scylla 4.4
+     * adding ring delay for the first generation
+     * has been removed: <a href="https://github.com/scylladb/scylla/pull/7654">Pull request #7654</a>,
+     * in which case this method is a no-op. This
+     * method waits for the first generation only
+     * once and the next invocations immediately
+     * return.
+     * <p>
+     * After waiting for first generation to start
+     * it is safe to <code>INSERT</code> rows
+     * into the CDC log table without the
+     * worry of <code>could not find any CDC stream</code>
+     * error.
+     */
+    private void maybeWaitForFirstGeneration() throws ExecutionException, InterruptedException, TimeoutException {
+        if (!scyllaVersion.startsWith("4.3.")) {
+            return;
+        }
+
+        if (hasWaitedForFirstGeneration) {
+            return;
+        }
+
+        // Get the first generation id.
+        MasterCQL masterCQL = new Driver3MasterCQL(buildLibrarySession());
+        GenerationId generationId = masterCQL.fetchFirstGenerationId()
+                .get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS).get();
+
+        // Remove the created librarySession,
+        // so that it does not interfere
+        // with the test code.
+        librarySession.close();
+        librarySession = null;
+
+        // Wait for the generation to start.
+        Date now = new Date();
+        Date generationStart = generationId.getGenerationStart().toDate();
+        long millisecondsToWait = generationStart.getTime() - now.getTime();
+        if (millisecondsToWait > 0) {
+            logger.atInfo().log("Waiting for the first generation for %d ms.", millisecondsToWait);
+            Thread.sleep(millisecondsToWait);
+        }
+
+        hasWaitedForFirstGeneration = true;
     }
 
     /**
