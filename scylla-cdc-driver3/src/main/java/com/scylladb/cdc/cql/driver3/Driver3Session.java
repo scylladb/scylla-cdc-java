@@ -18,6 +18,18 @@ public class Driver3Session implements AutoCloseable {
 
         clusterBuilder = clusterBuilder.addContactPointsWithPorts(cqlConfiguration.contactPoints);
 
+        // Deliberately set the protocol version to V4,
+        // as V5 implements returning a metadata id (schema id)
+        // per each page. Our implementation of Driver3WorkerCQL
+        // relies on the fact that the metadata will not change
+        // during a single PreparedStatement.
+        //
+        // See Driver3WorkerCQL, Driver3SchemaFactory,
+        // Driver3WorkerCQLIT#testPreparedStatementSameSchemaBetweenPages
+        // and Driver3WorkerCQLIT#testPreparedStatementOldSchemaAfterAlter
+        // for more context.
+        clusterBuilder = clusterBuilder.withProtocolVersion(ProtocolVersion.V4);
+
         String user = cqlConfiguration.user, password = cqlConfiguration.password;
         if (user != null && password != null) {
             clusterBuilder = clusterBuilder.withCredentials(user, password);
