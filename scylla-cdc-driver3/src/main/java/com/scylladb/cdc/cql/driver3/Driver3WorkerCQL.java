@@ -26,7 +26,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
-import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -125,6 +124,29 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                     });
                 }
             } else {
+                // The first assumption here is that we can
+                // build the schema only once and it won't
+                // change during the lifetime of this
+                // reader (during a single query window):
+                // the underlying PreparedStatement.
+                //
+                // We rely on the implementation of
+                // Java Driver and the implemented
+                // native protocol version (V4) - set in Driver3Session,
+                // that for a single PreparedStatement
+                // each row will have the same
+                // schema.
+                //
+                // This assumption is verified in integration tests:
+                // Driver3WorkerCQLIT#testPreparedStatementSameSchemaBetweenPages
+                // and Driver3WorkerCQLIT#testPreparedStatementOldSchemaAfterAlter.
+                //
+                // The second assumption is that
+                // between a time that the CDC log query
+                // was prepared (and therefore a CDC schema was
+                // returned by the preparing of the query)
+                // and fetching of the base table schema (now)
+                // there was at most a single schema change.
                 Row row = rs.one();
                 if (schema == null) {
                     try {
@@ -133,11 +155,6 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                         fut.completeExceptionally(ex);
                         return;
                     }
-                } else {
-                    // TODO: the schema might have changed
-                    // is there some hash/digest that we can use to check that?
-                    // it wouldn't be nice if we had to update `schema` on each query/page (expensive)
-                    // See Scylla issue #7824.
                 }
                 Driver3RawChange newChange = new Driver3RawChange(row, schema);
 
