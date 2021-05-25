@@ -127,9 +127,12 @@ public final class Driver3WorkerCQL implements WorkerCQL {
             } else {
                 Row row = rs.one();
                 if (schema == null) {
-                    schema = new Driver3SchemaBuilder()
-                            .withClusterMetadata(session.getCluster().getMetadata())
-                            .withRow(row).build();
+                    try {
+                        schema = Driver3SchemaFactory.getChangeSchema(row, session.getCluster().getMetadata());
+                    } catch (Driver3SchemaFactory.UnresolvableSchemaInconsistencyException ex) {
+                        fut.completeExceptionally(ex);
+                        return;
+                    }
                 } else {
                     // TODO: the schema might have changed
                     // is there some hash/digest that we can use to check that?
