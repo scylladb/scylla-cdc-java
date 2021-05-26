@@ -54,8 +54,8 @@ public class PreImageOperationHandler implements CdcOperationHandler {
     public CompletableFuture<Void> handle(RawChange change, ConsistencyLevel cl) {
         BoundStatement stmt = statement.bind();
         for (ChangeSchema.ColumnDefinition cd : change.getSchema().getNonCdcColumnDefinitions()) {
-            if (cd.getBaseTableColumnType() != ChangeSchema.ColumnType.PARTITION_KEY
-                    && cd.getBaseTableColumnType() != ChangeSchema.ColumnType.CLUSTERING_KEY) {
+            if (cd.getBaseTableColumnKind() != ChangeSchema.ColumnKind.PARTITION_KEY
+                    && cd.getBaseTableColumnKind() != ChangeSchema.ColumnKind.CLUSTERING_KEY) {
                 continue;
             }
 

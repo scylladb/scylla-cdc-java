@@ -155,7 +155,7 @@ for (ChangeSchema.ColumnDefinition columnDefinition : nonCdcColumnDefinitions) {
     // We can get information if this column was a part of primary key
     // in the base table. Note that in CDC log table different columns
     // are part of primary key (cdc$stream_id, cdc$time, batch_seq_no).
-    ChangeSchema.ColumnType baseTableColumnType = columnDefinition.getBaseTableColumnType();
+    ChangeSchema.ColumnKind baseTableColumnKind = columnDefinition.getBaseTableColumnKind();
 
     // Get the information about the data type (as present in CDC log).
     ChangeSchema.DataType logDataType = columnDefinition.getCdcLogDataType();
