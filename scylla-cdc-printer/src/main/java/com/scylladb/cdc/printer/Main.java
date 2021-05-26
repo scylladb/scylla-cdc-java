@@ -123,7 +123,7 @@ public class Main {
             // We can get information if this column was a part of primary key
             // in the base table. Note that in CDC log table different columns
             // are part of primary key (cdc$stream_id, cdc$time, batch_seq_no).
-            ChangeSchema.ColumnType baseTableColumnType = columnDefinition.getBaseTableColumnType();
+            ChangeSchema.ColumnKind baseTableColumnKind = columnDefinition.getBaseTableColumnKind();
 
             // Get the information about the data type (as present in CDC log).
             ChangeSchema.DataType logDataType = columnDefinition.getCdcLogDataType();
@@ -143,7 +143,7 @@ public class Main {
             // For printing purposes, we use getAsObject():
             Object cellValue = cell.getAsObject();
 
-            prettyPrintCell(columnName, baseTableColumnType, logDataType,
+            prettyPrintCell(columnName, baseTableColumnKind, logDataType,
                     cellValue, (++columnIndex == nonCdcColumnDefinitions.size()));
         }
 
@@ -164,9 +164,9 @@ public class Main {
         System.out.println("├────────────────────────────────────────────────────────┤");
     }
 
-    private static void prettyPrintCell(String columnName, ChangeSchema.ColumnType baseTableColumnType, ChangeSchema.DataType logDataType, Object cellValue, boolean isLast) {
+    private static void prettyPrintCell(String columnName, ChangeSchema.ColumnKind baseTableColumnKind, ChangeSchema.DataType logDataType, Object cellValue, boolean isLast) {
         prettyPrintField(columnName + ":", Objects.toString(cellValue));
-        prettyPrintField(columnName + " (schema):", columnName + ", " + logDataType.toString() + ", " + baseTableColumnType.name());
+        prettyPrintField(columnName + " (schema):", columnName + ", " + logDataType.toString() + ", " + baseTableColumnKind.name());
         if (!isLast) {
             prettyPrintField("", "");
         }

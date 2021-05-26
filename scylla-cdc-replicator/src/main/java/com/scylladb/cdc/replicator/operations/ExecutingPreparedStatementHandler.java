@@ -91,10 +91,10 @@ public abstract class ExecutingPreparedStatementHandler extends ExecutingStateme
 
     protected void bindPrimaryKeyColumns(BoundStatement stmt, RawChange c) {
         for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
-            ChangeSchema.ColumnType columnType = cd.getBaseTableColumnType();
+            ChangeSchema.ColumnKind columnKind = cd.getBaseTableColumnKind();
 
-            boolean isPrimaryKey = columnType == ChangeSchema.ColumnType.PARTITION_KEY
-                    || columnType == ChangeSchema.ColumnType.CLUSTERING_KEY;
+            boolean isPrimaryKey = columnKind == ChangeSchema.ColumnKind.PARTITION_KEY
+                    || columnKind == ChangeSchema.ColumnKind.CLUSTERING_KEY;
             if (!isPrimaryKey) {
                 continue;
             }
@@ -105,8 +105,8 @@ public abstract class ExecutingPreparedStatementHandler extends ExecutingStateme
 
     protected void bindPartitionKeyColumns(BoundStatement stmt, RawChange c) {
         for (ChangeSchema.ColumnDefinition cd : c.getSchema().getNonCdcColumnDefinitions()) {
-            ChangeSchema.ColumnType columnType = cd.getBaseTableColumnType();
-            if (columnType != ChangeSchema.ColumnType.PARTITION_KEY) {
+            ChangeSchema.ColumnKind columnKind = cd.getBaseTableColumnKind();
+            if (columnKind != ChangeSchema.ColumnKind.PARTITION_KEY) {
                 continue;
             }
 

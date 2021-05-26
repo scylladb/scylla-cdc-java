@@ -35,9 +35,9 @@ public class ChangeSchemaTest {
             new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 4, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
             new ChangeSchema.ColumnDefinition("cdc$operation", 5, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null),
             new ChangeSchema.ColumnDefinition("cdc$ttl", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null),
-            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY),
-            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY),
-            new ChangeSchema.ColumnDefinition("v", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.REGULAR)
+            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.CLUSTERING_KEY),
+            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.PARTITION_KEY),
+            new ChangeSchema.ColumnDefinition("v", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.REGULAR)
     ));
 
     // CDC table for:
@@ -80,12 +80,12 @@ public class ChangeSchemaTest {
             new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 4, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
             new ChangeSchema.ColumnDefinition("cdc$operation", 5, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null),
             new ChangeSchema.ColumnDefinition("cdc$ttl", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null),
-            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY),
-            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY),
-            new ChangeSchema.ColumnDefinition("v", 9, FROZEN_SET_INT, FROZEN_SET_INT, ChangeSchema.ColumnType.REGULAR),
-            new ChangeSchema.ColumnDefinition("v2", 10, FROZEN_LIST_INT, FROZEN_LIST_INT, ChangeSchema.ColumnType.REGULAR),
-            new ChangeSchema.ColumnDefinition("v3", 11, FROZEN_MAP_DOUBLE_TEXT, FROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnType.REGULAR),
-            new ChangeSchema.ColumnDefinition("v4", 12, FROZEN_TUPLE_INET_INT, FROZEN_TUPLE_INET_INT, ChangeSchema.ColumnType.REGULAR)
+            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.CLUSTERING_KEY),
+            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.PARTITION_KEY),
+            new ChangeSchema.ColumnDefinition("v", 9, FROZEN_SET_INT, FROZEN_SET_INT, ChangeSchema.ColumnKind.REGULAR),
+            new ChangeSchema.ColumnDefinition("v2", 10, FROZEN_LIST_INT, FROZEN_LIST_INT, ChangeSchema.ColumnKind.REGULAR),
+            new ChangeSchema.ColumnDefinition("v3", 11, FROZEN_MAP_DOUBLE_TEXT, FROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnKind.REGULAR),
+            new ChangeSchema.ColumnDefinition("v4", 12, FROZEN_TUPLE_INET_INT, FROZEN_TUPLE_INET_INT, ChangeSchema.ColumnKind.REGULAR)
     ));
 
     // CDC table for:
@@ -137,12 +137,12 @@ public class ChangeSchemaTest {
             new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 10, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
             new ChangeSchema.ColumnDefinition("cdc$operation", 11, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null),
             new ChangeSchema.ColumnDefinition("cdc$ttl", 12, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null),
-            new ChangeSchema.ColumnDefinition("ck", 13, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.CLUSTERING_KEY),
-            new ChangeSchema.ColumnDefinition("pk", 14, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnType.PARTITION_KEY),
-            new ChangeSchema.ColumnDefinition("v", 15, FROZEN_SET_INT, NONFROZEN_SET_INT, ChangeSchema.ColumnType.REGULAR),
-            new ChangeSchema.ColumnDefinition("v2", 16, FROZEN_LIST_INT, NONFROZEN_LIST_INT, ChangeSchema.ColumnType.REGULAR),
-            new ChangeSchema.ColumnDefinition("v3", 17, FROZEN_MAP_DOUBLE_TEXT, NONFROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnType.REGULAR),
-            new ChangeSchema.ColumnDefinition("v4", 18, FROZEN_TUPLE_INET_INT, NONFROZEN_TUPLE_INET_INT, ChangeSchema.ColumnType.REGULAR)
+            new ChangeSchema.ColumnDefinition("ck", 13, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.CLUSTERING_KEY),
+            new ChangeSchema.ColumnDefinition("pk", 14, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.PARTITION_KEY),
+            new ChangeSchema.ColumnDefinition("v", 15, FROZEN_SET_INT, NONFROZEN_SET_INT, ChangeSchema.ColumnKind.REGULAR),
+            new ChangeSchema.ColumnDefinition("v2", 16, FROZEN_LIST_INT, NONFROZEN_LIST_INT, ChangeSchema.ColumnKind.REGULAR),
+            new ChangeSchema.ColumnDefinition("v3", 17, FROZEN_MAP_DOUBLE_TEXT, NONFROZEN_MAP_DOUBLE_TEXT, ChangeSchema.ColumnKind.REGULAR),
+            new ChangeSchema.ColumnDefinition("v4", 18, FROZEN_TUPLE_INET_INT, NONFROZEN_TUPLE_INET_INT, ChangeSchema.ColumnKind.REGULAR)
     ));
 
     @Test
