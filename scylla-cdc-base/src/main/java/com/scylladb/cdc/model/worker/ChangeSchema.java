@@ -274,9 +274,54 @@ public class ChangeSchema {
         }
     }
 
-    // FIXME: misnomer: this should be named ColumnKind
+    /**
+     * The kind of a Scylla column.
+     *
+     * @deprecated Use {@link ColumnKind} instead.
+     * @see ColumnDefinition#getBaseTableColumnKind()
+     */
+    @Deprecated
     public enum ColumnType {
         REGULAR, PARTITION_KEY, CLUSTERING_KEY
+    }
+
+    /**
+     * The kind of a Scylla column. A Scylla
+     * column can either be a part of primary
+     * key (either as a {@link #PARTITION_KEY} or
+     * a {@link #CLUSTERING_KEY}) or be a {@link #REGULAR}
+     * column.
+     *
+     * @see ColumnDefinition#getBaseTableColumnKind()
+     * @see <a href="https://docs.scylladb.com/getting-started/ddl/#primary-key">The primary key</a>
+     * @see <a href="https://docs.scylladb.com/getting-started/ddl/#clustering-columns">The clustering columns</a>
+     */
+    public enum ColumnKind {
+        /**
+         * A regular column. This column
+         * is not a part of the primary key.
+         */
+        REGULAR,
+
+        /**
+         * A partition key column. This
+         * column is a part of the primary key.
+         * There could be many partition key
+         * columns in a partition key. A Scylla table
+         * must contain at least one partition
+         * key column.
+         * @see <a href="https://docs.scylladb.com/getting-started/ddl/#primary-key">The primary key</a>
+         */
+        PARTITION_KEY,
+
+        /**
+         * A clustering key column. This
+         * column is a part of the primary key.
+         * There could be many clustering key
+         * columns in a clustering key.
+         * @see <a href="https://docs.scylladb.com/getting-started/ddl/#clustering-columns">The clustering columns</a>
+         */
+        CLUSTERING_KEY
     }
 
     public static final class ColumnDefinition {
@@ -284,14 +329,14 @@ public class ChangeSchema {
         private final int index;
         private final DataType cdcLogDataType;
         private final DataType baseTableDataType;
-        private final ColumnType baseTableColumnType;
+        private final ColumnKind baseTableColumnKind;
 
-        public ColumnDefinition(String columnName, int index, DataType cdcLogDataType, DataType baseTableDataType, ColumnType baseTableColumnType) {
+        public ColumnDefinition(String columnName, int index, DataType cdcLogDataType, DataType baseTableDataType, ColumnKind baseTableColumnKind) {
             this.columnName = columnName;
             this.index = index;
             this.cdcLogDataType = cdcLogDataType;
             this.baseTableDataType = baseTableDataType;
-            this.baseTableColumnType = baseTableColumnType;
+            this.baseTableColumnKind = baseTableColumnKind;
         }
 
         public int getIndex() {
@@ -317,16 +362,49 @@ public class ChangeSchema {
             return baseTableDataType;
         }
         
+        /**
+         * Returns the kind of this column in the base table.
+         *
+         * @deprecated Use {@link #getBaseTableColumnKind()} instead.
+         * @return the kind of this column in the base table.
+         */
+        @Deprecated
         public ColumnType getBaseTableColumnType() {
+            switch (getBaseTableColumnKind()) {
+                case REGULAR:
+                    return ColumnType.REGULAR;
+                case CLUSTERING_KEY:
+                    return ColumnType.CLUSTERING_KEY;
+                case PARTITION_KEY:
+                    return ColumnType.PARTITION_KEY;
+                default:
+                    throw new IllegalStateException("Unknown column kind: " + getBaseTableColumnKind());
+            }
+        }
+
+        /**
+         * Returns the kind of this column in the base table.
+         * This method is only relevant for columns that
+         * appear in the base table. It will throw
+         * {@code IllegalStateException} for CDC columns.
+         * Note that the column kind in the CDC log table
+         * is different, as the primary key of the CDC log
+         * table is different from the base table.
+         *
+         * @return the kind of this column in the base table.
+         * @throws IllegalStateException if the column is a CDC column.
+         * @see <a href="https://docs.scylladb.com/using-scylla/cdc/cdc-log-table/">The CDC Log Table</a>
+         */
+        public ColumnKind getBaseTableColumnKind() {
             if (isCdcColumn()) {
                 throw new IllegalStateException("Cannot get base table column type for CDC columns.");
             }
-            return baseTableColumnType;
+            return baseTableColumnKind;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(baseTableColumnType, baseTableDataType, cdcLogDataType, columnName, index);
+            return Objects.hash(baseTableColumnKind, baseTableDataType, cdcLogDataType, columnName, index);
         }
 
         @Override
@@ -338,7 +416,7 @@ public class ChangeSchema {
                 return false;
             }
             ColumnDefinition other = (ColumnDefinition) obj;
-            return baseTableColumnType == other.baseTableColumnType
+            return baseTableColumnKind == other.baseTableColumnKind
                     && Objects.equals(baseTableDataType, other.baseTableDataType)
                     && Objects.equals(cdcLogDataType, other.cdcLogDataType)
                     && Objects.equals(columnName, other.columnName) && index == other.index;

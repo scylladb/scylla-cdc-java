@@ -120,6 +120,7 @@
                     <systemPropertyVariables>
                         <scylla.docker.hostname>${docker.host.address}</scylla.docker.hostname>
                         <scylla.docker.port>${scylla.docker.port}</scylla.docker.port>
+                        <scylla.docker.version>${scylla.docker.version}</scylla.docker.version>
                     </systemPropertyVariables>
                     <trimStackTrace>false</trimStackTrace>
                 </configuration>
