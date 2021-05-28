@@ -2,6 +2,7 @@ package com.scylladb.cdc.model.worker;
 
 import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
+import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.worker.cql.Cell;
 import com.scylladb.cdc.model.worker.cql.Field;
 
@@ -15,6 +16,9 @@ import java.util.UUID;
 import java.util.LinkedHashSet;
 import java.util.Collections;
 import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 public class MockRawChange implements RawChange {
     private final ChangeSchema changeSchema;
@@ -46,6 +50,13 @@ public class MockRawChange implements RawChange {
             return this;
         }
 
+        public Builder withStreamId(GenerationMetadata generationMetadata, int vnodeNumber, int streamIndexWithinVNode) {
+            ByteBuffer streamId = generationMetadata.getStreams().stream()
+                    .filter(s -> s.getVNodeId().getIndex() == vnodeNumber)
+                    .skip(streamIndexWithinVNode).findFirst().get().getValue();
+            return withStreamId(streamId);
+        }
+
         public Builder withStreamId(String streamId) {
             byte[] parsedBytes = BaseEncoding.base16().decode(streamId.replace("0x", "").toUpperCase());
             return withStreamId(ByteBuffer.wrap(parsedBytes));
@@ -58,6 +69,10 @@ public class MockRawChange implements RawChange {
 
         public Builder withTime(String timeuuid) {
             return withTime(UUID.fromString(timeuuid));
+        }
+
+        public Builder withTimeMs(long epochTimeMs) {
+            return withTime(TimeUUID.middleOf(epochTimeMs));
         }
 
         public Builder withOperation(byte operation) {

@@ -79,7 +79,7 @@ abstract class TaskAction {
 
         private CompletableFuture<Void> waitForWindow() {
             Date end = task.state.getWindowEndTimestamp().toDate();
-            Date now = new Date();
+            Date now = Date.from(workerConfiguration.getClock().instant());
             long toWait = end.getTime() - now.getTime() + workerConfiguration.confidenceWindowSizeMs;
             if (toWait > 0) {
                 return delay(toWait);

@@ -1,5 +1,6 @@
 package com.scylladb.cdc.model.worker;
 
+import java.util.Objects;
 import java.util.SortedSet;
 
 import com.google.common.base.Preconditions;
@@ -25,5 +26,25 @@ public final class Task {
     public Task updateState(ChangeId lastSeenChangeId) {
         Preconditions.checkNotNull(lastSeenChangeId);
         return new Task(id, streams, state.update(lastSeenChangeId));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Task)) return false;
+        Task task = (Task) o;
+        return id.equals(task.id) &&
+                streams.equals(task.streams) &&
+                state.equals(task.state);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Task(%s, %s, %s)", id, streams, state);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, streams, state);
     }
 }

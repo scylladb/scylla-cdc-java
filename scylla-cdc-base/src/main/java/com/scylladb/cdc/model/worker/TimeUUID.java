@@ -38,6 +38,10 @@ class TimeUUID {
         return new UUID(makeMSB(fromUnixTimestamp(timestamp + 1) - 1), MAX_CLOCK_SEQ_AND_NODE);
     }
 
+    protected static UUID middleOf(long timestamp) {
+        return new UUID(makeMSB(fromUnixTimestamp(timestamp) + 5000), 0);
+    }
+
     private static long fromUnixTimestamp(long tstamp) {
         return (tstamp - START_EPOCH) * 10000;
     }
