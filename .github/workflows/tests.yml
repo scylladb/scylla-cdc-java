@@ -44,7 +44,7 @@ jobs:
 
     strategy:
       matrix:
-        scylla-docker-version: ['latest', '4.4.1', '4.3.2']
+        scylla-docker-version: ['latest', '4.4.4', '4.3.6']
 
     steps:
       - uses: actions/checkout@v2
