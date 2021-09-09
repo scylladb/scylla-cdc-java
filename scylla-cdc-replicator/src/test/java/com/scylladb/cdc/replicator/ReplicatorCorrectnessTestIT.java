@@ -34,7 +34,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
             "CREATE TYPE ks.udt_simple (a int, b int, c text)"
       };
 
-      private static final long DEFAULT_AWAIT_TIMEOUT_MS = 20000;
+      private static final long DEFAULT_AWAIT_TIMEOUT_MS = 30000;
 
       private static final ConditionFactory DEFAULT_AWAIT =
             with().pollInterval(200, TimeUnit.MILLISECONDS).await()
@@ -156,8 +156,8 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
                             data.schema.keyspace, data.schema.tableName, ConsistencyLevel.QUORUM))
             .addTable(new TableName(data.schema.keyspace, data.schema.tableName))
             .withWorkersCount(1)
-            .withQueryTimeWindowSizeMs(200)
-            .withConfidenceWindowSizeMs(1000)
+            .withQueryTimeWindowSizeMs(3000)
+            .withConfidenceWindowSizeMs(3000)
             .build();
 
             Optional<Throwable> validation = consumer.validate();
@@ -249,7 +249,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       );
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testSimpleInserts(Mode mode) {
             TestData data = new TestData(
                   "simpleInserts", 
@@ -265,7 +265,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testSimpleUpdates(Mode mode) {
             TestData data = new TestData(
                   "simpleUpdates", 
@@ -281,7 +281,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testRowDeletes(Mode mode) {
             TestData data = new TestData(
                   "rowDeletes", 
@@ -297,7 +297,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testPartitionDeletes(Mode mode) {
             TestData data = new TestData(
                   "partitionDeletes", 
@@ -315,7 +315,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testRangeDeletes(Mode mode) {
             TestData data = new TestData(
                   "rangeDeletes", 
@@ -347,7 +347,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testBlobs(Mode mode) {
             TestData data = new TestData(
                   "blobs", 
@@ -367,7 +367,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testListOverwrites(Mode mode) {
             TestData data = new TestData(
                   "listOverwrites", 
@@ -418,7 +418,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       // }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testSetOverwrites(Mode mode) {
             TestData data = new TestData(
                   "setOverwrites", 
@@ -437,7 +437,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testSetAppends(Mode mode) {
             TestData data = new TestData(
                   "setAppends", 
@@ -453,7 +453,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testSetRemovals(Mode mode) {
             TestData data = new TestData(
                   "setRemovals", 
@@ -469,7 +469,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testMapOverwrites(Mode mode) {
             TestData data = new TestData(
                   "mapOverwrites", 
@@ -488,7 +488,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testMapSets(Mode mode) {
             TestData data = new TestData(
                   "mapSets", 
@@ -506,7 +506,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testMapAppends(Mode mode) {
             TestData data = new TestData(
                   "mapAppends", 
@@ -522,7 +522,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testMapRemovals(Mode mode) {
             TestData data = new TestData(
                   "mapRemovals", 
@@ -538,7 +538,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testTupleInserts(Mode mode) {
             TestData data = new TestData(
                   "tupleInserts", 
@@ -554,7 +554,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testTupleUpdates(Mode mode) {
             TestData data = new TestData(
                   "tupleUpdates", 
@@ -581,7 +581,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testTuplesInTuples(Mode mode) {
             TestData data = new TestData(
                   "tuplesInTuples", 
@@ -602,7 +602,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testTuplesInTuplesInTuples(Mode mode) {
             TestData data = new TestData(
                   "tuplesInTuplesInTuples", 
@@ -621,7 +621,7 @@ public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       }
 
       @ParameterizedTest
-      @EnumSource(value = Mode.class, names = {"PRE_IMAGE"}, mode = EnumSource.Mode.EXCLUDE)
+      @EnumSource(value = Mode.class)
       public void testUdt(Mode mode) {
             TestData data = new TestData(
                   "udt", 
