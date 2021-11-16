@@ -3,7 +3,7 @@ package com.scylladb.cdc.cql.driver3;
 import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.bindMarker;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.gt;
-import static com.datastax.driver.core.querybuilder.QueryBuilder.in;
+import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.lte;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.select;
 
@@ -11,8 +11,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import com.datastax.driver.core.ConsistencyLevel;
@@ -59,7 +61,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
     private static RegularStatement getStmt(TableName table) {
         return select().all().from(quoteIfNecessary(table.keyspace), quoteIfNecessary(table.name + "_scylla_cdc_log"))
-                .where(in(quoteIfNecessary("cdc$stream_id"), bindMarker()))
+                .where(eq(quoteIfNecessary("cdc$stream_id"), bindMarker()))
                 .and(gt(quoteIfNecessary("cdc$time"), bindMarker()))
                 .and(lte(quoteIfNecessary("cdc$time"), bindMarker()));
     }
@@ -162,20 +164,64 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
     }
 
+    private final class Driver3MultiReader implements Reader {
+
+        private volatile List<Driver3Reader> readers;
+        private AtomicInteger currentReaderIndex;
+
+        public Driver3MultiReader(List<ResultSet> rss, Optional<ChangeId> lastChangeId) {
+            this.readers = rss.stream().map(rs -> new Driver3Reader(rs, lastChangeId)).collect(Collectors.toList());
+            this.currentReaderIndex = new AtomicInteger();
+        }
+
+        private void findNext(CompletableFuture<Optional<RawChange>> fut) {
+            // use many readers
+            if(currentReaderIndex.get() >= readers.size()) {
+                fut.complete(Optional.empty());
+            }
+
+            readers.get(currentReaderIndex.get()).nextChange()
+                .whenCompleteAsync((change, exception) -> {
+                    if (exception != null) {
+                        fut.completeExceptionally(exception);
+                    } else {
+                        if(!change.isPresent()) {
+                            currentReaderIndex.incrementAndGet();
+                            findNext(fut);
+                        } else {
+                            fut.complete(change);
+                        }
+                    }
+                });
+        }
+
+        @Override
+        public CompletableFuture<Optional<RawChange>> nextChange() {
+            CompletableFuture<Optional<RawChange>> result = new CompletableFuture<>();
+            findNext(result);
+            return result;
+        }
+
+    }
+
     private CompletableFuture<Reader> query(PreparedStatement stmt, Task task) {
         CompletableFuture<Reader> result = new CompletableFuture<>();
-        ResultSetFuture future = session
-                .executeAsync(stmt
-                        .bind(task.streams.stream().map(StreamId::getValue).collect(Collectors.toList()),
-                                task.state.getWindowStart(), task.state.getWindowEnd())
-                        .setConsistencyLevel(consistencyLevel));
+        List<ResultSetFuture> futures = task.streams.stream().map(StreamId::getValue)
+            .map(streamId ->
+                session.executeAsync(
+                    stmt.bind(
+                        streamId, task.state.getWindowStart(), task.state.getWindowEnd()
+                    )
+                    .setConsistencyLevel(consistencyLevel)
+                )
+            ).collect(Collectors.toList());
         logger.atFine().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
 
-        Futures.addCallback(future, new FutureCallback<ResultSet>() {
+        Futures.addCallback(Futures.allAsList(futures), new FutureCallback<List<ResultSet>>() {
 
             @Override
-            public void onSuccess(ResultSet rs) {
-                result.complete(new Driver3Reader(rs, task.state.getLastConsumedChangeId()));
+            public void onSuccess(List<ResultSet> rss) {
+                result.complete(new Driver3MultiReader(rss, task.state.getLastConsumedChangeId()));
             }
 
             @Override
