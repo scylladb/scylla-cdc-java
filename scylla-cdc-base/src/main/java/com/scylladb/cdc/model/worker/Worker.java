@@ -48,9 +48,10 @@ public final class Worker {
      * All streams are assumed to belong to the same generation and the initial
      * state is build based on the ID of this generation.
      */
-    private static TaskState getInitialStateForStreams(Map<TaskId, SortedSet<StreamId>> groupedStreams,
-                                                       long windowSizeMs) {
-        return TaskState.createInitialFor(getGenerationIdOfStreams(groupedStreams), windowSizeMs);
+    private TaskState getInitialStateForStreams(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
+        Timestamp now = new Timestamp(Date.from(workerConfiguration.getClock().instant()));
+
+        return TaskState.createInitialFor(getGenerationIdOfStreams(groupedStreams), now, workerConfiguration.confidenceWindowSizeMs, workerConfiguration.queryTimeWindowSizeMs);
     }
 
     /*
@@ -64,7 +65,7 @@ public final class Worker {
      */
     private Stream<Task> createTasksWithState(Map<TaskId, SortedSet<StreamId>> groupedStreams) throws ExecutionException, InterruptedException {
         Map<TaskId, TaskState> states = workerConfiguration.transport.getTaskStates(groupedStreams.keySet());
-        TaskState initialState = getInitialStateForStreams(groupedStreams, workerConfiguration.queryTimeWindowSizeMs);
+        TaskState initialState = getInitialStateForStreams(groupedStreams);
 
         Set<TableName> tableNames = groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet());
         Date now = Date.from(workerConfiguration.getClock().instant());

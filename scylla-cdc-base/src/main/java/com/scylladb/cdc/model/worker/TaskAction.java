@@ -9,6 +9,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
+import com.scylladb.cdc.model.Timestamp;
 
 abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -180,7 +181,9 @@ abstract class TaskAction {
 
         @Override
         public CompletableFuture<TaskAction> run() {
-            TaskState newState = task.state.moveToNextWindow(workerConfiguration.queryTimeWindowSizeMs);
+            Date now = Date.from(workerConfiguration.getClock().instant());
+
+            TaskState newState = task.state.moveToNextWindow(new Timestamp(now), workerConfiguration.confidenceWindowSizeMs, workerConfiguration.queryTimeWindowSizeMs);
             workerConfiguration.transport.moveStateToNextWindow(task.id, newState);
             Task newTask = task.updateState(newState);
             return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(workerConfiguration, newTask, 0));
