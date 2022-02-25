@@ -4,7 +4,7 @@ import java.util.Objects;
 
 import com.google.common.base.Preconditions;
 
-public final class TaskId implements Comparable<TaskId> {
+public class TaskId implements Comparable<TaskId> {
     private final GenerationId generationId;
     private final VNodeId vNodeId;
     private final TableName table;
