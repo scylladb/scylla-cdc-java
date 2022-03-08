@@ -7,13 +7,16 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.in;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.lte;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.select;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.PreparedStatement;
@@ -22,6 +25,7 @@ import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.ResultSetFuture;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.Statement;
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
@@ -93,82 +97,203 @@ public final class Driver3WorkerCQL implements WorkerCQL {
     }
 
     private final class Driver3Reader implements Reader {
+        private final PreparedStatement stmt;
+        private final Task task;
 
-        private volatile ResultSet rs;
-        private volatile ChangeSchema schema;
-        private final Optional<ChangeId> lastChangeId;
+        private volatile ChangeSchema schema = null;
 
-        public Driver3Reader(ResultSet rs, Optional<ChangeId> lastChangeId) {
-            this.rs = Preconditions.checkNotNull(rs);
-            this.lastChangeId = Preconditions.checkNotNull(lastChangeId);
+        // When there is lastChangeId, Driver3Reader
+        // will first read stream from lastChangeId
+        // skipping some prefix of it, then it will
+        // read entire streams from a stream one past
+        // stream in lastChangeId.
+        //
+        // If there was none lastChangeId, Driver3Reader
+        // will only read from entireStreamsResult.
+        private volatile ResultSet partialStreamResult = null;
+        private volatile ResultSet entireStreamsResult = null;
+
+        private volatile boolean finishedReadingPartialStreamResult = false;
+
+        public Driver3Reader(PreparedStatement stmt, Task task) {
+            this.stmt = stmt;
+            this.task = task;
+
+            if (!task.state.getLastConsumedChangeId().isPresent()) {
+                finishedReadingPartialStreamResult = true;
+            }
         }
 
-        private void findNext(CompletableFuture<Optional<RawChange>> fut) {
+        private CompletableFuture<ResultSet> executeAsync(Statement statement) {
+            // Converts from ResultSetFuture to CompletableFuture<ResultSet>
+            ResultSetFuture future = session.executeAsync(statement);
+            CompletableFuture<ResultSet> result = new CompletableFuture<>();
+
+            Futures.addCallback(future, new FutureCallback<ResultSet>() {
+                @Override
+                public void onSuccess(ResultSet rs) {
+                    result.complete(rs);
+                }
+
+                @Override
+                public void onFailure(Throwable t) {
+                    result.completeExceptionally(t);
+                }
+            });
+
+            return result;
+        }
+
+        private CompletableFuture<Optional<Row>> fetchRow(ResultSet rs) {
             if (rs.getAvailableWithoutFetching() == 0) {
                 if (rs.isFullyFetched()) {
-                    fut.complete(Optional.empty());
+                    return CompletableFuture.completedFuture(Optional.empty());
                 } else {
+                    CompletableFuture<Optional<Row>> result = new CompletableFuture<>();
                     Futures.addCallback(rs.fetchMoreResults(), new FutureCallback<ResultSet>() {
-
                         @Override
-                        public void onSuccess(ResultSet result) {
-                            // There's no guarantee what thread will run this
-                            rs = result;
-                            findNext(fut);
+                        public void onSuccess(ResultSet ignored) {
+                            // It turns out you don't have to use the ResultSet
+                            // returned by rs.fetchMoreResults(), just use the
+                            // original rs.
+                            fetchRow(rs).thenAccept(result::complete);
                         }
 
                         @Override
                         public void onFailure(Throwable t) {
-                            fut.completeExceptionally(t);
+                            result.completeExceptionally(t);
                         }
                     });
+                    return result;
                 }
             } else {
-                // The first assumption here is that we can
-                // build the schema only once and it won't
-                // change during the lifetime of this
-                // reader (during a single query window):
-                // the underlying PreparedStatement.
-                //
-                // We rely on the implementation of
-                // Java Driver and the implemented
-                // native protocol version (V4) - set in Driver3Session,
-                // that for a single PreparedStatement
-                // each row will have the same
-                // schema.
-                //
-                // This assumption is verified in integration tests:
-                // Driver3WorkerCQLIT#testPreparedStatementSameSchemaBetweenPages
-                // and Driver3WorkerCQLIT#testPreparedStatementOldSchemaAfterAlter.
-                //
-                // The second assumption is that
-                // between a time that the CDC log query
-                // was prepared (and therefore a CDC schema was
-                // returned by the preparing of the query)
-                // and fetching of the base table schema (now)
-                // there was at most a single schema change.
-                Row row = rs.one();
-                if (schema == null) {
-                    try {
-                        schema = Driver3SchemaFactory.getChangeSchema(row, session.getCluster().getMetadata());
-                    } catch (Driver3SchemaFactory.UnresolvableSchemaInconsistencyException ex) {
-                        fut.completeExceptionally(ex);
-                        return;
-                    }
-                }
-                Driver3RawChange newChange = new Driver3RawChange(row, schema);
+                return CompletableFuture.completedFuture(Optional.of(rs.one()));
+            }
+        }
 
-                // lastChangeId determines the point from which we should
-                // start reading within a window. In this implementation
-                // we simply read the entire window and skip rows that
-                // were before lastChangeId.
-                //
-                // If lastChangeId is Optional.empty(), then we read
-                // the entire window.
-                if (!lastChangeId.isPresent() || newChange.getId().compareTo(lastChangeId.get()) > 0) {
-                    fut.complete(Optional.of(newChange));
+        private RawChange translateRowToRawChange(Row row) throws Driver3SchemaFactory.UnresolvableSchemaInconsistencyException {
+            // The first assumption here is that we can
+            // build the schema only once and it won't
+            // change during the lifetime of this
+            // reader (during a single query window):
+            // the underlying PreparedStatement.
+            //
+            // We rely on the implementation of
+            // Java Driver and the implemented
+            // native protocol version (V4) - set in Driver3Session,
+            // that for a single PreparedStatement
+            // each row will have the same
+            // schema.
+            //
+            // This assumption is verified in integration tests:
+            // Driver3WorkerCQLIT#testPreparedStatementSameSchemaBetweenPages
+            // and Driver3WorkerCQLIT#testPreparedStatementOldSchemaAfterAlter.
+            //
+            // The second assumption is that
+            // between a time that the CDC log query
+            // was prepared (and therefore a CDC schema was
+            // returned by the preparing of the query)
+            // and fetching of the base table schema (now)
+            // there was at most a single schema change.
+            if (schema == null) {
+                schema = Driver3SchemaFactory.getChangeSchema(row, session.getCluster().getMetadata());
+            }
+            return new Driver3RawChange(row, schema);
+        }
+
+        private void startReadingPartialStreamResult(CompletableFuture<Optional<RawChange>> result) {
+            ChangeId lastConsumedChangeId = task.state.getLastConsumedChangeId().get();
+
+            UUID windowStart = lastConsumedChangeId.getChangeTime().getUUID();
+            if (task.state.getWindowStart().compareTo(windowStart) > 0) {
+                windowStart = task.state.getWindowStart();
+            }
+
+            Statement statement = stmt
+                    .bind(Collections.singletonList(lastConsumedChangeId.getStreamId().getValue()),
+                            windowStart, task.state.getWindowEnd())
+                    .setConsistencyLevel(consistencyLevel);
+
+            executeAsync(statement).thenAccept(rs -> {
+                partialStreamResult = rs;
+                findNext(result);
+            }).exceptionally(ex -> {
+                result.completeExceptionally(ex);
+                return null;
+            });
+        }
+
+        private void findNextInPartialStreamResult(CompletableFuture<Optional<RawChange>> result) {
+            fetchRow(partialStreamResult).thenAccept(row -> {
+                if (row.isPresent()) {
+                    try {
+                        result.complete(Optional.of(translateRowToRawChange(row.get())));
+                    } catch (Driver3SchemaFactory.UnresolvableSchemaInconsistencyException e) {
+                        result.completeExceptionally(e);
+                    }
                 } else {
-                    findNext(fut);
+                    finishedReadingPartialStreamResult = true;
+                    findNext(result);
+                }
+            }).exceptionally(ex -> {
+                result.completeExceptionally(ex);
+                return null;
+            });
+        }
+
+        private void startReadingEntireStreamsResult(CompletableFuture<Optional<RawChange>> result) {
+            Stream<StreamId> streams = task.streams.stream();
+
+            if (task.state.getLastConsumedChangeId().isPresent()) {
+                ChangeId lastConsumedChangeId = task.state.getLastConsumedChangeId().get();
+                streams = streams.filter(s -> s.compareTo(lastConsumedChangeId.getStreamId()) > 0);
+            }
+
+            Statement statement = stmt
+                            .bind(streams.map(StreamId::getValue).collect(Collectors.toList()),
+                                    task.state.getWindowStart(), task.state.getWindowEnd())
+                            .setConsistencyLevel(consistencyLevel);
+
+            executeAsync(statement).thenAccept(rs -> {
+                entireStreamsResult = rs;
+                findNext(result);
+            }).exceptionally(ex -> {
+                result.completeExceptionally(ex);
+                return null;
+            });
+        }
+
+        private void findNextInEntireStreamsResult(CompletableFuture<Optional<RawChange>> result) {
+            fetchRow(entireStreamsResult).thenAccept(row -> {
+                if (row.isPresent()) {
+                    try {
+                        result.complete(Optional.of(translateRowToRawChange(row.get())));
+                    } catch (Driver3SchemaFactory.UnresolvableSchemaInconsistencyException e) {
+                        result.completeExceptionally(e);
+                    }
+                } else {
+                    result.complete(Optional.empty());
+                }
+            }).exceptionally(ex -> {
+                result.completeExceptionally(ex);
+                return null;
+            });
+        }
+
+        public void findNext(CompletableFuture<Optional<RawChange>> result) {
+            if (!finishedReadingPartialStreamResult) {
+                // Read from partialStreamResult
+                if (partialStreamResult == null) {
+                    startReadingPartialStreamResult(result);
+                } else {
+                    findNextInPartialStreamResult(result);
+                }
+            } else {
+                // Read from entireStreamsResult
+                if (entireStreamsResult == null) {
+                    startReadingEntireStreamsResult(result);
+                } else {
+                    findNextInEntireStreamsResult(result);
                 }
             }
         }
@@ -179,38 +304,13 @@ public final class Driver3WorkerCQL implements WorkerCQL {
             findNext(result);
             return result;
         }
-
-    }
-
-    private CompletableFuture<Reader> query(PreparedStatement stmt, Task task) {
-        CompletableFuture<Reader> result = new CompletableFuture<>();
-        ResultSetFuture future = session
-                .executeAsync(stmt
-                        .bind(task.streams.stream().map(StreamId::getValue).collect(Collectors.toList()),
-                                task.state.getWindowStart(), task.state.getWindowEnd())
-                        .setConsistencyLevel(consistencyLevel));
-        logger.atFine().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
-
-        Futures.addCallback(future, new FutureCallback<ResultSet>() {
-
-            @Override
-            public void onSuccess(ResultSet rs) {
-                result.complete(new Driver3Reader(rs, task.state.getLastConsumedChangeId()));
-            }
-
-            @Override
-            public void onFailure(Throwable t) {
-                result.completeExceptionally(t);
-            }
-        });
-        return result;
     }
 
     @Override
     public CompletableFuture<Reader> createReader(Task task) {
         PreparedStatement stmt = preparedStmts.get(task.id.getTable());
         Preconditions.checkNotNull(stmt);
-        return query(stmt, task);
+        return CompletableFuture.completedFuture(new Driver3Reader(stmt, task));
     }
 
     @Override
