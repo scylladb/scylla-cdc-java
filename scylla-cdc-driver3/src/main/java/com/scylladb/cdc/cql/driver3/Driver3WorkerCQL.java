@@ -11,8 +11,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import com.datastax.driver.core.ConsistencyLevel;
@@ -58,9 +60,9 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
     private static RegularStatement getStmt(TableName table) {
         return select().all().from(quoteIfNecessary(table.keyspace), quoteIfNecessary(table.name + "_scylla_cdc_log"))
-                .where(eq(quoteIfNecessary("cdc$stream_id"), bindMarker()))
-                .and(gt(quoteIfNecessary("cdc$time"), bindMarker()))
-                .and(lte(quoteIfNecessary("cdc$time"), bindMarker()));
+            .where(eq(quoteIfNecessary("cdc$stream_id"), bindMarker()))
+            .and(gt(quoteIfNecessary("cdc$time"), bindMarker()))
+            .and(lte(quoteIfNecessary("cdc$time"), bindMarker()));
     }
 
     private CompletableFuture<PreparedResult> prepare(TableName table) {
@@ -84,7 +86,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
     public void prepare(Set<TableName> tables) throws InterruptedException, ExecutionException {
         @SuppressWarnings("unchecked")
         CompletableFuture<PreparedResult>[] futures = tables.stream().filter(t -> !preparedStmts.containsKey(t))
-                .map(this::prepare).toArray(n -> new CompletableFuture[n]);
+            .map(this::prepare).toArray(n -> new CompletableFuture[n]);
         CompletableFuture.allOf(futures).get();
         for (CompletableFuture<PreparedResult> f : futures) {
             PreparedResult r = f.get();
@@ -124,37 +126,18 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                     });
                 }
             } else {
-                // The first assumption here is that we can
-                // build the schema only once and it won't
-                // change during the lifetime of this
-                // reader (during a single query window):
-                // the underlying PreparedStatement.
-                //
-                // We rely on the implementation of
-                // Java Driver and the implemented
-                // native protocol version (V4) - set in Driver3Session,
-                // that for a single PreparedStatement
-                // each row will have the same
-                // schema.
-                //
-                // This assumption is verified in integration tests:
-                // Driver3WorkerCQLIT#testPreparedStatementSameSchemaBetweenPages
-                // and Driver3WorkerCQLIT#testPreparedStatementOldSchemaAfterAlter.
-                //
-                // The second assumption is that
-                // between a time that the CDC log query
-                // was prepared (and therefore a CDC schema was
-                // returned by the preparing of the query)
-                // and fetching of the base table schema (now)
-                // there was at most a single schema change.
                 Row row = rs.one();
                 if (schema == null) {
                     try {
                         schema = Driver3SchemaFactory.getChangeSchema(row, session.getCluster().getMetadata());
-                    } catch (Driver3SchemaFactory.UnresolvableSchemaInconsistencyException ex) {
-                        fut.completeExceptionally(ex);
-                        return;
+                    } catch (Driver3SchemaFactory.UnresolvableSchemaInconsistencyException e) {
+                        throw new RuntimeException(e);
                     }
+                } else {
+                    // TODO: the schema might have changed
+                    // is there some hash/digest that we can use to check that?
+                    // it wouldn't be nice if we had to update `schema` on each query/page (expensive)
+                    // See Scylla issue #7824.
                 }
                 Driver3RawChange newChange = new Driver3RawChange(row, schema);
 
@@ -182,20 +165,64 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
     }
 
+    private final class Driver3MultiReader implements Reader {
+
+        private volatile List<Driver3Reader> readers;
+        private AtomicInteger currentReaderIndex;
+
+        public Driver3MultiReader(List<ResultSet> rss, Optional<ChangeId> lastChangeId) {
+            this.readers = rss.stream().map(rs -> new Driver3Reader(rs, lastChangeId)).collect(Collectors.toList());
+            this.currentReaderIndex = new AtomicInteger();
+        }
+
+        private void findNext(CompletableFuture<Optional<RawChange>> fut) {
+            // use many readers
+            if(currentReaderIndex.get() >= readers.size()) {
+                fut.complete(Optional.empty());
+            }
+
+            readers.get(currentReaderIndex.get()).nextChange()
+                .whenCompleteAsync((change, exception) -> {
+                    if (exception != null) {
+                        fut.completeExceptionally(exception);
+                    } else {
+                        if(!change.isPresent()) {
+                            currentReaderIndex.incrementAndGet();
+                            findNext(fut);
+                        } else {
+                            fut.complete(change);
+                        }
+                    }
+                });
+        }
+
+        @Override
+        public CompletableFuture<Optional<RawChange>> nextChange() {
+            CompletableFuture<Optional<RawChange>> result = new CompletableFuture<>();
+            findNext(result);
+            return result;
+        }
+
+    }
+
     private CompletableFuture<Reader> query(PreparedStatement stmt, Task task) {
         CompletableFuture<Reader> result = new CompletableFuture<>();
-        ResultSetFuture future = session
-                .executeAsync(stmt
-                        .bind(task.streams.stream().map(StreamId::getValue).collect(Collectors.toList()),
-                                task.state.getWindowStart(), task.state.getWindowEnd())
-                        .setConsistencyLevel(consistencyLevel));
+        List<ResultSetFuture> futures = task.streams.stream().map(StreamId::getValue)
+            .map(streamId ->
+                session.executeAsync(
+                    stmt.bind(
+                            streamId, task.state.getWindowStart(), task.state.getWindowEnd()
+                        )
+                        .setConsistencyLevel(consistencyLevel)
+                )
+            ).collect(Collectors.toList());
         logger.atFine().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
 
-        Futures.addCallback(future, new FutureCallback<ResultSet>() {
+        Futures.addCallback(Futures.allAsList(futures), new FutureCallback<List<ResultSet>>() {
 
             @Override
-            public void onSuccess(ResultSet rs) {
-                result.complete(new Driver3Reader(rs, task.state.getLastConsumedChangeId()));
+            public void onSuccess(List<ResultSet> rss) {
+                result.complete(new Driver3MultiReader(rss, task.state.getLastConsumedChangeId()));
             }
 
             @Override
