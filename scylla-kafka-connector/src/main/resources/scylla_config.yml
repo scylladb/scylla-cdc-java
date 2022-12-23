@@ -1,0 +1,33 @@
+scyllaDBConfig:
+  host: 129
+  port: 9041
+  userName: admin
+  scPassword: xdk
+  region: ap_south_1
+
+keySpacesAndTablesList: {"testing":[{"tableName":"timeline","primaryKey":"userid"}]}
+
+org: dview   #Organisation Name
+tenant: testing
+#Team name
+sourceIdOrName: scylla  #This value must be unique
+workersCount: 1
+
+kafkaBrokers: localhost:9092
+poolSize: 3 #3 should be given
+
+slackWebhookURL: xxxxxxxx
+checkPointAfterRows: 10
+
+dataSourceConfig:
+  driverClass: com.mysql.cj.jdbc.Driver
+  username: ${MYSQL_USR}
+  password: ${MYSQL_PWD}
+  jdbcUrl: ${MYSQL_HOST_SYCLLA_CONNECTOR}
+  acquireIncrement: 5
+  initialPoolSize: 10
+  minConnectionsPerPartition: 10
+  maxConnectionsPerPartition: 50
+  idleMaxAgeInSeconds: 300
+  statementsCacheSize: 500
+  idleConnectionTestPeriodInSeconds: 30

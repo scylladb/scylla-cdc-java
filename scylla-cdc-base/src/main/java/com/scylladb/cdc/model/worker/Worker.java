@@ -2,6 +2,7 @@ package com.scylladb.cdc.model.worker;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
+import com.dview.manifest.db.mysql.helper.IMysqlDaoHelper;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -29,8 +30,11 @@ public final class Worker {
     private final WorkerConfiguration workerConfiguration;
     private volatile boolean shouldStop = false;
 
+    private IMysqlDaoHelper mysqlDaoHelper;
+
     public Worker(WorkerConfiguration workerConfiguration) {
         this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
+        this.mysqlDaoHelper = ScyllaApplicationContext.getMysqlDaoHelper();
     }
 
     /*
@@ -75,6 +79,7 @@ public final class Worker {
 
         for (TableName tableName : tableNames) {
             Optional<Long> ttl = workerConfiguration.cql.fetchTableTTL(tableName).get();
+            /* To-Do TBD added on checkpointing */
             Date minimumWindowStart = new Date(0);
             if (ttl.isPresent()) {
                 minimumWindowStart = new Date(now.getTime() - 1000L * ttl.get()); // TTL is in seconds, getTime() in milliseconds

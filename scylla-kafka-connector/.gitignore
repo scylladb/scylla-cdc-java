@@ -1,0 +1,12 @@
+# IntelliJ project files
+.idea
+*.iml
+out
+gen
+**/target/**
+# eclipse
+.classpath
+.project
+.settings/
+target/
+var/

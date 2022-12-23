@@ -1,0 +1,33 @@
+scyllaDBConfig:
+  host: localhost
+  port: 9041
+  userName: root
+  password: root
+  region: ap_south_1
+
+keySpacesAndTablesList: {"testing":[{"tableName":"timeline","primaryKey":"userid"}]}
+
+org: dview   #Organisation Name
+tenant: checkpoint   #Team name
+sourceIdOrName: scylla  #This value must be unique
+workersCount: 1
+
+kafkaBrokers: localhost:9092
+poolSize: 3 #3 should be given
+
+slackWebhookURL: xxxxx
+checkPointAfterRows: 10
+
+dataSourceConfig:
+  driverClass: com.mysql.cj.jdbc.Driver
+  username: root
+  password:
+  jdbcUrl: jdbc:mysql://127.0.0.1:3306/scylla_kafka_checkpointing?autoReconnect=true
+  acquireIncrement: 5
+  initialPoolSize: 10
+  minConnectionsPerPartition: 10
+  maxConnectionsPerPartition: 50
+  idleMaxAgeInSeconds: 300
+  statementsCacheSize: 500
+  idleConnectionTestPeriodInSeconds: 30
+
