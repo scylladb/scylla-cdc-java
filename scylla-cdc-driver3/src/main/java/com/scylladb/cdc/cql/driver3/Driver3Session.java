@@ -12,6 +12,7 @@ import com.datastax.driver.core.Session;
 import com.datastax.driver.core.SocketOptions;
 import com.datastax.driver.core.policies.DCAwareRoundRobinPolicy;
 import com.datastax.driver.core.policies.DefaultRetryPolicy;
+import com.datastax.driver.core.policies.TokenAwarePolicy;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.CQLConfiguration;
 
@@ -40,6 +41,9 @@ public class Driver3Session implements AutoCloseable {
         Cluster.Builder clusterBuilder = Cluster.builder()
                 .withProtocolVersion(ProtocolVersion.NEWEST_SUPPORTED)
                 .withPoolingOptions(poolingOptions)
+                .withLoadBalancingPolicy(new TokenAwarePolicy(DCAwareRoundRobinPolicy.builder()
+                .withLocalDc(cqlConfiguration.getLocalDCName())
+                .build()))
                 .withQueryOptions(new QueryOptions().setMetadataEnabled(true))
                 .withRetryPolicy(DefaultRetryPolicy.INSTANCE).withSocketOptions(new SocketOptions().setKeepAlive(true));
 
