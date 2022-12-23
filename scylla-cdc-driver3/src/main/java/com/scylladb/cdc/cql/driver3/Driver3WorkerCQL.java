@@ -3,7 +3,7 @@ package com.scylladb.cdc.cql.driver3;
 import static com.datastax.driver.core.Metadata.quoteIfNecessary;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.bindMarker;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.gt;
-import static com.datastax.driver.core.querybuilder.QueryBuilder.in;
+import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.lte;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.select;
 
@@ -58,7 +58,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
     private static RegularStatement getStmt(TableName table) {
         return select().all().from(quoteIfNecessary(table.keyspace), quoteIfNecessary(table.name + "_scylla_cdc_log"))
-                .where(in(quoteIfNecessary("cdc$stream_id"), bindMarker()))
+                .where(eq(quoteIfNecessary("cdc$stream_id"), bindMarker()))
                 .and(gt(quoteIfNecessary("cdc$time"), bindMarker()))
                 .and(lte(quoteIfNecessary("cdc$time"), bindMarker()));
     }

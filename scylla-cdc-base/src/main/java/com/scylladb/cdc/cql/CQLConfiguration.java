@@ -9,7 +9,7 @@ import java.util.List;
 
 public class CQLConfiguration {
     private static final int DEFAULT_PORT = 9042;
-    private static final ConsistencyLevel DEFAULT_CONSISTENCY_LEVEL = ConsistencyLevel.QUORUM;
+    private static final ConsistencyLevel DEFAULT_CONSISTENCY_LEVEL = ConsistencyLevel.LOCAL_QUORUM;
 
     /**
      * The consistency level of read queries to Scylla.
