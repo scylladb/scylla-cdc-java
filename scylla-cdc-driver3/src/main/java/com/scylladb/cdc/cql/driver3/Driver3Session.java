@@ -27,8 +27,8 @@ public class Driver3Session implements AutoCloseable {
             .setCoreConnectionsPerHost(
                 HostDistance.LOCAL, 1)
             .setMaxConnectionsPerHost(HostDistance.LOCAL, 1)
-            .setMaxRequestsPerConnection(HostDistance.LOCAL, 2048)
-            .setNewConnectionThreshold(HostDistance.LOCAL, 400)
+            .setMaxRequestsPerConnection(HostDistance.LOCAL, 32768)
+            .setNewConnectionThreshold(HostDistance.LOCAL, 30000)
             .setCoreConnectionsPerHost(HostDistance.REMOTE, 1)
             .setMaxConnectionsPerHost(HostDistance.REMOTE, 1)
             .setMaxRequestsPerConnection(HostDistance.REMOTE, 2048)
