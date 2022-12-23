@@ -11,17 +11,14 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
-import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
-import com.scylladb.cdc.transport.MasterTransport;
 
 public final class Master {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();

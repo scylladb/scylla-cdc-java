@@ -5,6 +5,8 @@ scyllaDBConfig:
   scPassword: xdk
   region: ap_south_1
 
+dcName: datacenter1
+
 keySpacesAndTablesList: {"testing":[{"tableName":"timeline","primaryKey":"userid"}]}
 
 org: dview   #Organisation Name

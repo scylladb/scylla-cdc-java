@@ -17,5 +17,4 @@ public class ScyllaDBConfig {
     private Integer port;
     private String userName;
     private String scPassword;
-    private String region;
 }

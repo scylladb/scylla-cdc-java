@@ -16,6 +16,7 @@ import lombok.Setter;
 public class ScyllaApplicationContext {
 
   private ScyllaApplicationContext(){ throw new IllegalStateException("Utility Class"); }
+  @Getter
   private static ScyllaConnectorConfiguration scyllaConnectorConfiguration;
   private static IMysqlDaoHelper mysqlDaoHelper;
 

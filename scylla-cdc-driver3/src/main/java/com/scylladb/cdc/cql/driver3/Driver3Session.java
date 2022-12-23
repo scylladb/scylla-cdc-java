@@ -15,6 +15,8 @@ import com.datastax.driver.core.policies.DefaultRetryPolicy;
 import com.datastax.driver.core.policies.TokenAwarePolicy;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.CQLConfiguration;
+import com.scylladb.cdc.model.worker.ScyllaApplicationContext;
+
 
 public class Driver3Session implements AutoCloseable {
     private final Cluster driverCluster;
@@ -42,7 +44,7 @@ public class Driver3Session implements AutoCloseable {
                 .withProtocolVersion(ProtocolVersion.NEWEST_SUPPORTED)
                 .withPoolingOptions(poolingOptions)
                 .withLoadBalancingPolicy(new TokenAwarePolicy(DCAwareRoundRobinPolicy.builder()
-                    .withLocalDc(cqlConfiguration.getLocalDCName())
+                    .withLocalDc(ScyllaApplicationContext.getScyllaConnectorConfiguration().getDcName())
                     .build()))
                 .withQueryOptions(new QueryOptions().setMetadataEnabled(true))
                 .withRetryPolicy(DefaultRetryPolicy.INSTANCE).withSocketOptions(new SocketOptions().setKeepAlive(true));
@@ -76,7 +78,7 @@ public class Driver3Session implements AutoCloseable {
 
         final Metadata metadata = driverCluster.getMetadata();
         for (final Host host : metadata.getAllHosts()) {
-            logger.atFine().log("Scylla node - Data center: %s Host: %s Rack: %s", host.getDatacenter(), host.getEndPoint(), host.getRack());
+            logger.atInfo().log("Scylla node - Data center: %s Host: %s Rack: %s", host.getDatacenter(), host.getEndPoint(), host.getRack());
         }
 
         switch (cqlConfiguration.getConsistencyLevel()) {

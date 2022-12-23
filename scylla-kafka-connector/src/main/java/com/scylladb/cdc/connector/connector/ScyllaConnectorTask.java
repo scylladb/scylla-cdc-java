@@ -56,7 +56,6 @@ public class ScyllaConnectorTask{
                 if (!restart || continuousFlag) {
                     processChanges(task, change);
                 }else {
-                    log.info("Waiting for the changed which was last accessed: ");
                     ChangeId changeId = change.getId();
                     ChangeTime changeTime = changeId.getChangeTime();
                     long timeInMillis = changeTime.getTimestamp();

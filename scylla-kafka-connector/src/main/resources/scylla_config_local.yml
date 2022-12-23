@@ -1,9 +1,10 @@
 scyllaDBConfig:
   host: localhost
-  port: 9041
-  userName: root
-  password: root
-  region: ap_south_1
+  port: 9042
+  userName: kauts
+  scPassword: xxxxxxxx
+
+dcName: AWS_AP_SOUTH_1_3
 
 keySpacesAndTablesList: {"testing":[{"tableName":"timeline","primaryKey":"userid"}]}
 
@@ -21,7 +22,7 @@ checkPointAfterRows: 10
 dataSourceConfig:
   driverClass: com.mysql.cj.jdbc.Driver
   username: root
-  password:
+  password: root
   jdbcUrl: jdbc:mysql://127.0.0.1:3306/scylla_kafka_checkpointing?autoReconnect=true
   acquireIncrement: 5
   initialPoolSize: 10
