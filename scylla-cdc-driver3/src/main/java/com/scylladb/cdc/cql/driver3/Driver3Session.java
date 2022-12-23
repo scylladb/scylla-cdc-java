@@ -42,8 +42,8 @@ public class Driver3Session implements AutoCloseable {
                 .withProtocolVersion(ProtocolVersion.NEWEST_SUPPORTED)
                 .withPoolingOptions(poolingOptions)
                 .withLoadBalancingPolicy(new TokenAwarePolicy(DCAwareRoundRobinPolicy.builder()
-                .withLocalDc(cqlConfiguration.getLocalDCName())
-                .build()))
+                    .withLocalDc(cqlConfiguration.getLocalDCName())
+                    .build()))
                 .withQueryOptions(new QueryOptions().setMetadataEnabled(true))
                 .withRetryPolicy(DefaultRetryPolicy.INSTANCE).withSocketOptions(new SocketOptions().setKeepAlive(true));
 
