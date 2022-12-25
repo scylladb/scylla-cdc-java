@@ -216,7 +216,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                         .setConsistencyLevel(consistencyLevel)
                 )
             ).collect(Collectors.toList());
-        logger.atFine().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
+        logger.atInfo().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
 
         Futures.addCallback(Futures.allAsList(futures), new FutureCallback<List<ResultSet>>() {
 
