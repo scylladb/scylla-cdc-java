@@ -71,7 +71,7 @@ public final class Worker {
         TaskState initialState = getInitialStateForStreams(groupedStreams, workerConfiguration.queryTimeWindowSizeMs);
 
         Set<TableName> tableNames = groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet());
-        Date now = Date.from(workerConfiguration.getClock().instant());
+        long currentTime = Date.from(workerConfiguration.getClock().instant()).getTime();
 
         // The furthest point in time where there might be
         // a CDC change, given table's TTL.
@@ -79,7 +79,11 @@ public final class Worker {
 
         for (TableName tableName : tableNames) {
             /* For Checkpointing : Replace now.getTime() with Current time in long check pointed in DB else use now.getTime() */
-            minimumWindowStarts.put(tableName, new Timestamp(new Date(now.getTime() - (2 * workerConfiguration.queryTimeWindowSizeMs))));
+            Optional<Long> ttl = workerConfiguration.cql.fetchTableTTL(tableName).get();
+//            if(ttl.isPresent() && ("DB_TIME" > (currentTime - (1000L * ttl.get())))){
+//                currentTime = "DB_TIME"
+//            }
+            minimumWindowStarts.put(tableName, new Timestamp(new Date(currentTime - (2 * workerConfiguration.queryTimeWindowSizeMs))));
         }
 
         return groupedStreams.entrySet().stream().map(taskStreams -> {
