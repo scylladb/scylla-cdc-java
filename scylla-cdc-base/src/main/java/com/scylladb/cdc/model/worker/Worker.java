@@ -78,13 +78,8 @@ public final class Worker {
         Map<TableName, Timestamp> minimumWindowStarts = new HashMap<>();
 
         for (TableName tableName : tableNames) {
-            Optional<Long> ttl = workerConfiguration.cql.fetchTableTTL(tableName).get();
-            /* To-Do TBD added on checkpointing */
-            Date minimumWindowStart = new Date(0);
-            if (ttl.isPresent()) {
-                minimumWindowStart = new Date(now.getTime() - 1000L * ttl.get()); // TTL is in seconds, getTime() in milliseconds
-            }
-            minimumWindowStarts.put(tableName, new Timestamp(minimumWindowStart));
+            /* For Checkpointing : Replace now.getTime() with Current time in long check pointed in DB else use now.getTime() */
+            minimumWindowStarts.put(tableName, new Timestamp(new Date(now.getTime() - (2 * workerConfiguration.queryTimeWindowSizeMs))));
         }
 
         return groupedStreams.entrySet().stream().map(taskStreams -> {
