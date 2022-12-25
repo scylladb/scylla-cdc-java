@@ -31,6 +31,5 @@ public class ScyllaConnectorConfiguration {
     private int poolSize;
     private String slackWebhookURL;
     private HikariCpConfig dataSourceConfig;
-    private int checkPointAfterRows;
     private String dcName;
 }

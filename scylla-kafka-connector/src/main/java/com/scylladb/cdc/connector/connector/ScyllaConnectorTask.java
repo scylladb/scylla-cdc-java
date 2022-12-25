@@ -42,28 +42,10 @@ public class ScyllaConnectorTask{
      * the event into kafka.
      */
 
-    public void startReplication(boolean restart,String instanceName) throws InterruptedException {
-        long lastAccessedTimeStamp = 0;
-        if(restart){
-            log.info("Getting the timestamp processed a minute ago: ");
-            CheckPointDetails lastAccessedDetails = ScyllaApplicationContext.getCheckPointDetails(instanceName);
-            lastAccessedTimeStamp = lastAccessedDetails.getLastReadTimestamp();
-        }
-
-        long finalLastAccessedTimeStamp = lastAccessedTimeStamp;
+    public void startReplication() throws InterruptedException {
         TaskAndRawChangeConsumer changeConsumer = (task, change) -> {
             try {
-                if (!restart || continuousFlag) {
-                    processChanges(task, change);
-                }else {
-                    ChangeId changeId = change.getId();
-                    ChangeTime changeTime = changeId.getChangeTime();
-                    long timeInMillis = changeTime.getTimestamp();
-                    if(finalLastAccessedTimeStamp == timeInMillis){
-                        processChanges(task, change);
-                        continuousFlag = true;
-                    }
-                }
+                processChanges(task,change);
             } catch (JsonProcessingException | ExecutionException e) {
                 log.error("Exception while processing the change: " + e.getMessage());
             }

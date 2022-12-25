@@ -6,6 +6,7 @@ import com.scylladb.cdc.connector.utils.JsonUtils;
 import com.scylladb.cdc.connector.utils.ScyllaConstants;
 import com.scylladb.cdc.connector.utils.ScyllaUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.ScyllaConnectorConfiguration;
 import com.scylladb.cdc.model.worker.*;
 import com.scylladb.cdc.model.worker.cql.Cell;
@@ -30,8 +31,6 @@ public class ScyllaTransformer implements ITransformer {
 
     private final SimpleDateFormat formatter = new SimpleDateFormat(ScyllaConstants.DATETIME_FORMAT);
 
-    private Integer counter = 0;
-
     public ScyllaTransformer(ScyllaConnectorConfiguration scyllaConnectorConfiguration) {
         this.kafkaConnector = new KafkaConnector(scyllaConnectorConfiguration);
         this.scyllaConnectorConfiguration = scyllaConnectorConfiguration;
@@ -53,10 +52,12 @@ public class ScyllaTransformer implements ITransformer {
         //Fetching write time of the record.
         ChangeId changeId = change.getId();
         ChangeTime changeTime = changeId.getChangeTime();
-        long timeInMillis = changeTime.getTimestamp();
+        long cddTimeStamp = changeTime.getTimestamp();
         String topicName = topicNameBuilder(task);
 
-        Map<String, Object> payloadMap = buildPayload(task, change, timeInMillis);
+        TableName tableName = task.id.getTable();
+
+        Map<String, Object> payloadMap = buildPayload(task, change, cddTimeStamp);
         payloadMap.put(ScyllaConstants.SCHEMA_VERSION, "1.0");
 
         String kafkaPayload = JsonUtils.OBJECT_MAPPER.writeValueAsString(payloadMap);
@@ -65,12 +66,25 @@ public class ScyllaTransformer implements ITransformer {
             if (payloadMap.size() > 2) {
                 kafkaConnector.getConnector().send(new ProducerRecord<>(topicName, payloadMap.get(ScyllaConstants.ENTITY_ID).toString(), kafkaPayload));
                 log.info("Pushed record successfully: " + topicName);
-                counter++;
-            }
-            if(counter == scyllaConnectorConfiguration.getCheckPointAfterRows()){
-                log.info("Doing the checkpointing after {} records: ",scyllaConnectorConfiguration.getCheckPointAfterRows());
-                ScyllaUtils.doCheckPointing(task,change);
-                counter=0;
+
+                //For your reference:
+                /*long currentTimeStamp = System.currentTimeMillis() + this.checkPointIntervalMs;
+                String keySpaceAndTableComb = String.format("%s$%s",tableName.keyspace,tableName.name);
+                if(currentTimeStamp >= this.checkPointTimer){
+                    //Db me entry from the hashmap
+                    ScyllaApplicationContext.checkPointMeta.forEach(k ->
+                    {
+                        String query = "update scylla_kafka_checkpointing.scylla_checkpoint set last_read_cdc_timestamp = " + cddTimeStamp + "  where keyspace_table_combination = " + keySpaceAndTableComb+ " and cdc_time<??";
+                    });
+                    this.checkPointTimer = currentTimeStamp;
+                }else{
+                    long ov = ScyllaApplicationContext.checkPointMeta.get(k);
+                    if(ov < cv){
+                        ScyllaApplicationContext.checkPointMeta.put(k,cv);
+                    }
+
+                }*/
+
             }
         }
     }

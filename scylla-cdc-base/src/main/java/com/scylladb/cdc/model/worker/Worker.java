@@ -80,9 +80,14 @@ public final class Worker {
         for (TableName tableName : tableNames) {
             /* For Checkpointing : Replace now.getTime() with Current time in long check pointed in DB else use now.getTime() */
             Optional<Long> ttl = workerConfiguration.cql.fetchTableTTL(tableName).get();
-//            if(ttl.isPresent() && ("DB_TIME" > (currentTime - (1000L * ttl.get())))){
-//                currentTime = "DB_TIME"
-//            }
+            String uniqueIdentifier = String.format("%s$%s",tableName.keyspace,tableName.name);
+
+            CheckPointDetails checkPointDetails = ScyllaApplicationContext.getCheckPointDetails(uniqueIdentifier);
+            long checkPointTimeFromDB = checkPointDetails.getLastReadTimestamp();
+
+            if(ttl.isPresent() && (checkPointTimeFromDB > (currentTime - (1000L * ttl.get())))){
+                currentTime = checkPointTimeFromDB;
+            }
             minimumWindowStarts.put(tableName, new Timestamp(new Date(currentTime - (2 * workerConfiguration.queryTimeWindowSizeMs))));
         }
 

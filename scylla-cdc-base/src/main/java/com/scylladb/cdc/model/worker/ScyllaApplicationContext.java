@@ -59,12 +59,12 @@ public class ScyllaApplicationContext {
         });
   }
 
-  public static CheckPointDetails getCheckPointDetails(String instanceName){
-    String query = "Select id,last_read_cdc_timestamp from scylla_kafka_checkpointing.scylla_checkpoint where instance_name= ?";
+  public static CheckPointDetails getCheckPointDetails(String keyspaceTableCombination){
+    String query = "Select keyspace_table_combination,last_read_cdc_timestamp from scylla_kafka_checkpointing.scylla_checkpoint where keyspace_table_combination= ?";
     return getMysqlDaoHelper().findOne(
         "Checkpointing_Get_Details",
         query,
-        statement -> statement.setString(1, instanceName),
+        statement -> statement.setString(1, keyspaceTableCombination),
         new CheckPointMapper(),
         CheckPointDetails.class
     ).orElse(null);
@@ -74,7 +74,7 @@ public class ScyllaApplicationContext {
     @Override
     public CheckPointDetails map(ResultSet resultSet) throws SQLException {
       CheckPointDetails checkPointDetails = new CheckPointDetails();
-      checkPointDetails.setId(resultSet.getInt("id"));
+      checkPointDetails.setKeySpaceTableNameCombination(resultSet.getString("keyspace_table_combination"));
       checkPointDetails.setLastReadTimestamp(resultSet.getLong("last_read_cdc_timestamp"));
       return checkPointDetails;
     }

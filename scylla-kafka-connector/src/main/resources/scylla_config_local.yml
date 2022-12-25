@@ -4,7 +4,7 @@ scyllaDBConfig:
   userName: kauts
   scPassword: xxxxxxxx
 
-dcName: AWS_AP_SOUTH_1_3
+dcName: datacenter1
 
 keySpacesAndTablesList: {"testing":[{"tableName":"timeline","primaryKey":"userid"}]}
 
@@ -17,7 +17,6 @@ kafkaBrokers: localhost:9092
 poolSize: 3 #3 should be given
 
 slackWebhookURL: xxxxx
-checkPointAfterRows: 10
 
 dataSourceConfig:
   driverClass: com.mysql.cj.jdbc.Driver

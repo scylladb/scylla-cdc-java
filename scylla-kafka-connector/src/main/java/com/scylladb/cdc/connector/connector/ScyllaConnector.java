@@ -54,27 +54,11 @@ public class ScyllaConnector implements IScyllaConnector {
         scyllaConnector.start();
     }
 
-    private boolean isFirstTime() {
-        HashMap<String, List<TableConfig>> keySpacesAndTablesList = scyllaConnectorConfiguration.getKeySpacesAndTablesList();
-        Map.Entry<String, List<TableConfig>> entry = keySpacesAndTablesList.entrySet().iterator().next();
-        instanceName = entry.getKey();
-        CheckPointDetails checkPointDetails = ScyllaApplicationContext.getCheckPointDetails(instanceName);
-        return Objects.isNull(checkPointDetails);
-    }
 
     @Override
     public void start() throws InterruptedException {
         log.info("-------Starting scylla-cdc-connector--------");
-        boolean firstTime = isFirstTime();
-        if(firstTime){
-            Timestamp timestamp = new Timestamp(System.currentTimeMillis());
-            ScyllaApplicationContext.createCheckPointRow(instanceName,timestamp.getTime());
-            scyllaConnectorTask.startReplication(false,instanceName);
-        }else {
-            log.info("Scylla connector restarted: ");
-            scyllaConnectorTask.startReplication(true,instanceName);
-        }
-
+        scyllaConnectorTask.startReplication();
     }
 
     /**

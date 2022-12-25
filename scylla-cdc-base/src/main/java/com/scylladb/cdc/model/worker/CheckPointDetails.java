@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class CheckPointDetails {
-    private Integer id;
-    private String instanceName;
+    private String keySpaceTableNameCombination;
     private long lastReadTimestamp;
 }
