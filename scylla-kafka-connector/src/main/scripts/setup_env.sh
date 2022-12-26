@@ -17,7 +17,9 @@ export SCYLLA_PROD_PASSWORD=$(echo -ne "$SCYLLA_PROD_PASSWORD")
 # shellcheck disable=SC2155
 export SCYLLA_PROD_REGION=$(echo -ne "$SCYLLA_PROD_REGION")
 # shellcheck disable=SC2155
+export DATA_CENTER=$(echo -ne "$DATA_CENTER")
 export KAFKA_ENDPOINT_WITH_PORT=$(echo -ne "$KAFKA_ENDPOINT_WITH_PORT")
+
 
 export ORG=$(echo -ne "$ORG")
 # shellcheck disable=SC2155
@@ -48,6 +50,7 @@ sed -i -e 's#host:.*#host: '"$SCYLLA_PROD_HOST"'#' "$FILE"
 sed -i -e 's#userName:.*#userName: '"$SCYLLA_PROD_USERNAME"'#' "$FILE"
 sed -i -e 's#port:.*#port: '$SCYLLA_PROD_PORT'#' "$FILE"
 sed -i -e 's#scPassword:.*#scPassword: '"$SCYLLA_PROD_PASSWORD"'#' "$FILE"
+sed -i -e 's#dcName:.*#dcName: '"$DATA_CENTER"'#' "$FILE"
 
 sed -i -e 's#username:.*#username: '"$MYSQL_USR"'#' "$FILE"
 sed -i -e 's#password:.*#password: '"$MYSQL_PWD"'#' "$FILE"
