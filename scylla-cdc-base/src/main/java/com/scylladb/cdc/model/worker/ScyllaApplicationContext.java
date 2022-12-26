@@ -48,13 +48,14 @@ public class ScyllaApplicationContext {
         });
   }
 
-  public static boolean updateCheckPoint(String instanceName,long readTimeStamp) {
+  public static boolean updateCheckPoint(String uniqueKey,long readTimeStamp) {
     return getMysqlDaoHelper().update(
         "Updating the checkpointing for the scylla: ",
-        "update scylla_kafka_checkpointing.scylla_checkpoint set last_read_cdc_timestamp = ? where instance_name =?",
+        "update scylla_kafka_checkpointing.scylla_checkpoint set last_read_cdc_timestamp = ? where keyspace_table_combination =? and last_read_cdc_timestamp <?",
         statement -> {
           statement.setLong(1, readTimeStamp);
-          statement.setString(2, instanceName);
+          statement.setString(2, uniqueKey);
+          statement.setLong(3, readTimeStamp);
 
         });
   }

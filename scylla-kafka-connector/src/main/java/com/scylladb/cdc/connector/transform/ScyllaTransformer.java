@@ -31,10 +31,15 @@ public class ScyllaTransformer implements ITransformer {
 
     private final SimpleDateFormat formatter = new SimpleDateFormat(ScyllaConstants.DATETIME_FORMAT);
 
+    private final Map<String, Long> checkpointMap = Collections.synchronizedMap(new HashMap<>());
+
+    private long pollingTime;
+
     public ScyllaTransformer(ScyllaConnectorConfiguration scyllaConnectorConfiguration) {
         this.kafkaConnector = new KafkaConnector(scyllaConnectorConfiguration);
         this.scyllaConnectorConfiguration = scyllaConnectorConfiguration;
         this.utilityCache = new UtilityCache();
+        this.pollingTime = System.currentTimeMillis();
     }
 
     /**
@@ -44,6 +49,14 @@ public class ScyllaTransformer implements ITransformer {
      * @param task   linked with {@link Task}
      * @param change linked with {@link RawChange}
      */
+
+    private void processCheckpoint(){
+        long currentTime  = System.currentTimeMillis();
+        if(currentTime - pollingTime >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
+            checkpointMap.forEach(ScyllaApplicationContext::updateCheckPoint);
+            pollingTime = currentTime;
+        }
+    }
 
     @Override
     public void transformAndPush(Task task, RawChange change) throws JsonProcessingException, ExecutionException {
@@ -56,6 +69,7 @@ public class ScyllaTransformer implements ITransformer {
         String topicName = topicNameBuilder(task);
 
         TableName tableName = task.id.getTable();
+        checkpointMap.put(String.format("%s$%s", task.id.getTable().keyspace, tableName), cddTimeStamp);
 
         Map<String, Object> payloadMap = buildPayload(task, change, cddTimeStamp);
         payloadMap.put(ScyllaConstants.SCHEMA_VERSION, "1.0");
@@ -66,25 +80,7 @@ public class ScyllaTransformer implements ITransformer {
             if (payloadMap.size() > 2) {
                 kafkaConnector.getConnector().send(new ProducerRecord<>(topicName, payloadMap.get(ScyllaConstants.ENTITY_ID).toString(), kafkaPayload));
                 log.info("Pushed record successfully: " + topicName);
-
-                //For your reference:
-                /*long currentTimeStamp = System.currentTimeMillis() + this.checkPointIntervalMs;
-                String keySpaceAndTableComb = String.format("%s$%s",tableName.keyspace,tableName.name);
-                if(currentTimeStamp >= this.checkPointTimer){
-                    //Db me entry from the hashmap
-                    ScyllaApplicationContext.checkPointMeta.forEach(k ->
-                    {
-                        String query = "update scylla_kafka_checkpointing.scylla_checkpoint set last_read_cdc_timestamp = " + cddTimeStamp + "  where keyspace_table_combination = " + keySpaceAndTableComb+ " and cdc_time<??";
-                    });
-                    this.checkPointTimer = currentTimeStamp;
-                }else{
-                    long ov = ScyllaApplicationContext.checkPointMeta.get(k);
-                    if(ov < cv){
-                        ScyllaApplicationContext.checkPointMeta.put(k,cv);
-                    }
-
-                }*/
-
+                processCheckpoint();
             }
         }
     }
