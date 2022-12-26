@@ -8,6 +8,7 @@ import com.dview.manifest.metrics.IApplicationMetrics;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.UUID;
 import javax.sql.DataSource;
 import lombok.Getter;
 import lombok.Setter;
@@ -38,13 +39,14 @@ public class ScyllaApplicationContext {
     return mysqlDaoHelper;
   }
 
-  public static void createCheckPointRow(String instanceName, long dummyTimeStamp) {
+  public static void createCheckPointRow(String uniqueKey, long currentTime) {
     getMysqlDaoHelper().persist(
         "Create the checkpointing for first time: ",
-        "insert into scylla_kafka_checkpointing.scylla_checkpoint (instance_name,last_read_cdc_timestamp) values(?,?)",
+        "insert into scylla_kafka_checkpointing.scylla_checkpoint (instance_name,keyspace_table_combination,last_read_cdc_timestamp) values(?,?)",
         statement -> {
-          statement.setString(1, instanceName);
-          statement.setLong(2,dummyTimeStamp);
+          statement.setString(1, UUID.randomUUID().toString());
+          statement.setString(2, uniqueKey);
+          statement.setLong(3, currentTime);
         });
   }
 
