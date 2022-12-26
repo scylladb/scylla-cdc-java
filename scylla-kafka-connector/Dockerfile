@@ -9,7 +9,7 @@ RUN mkdir /scylla-kafka
 
 WORKDIR  /scylla-kafka
 
-COPY ./target/scylla-kafka-connector-1.0-SNAPSHOT.jar /scylla-kafka/scylla-kafka-connector.jar
+COPY ./target/scylla-kafka-connector-*-SNAPSHOT.jar /scylla-kafka/scylla-kafka-connector.jar
 COPY src/main/resources/scylla_config.yml /scylla-kafka/scylla_config.yml
 COPY ./src/main/scripts/setup_env.sh /scylla-kafka/
 COPY ./src/main/scripts/run.sh /scylla-kafka/
