@@ -3,10 +3,16 @@ package com.scylladb.cdc.cql.driver3;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.Host;
+import com.datastax.driver.core.HostDistance;
 import com.datastax.driver.core.Metadata;
+import com.datastax.driver.core.PoolingOptions;
 import com.datastax.driver.core.ProtocolVersion;
+import com.datastax.driver.core.QueryOptions;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.SocketOptions;
 import com.datastax.driver.core.policies.DCAwareRoundRobinPolicy;
+import com.datastax.driver.core.policies.DefaultRetryPolicy;
+import com.datastax.driver.core.policies.TokenAwarePolicy;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.model.worker.ScyllaApplicationContext;
@@ -20,8 +26,28 @@ public class Driver3Session implements AutoCloseable {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     public Driver3Session(CQLConfiguration cqlConfiguration) {
+        PoolingOptions poolingOptions = new PoolingOptions()
+            .setCoreConnectionsPerHost(
+                HostDistance.LOCAL, 1)
+            .setMaxConnectionsPerHost(HostDistance.LOCAL, 1)
+            .setMaxRequestsPerConnection(HostDistance.LOCAL, 32768)
+            .setNewConnectionThreshold(HostDistance.LOCAL, 30000)
+            .setCoreConnectionsPerHost(HostDistance.REMOTE, 1)
+            .setMaxConnectionsPerHost(HostDistance.REMOTE, 1)
+            .setMaxRequestsPerConnection(HostDistance.REMOTE, 2048)
+            .setNewConnectionThreshold(HostDistance.REMOTE, 400)
+            .setMaxQueueSize(256)
+            .setHeartbeatIntervalSeconds(60)
+            .setPoolTimeoutMillis(30000);
+
         Cluster.Builder clusterBuilder = Cluster.builder()
-            .withProtocolVersion(ProtocolVersion.NEWEST_SUPPORTED);
+                .withProtocolVersion(ProtocolVersion.V4)
+                .withPoolingOptions(poolingOptions)
+                .withLoadBalancingPolicy(new TokenAwarePolicy(DCAwareRoundRobinPolicy.builder()
+                    .withLocalDc(ScyllaApplicationContext.getScyllaConnectorConfiguration().getDcName())
+                    .build()))
+                .withQueryOptions(new QueryOptions().setMetadataEnabled(true))
+                .withRetryPolicy(DefaultRetryPolicy.INSTANCE).withSocketOptions(new SocketOptions().setKeepAlive(true));
 
         clusterBuilder = clusterBuilder.addContactPointsWithPorts(cqlConfiguration.contactPoints);
 
@@ -35,16 +61,10 @@ public class Driver3Session implements AutoCloseable {
         // Driver3WorkerCQLIT#testPreparedStatementSameSchemaBetweenPages
         // and Driver3WorkerCQLIT#testPreparedStatementOldSchemaAfterAlter
         // for more context.
-        clusterBuilder = clusterBuilder.withProtocolVersion(ProtocolVersion.V4);
 
         String user = cqlConfiguration.user, password = cqlConfiguration.password;
         if (user != null && password != null) {
             clusterBuilder = clusterBuilder.withCredentials(user, password);
-        }
-
-        if (cqlConfiguration.getLocalDCName() != null) {
-            clusterBuilder = clusterBuilder.withLoadBalancingPolicy(
-                DCAwareRoundRobinPolicy.builder().withLocalDc(ScyllaApplicationContext.getScyllaConnectorConfiguration().getDcName()).build());
         }
 
         driverCluster = clusterBuilder.build();
