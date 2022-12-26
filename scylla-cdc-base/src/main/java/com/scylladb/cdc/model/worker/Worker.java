@@ -2,11 +2,11 @@ package com.scylladb.cdc.model.worker;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-import com.dview.manifest.db.mysql.helper.IMysqlDaoHelper;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
@@ -30,11 +30,8 @@ public final class Worker {
     private final WorkerConfiguration workerConfiguration;
     private volatile boolean shouldStop = false;
 
-    private IMysqlDaoHelper mysqlDaoHelper;
-
     public Worker(WorkerConfiguration workerConfiguration) {
         this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
-        this.mysqlDaoHelper = ScyllaApplicationContext.getMysqlDaoHelper();
     }
 
     /*
@@ -73,7 +70,7 @@ public final class Worker {
         Set<TableName> tableNames = groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet());
         long currentTime = Date.from(workerConfiguration.getClock().instant()).getTime();
 
-        // The furthest point in time where there might be
+        // The furthest point in time, where there might be
         // a CDC change, given table's TTL.
         Map<TableName, Timestamp> minimumWindowStarts = new HashMap<>();
 
@@ -83,12 +80,12 @@ public final class Worker {
             String uniqueIdentifier = String.format("%s$%s",tableName.keyspace,tableName.name);
 
             CheckPointDetails checkPointDetails = ScyllaApplicationContext.getCheckPointDetails(uniqueIdentifier);
-            long checkPointTimeFromDB = checkPointDetails.getLastReadTimestamp();
 
-            if(ttl.isPresent() && (checkPointTimeFromDB > (currentTime - (1000L * ttl.get())))){
-                currentTime = checkPointTimeFromDB;
+            if(ttl.isPresent() && Objects.nonNull(checkPointDetails)){
+                minimumWindowStarts.put(tableName, new Timestamp(new Date(checkPointDetails.getLastReadTimestamp() - (2 * workerConfiguration.queryTimeWindowSizeMs))));
+            }else{
+                minimumWindowStarts.put(tableName, new Timestamp(new Date(currentTime - (2 * workerConfiguration.queryTimeWindowSizeMs))));
             }
-            minimumWindowStarts.put(tableName, new Timestamp(new Date(currentTime - (2 * workerConfiguration.queryTimeWindowSizeMs))));
         }
 
         return groupedStreams.entrySet().stream().map(taskStreams -> {
