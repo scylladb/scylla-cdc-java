@@ -52,7 +52,7 @@ public class ScyllaTransformer implements ITransformer {
 
     private void processCheckpoint(){
         long currentTime  = System.currentTimeMillis();
-        if(currentTime - pollingTime >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
+        if(currentTime - pollingTime >= (WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
             checkpointMap.forEach(ScyllaApplicationContext::updateCheckPoint);
             pollingTime = currentTime;
         }
@@ -69,7 +69,7 @@ public class ScyllaTransformer implements ITransformer {
         String topicName = topicNameBuilder(task);
 
         TableName tableName = task.id.getTable();
-        checkpointMap.put(String.format("%s$%s", task.id.getTable().keyspace, tableName), cddTimeStamp);
+        checkpointMap.put(String.format("%s$%s", tableName.keyspace, tableName.name), cddTimeStamp);
 
         Map<String, Object> payloadMap = buildPayload(task, change, cddTimeStamp);
         payloadMap.put(ScyllaConstants.SCHEMA_VERSION, "1.0");
@@ -79,7 +79,7 @@ public class ScyllaTransformer implements ITransformer {
         if (RawChange.OperationType.ROW_INSERT.equals(change.getOperationType()) || (RawChange.OperationType.POST_IMAGE.equals(change.getOperationType()))) {
             if (payloadMap.size() > 2) {
                 kafkaConnector.getConnector().send(new ProducerRecord<>(topicName, payloadMap.get(ScyllaConstants.ENTITY_ID).toString(), kafkaPayload));
-                log.info("Pushed record successfully: " + topicName);
+                log.debug("Pushed record successfully: " + topicName);
                 processCheckpoint();
             }
         }
