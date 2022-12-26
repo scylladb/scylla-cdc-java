@@ -72,6 +72,7 @@ public class ScyllaTransformer implements ITransformer {
         payloadMap.put(ScyllaConstants.SCHEMA_VERSION, "1.0");
 
         String kafkaPayload = JsonUtils.OBJECT_MAPPER.writeValueAsString(payloadMap);
+        System.out.println(kafkaPayload);
 
         if (RawChange.OperationType.ROW_INSERT.equals(change.getOperationType()) || (RawChange.OperationType.POST_IMAGE.equals(change.getOperationType()))) {
             if (payloadMap.size() > 2) {

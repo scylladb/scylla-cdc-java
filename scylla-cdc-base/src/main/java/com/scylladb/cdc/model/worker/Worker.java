@@ -85,7 +85,7 @@ public final class Worker {
                 minimumWindowStarts.put(tableName, new Timestamp(new Date(checkPointDetails.getLastReadTimestamp() - (2 * workerConfiguration.queryTimeWindowSizeMs))));
             }else if(Objects.isNull(checkPointDetails)){
                 ScyllaApplicationContext.createCheckPointRow(uniqueIdentifier, currentTime);
-                minimumWindowStarts.put(tableName, new Timestamp(new Date(currentTime - (2 * workerConfiguration.queryTimeWindowSizeMs))));
+                minimumWindowStarts.put(tableName, new Timestamp(new Date(currentTime - (120 * workerConfiguration.queryTimeWindowSizeMs))));
             }else{
                 minimumWindowStarts.put(tableName, new Timestamp(new Date(currentTime - (120 * workerConfiguration.queryTimeWindowSizeMs))));
             }

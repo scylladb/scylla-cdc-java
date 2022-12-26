@@ -3,7 +3,6 @@ scyllaDBConfig:
   port: 9041
   userName: admin
   scPassword: xdk
-  region: ap_south_1
 
 dcName: datacenter1
 
