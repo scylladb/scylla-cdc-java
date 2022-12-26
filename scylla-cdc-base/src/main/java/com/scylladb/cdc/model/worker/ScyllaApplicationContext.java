@@ -42,7 +42,7 @@ public class ScyllaApplicationContext {
   public static void createCheckPointRow(String uniqueKey, long currentTime) {
     getMysqlDaoHelper().persist(
         "Create the checkpointing for first time: ",
-        "insert into scylla_kafka_checkpointing.scylla_checkpoint (instance_name,keyspace_table_combination,last_read_cdc_timestamp) values(?,?)",
+        "insert into scylla_kafka_checkpointing.scylla_checkpoint (instance_name,keyspace_table_combination,last_read_cdc_timestamp) values(?,?,?)",
         statement -> {
           statement.setString(1, UUID.randomUUID().toString());
           statement.setString(2, uniqueKey);

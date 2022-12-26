@@ -1,6 +1,6 @@
 scyllaDBConfig:
   host: localhost
-  port: 9042
+  port: 9041
   userName: kauts
   scPassword: xxxxxxxx
 
@@ -21,7 +21,7 @@ slackWebhookURL: xxxxx
 dataSourceConfig:
   driverClass: com.mysql.cj.jdbc.Driver
   username: root
-  password: root
+  password:
   jdbcUrl: jdbc:mysql://127.0.0.1:3306/scylla_kafka_checkpointing?autoReconnect=true
   acquireIncrement: 5
   initialPoolSize: 10
