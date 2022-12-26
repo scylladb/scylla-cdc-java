@@ -52,7 +52,7 @@ public class ScyllaTransformer implements ITransformer {
 
     private void processCheckpoint(){
         long currentTime  = System.currentTimeMillis();
-        if(currentTime - pollingTime >= (WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
+        if(currentTime - pollingTime >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
             checkpointMap.forEach(ScyllaApplicationContext::updateCheckPoint);
             pollingTime = currentTime;
         }
