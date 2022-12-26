@@ -66,7 +66,7 @@ public class ScyllaTransformer implements ITransformer {
         String topicName = topicNameBuilder(task);
 
         TableName tableName = task.id.getTable();
-        checkpointMap.put(String.format("%s$%s", tableName.keyspace, tableName.name), cddTimeStamp);
+        checkpointMap.put(String.format("%s$%s", tableName.keyspace, tableName.name), cddTimeStamp/1000);
 
         Map<String, Object> payloadMap = buildPayload(task, change, cddTimeStamp);
         payloadMap.put(ScyllaConstants.SCHEMA_VERSION, "1.0");

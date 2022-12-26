@@ -57,7 +57,7 @@ public class ScyllaApplicationContext {
         statement -> {
           statement.setLong(1, readTimeStamp);
           statement.setString(2, uniqueKey);
-          statement.setLong(3, readTimeStamp/1000);
+          statement.setLong(3, readTimeStamp);
         });
   }
 
