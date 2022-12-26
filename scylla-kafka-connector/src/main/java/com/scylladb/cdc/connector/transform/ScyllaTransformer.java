@@ -44,10 +44,7 @@ public class ScyllaTransformer implements ITransformer {
 
     /**
      * This method is the crux of this application which is responsible to get the task and change(row change) parameter
-     * and build a json payload which will have some metadata also like createdAt and updatedAt.
-     *
-     * @param task   linked with {@link Task}
-     * @param change linked with {@link RawChange}
+     * and build a json payload which will have some metadata also like createdAt and updatedAt
      */
 
     private void processCheckpoint(){
