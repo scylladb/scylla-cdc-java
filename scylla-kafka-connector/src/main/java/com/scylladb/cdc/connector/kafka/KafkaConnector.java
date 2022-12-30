@@ -1,5 +1,6 @@
 package com.scylladb.cdc.connector.kafka;
 
+import com.scylladb.cdc.connector.utils.ScyllaConstants;
 import com.scylladb.cdc.model.worker.ScyllaConnectorConfiguration;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -16,9 +17,9 @@ public class KafkaConnector implements IConnector{
     private final AtomicReference<List<KafkaProducer<String, String>>> kafkaProducerList;
 
     public KafkaConnector(ScyllaConnectorConfiguration scyllaConnectorConfiguration) {
+        this.random = new Random();
         this.brokers = scyllaConnectorConfiguration.getKafkaBrokers();
         this.poolSize = scyllaConnectorConfiguration.getPoolSize();
-        this.random = new Random();
         this.kafkaProducerList = new AtomicReference<>(Collections.synchronizedList(new LinkedList<>()));
         init();
     }
@@ -27,10 +28,10 @@ public class KafkaConnector implements IConnector{
     public void init() {
         for (int i = 0; i < this.poolSize; ++i) {
             Properties kafkaProperties = new Properties();
-            //TODO: Set the compression type: kafkaProperties.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, ScyllaConstants.COMPRESSION_TYPE_SNAPPY);
             kafkaProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, this.brokers);
             kafkaProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
             kafkaProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            kafkaProperties.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, ScyllaConstants.COMPRESSION_TYPE_SNAPPY);
             this.kafkaProducerList.get().add(new KafkaProducer<>(kafkaProperties));
         }
     }

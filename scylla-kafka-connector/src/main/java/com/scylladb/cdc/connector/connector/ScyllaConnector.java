@@ -2,21 +2,17 @@ package com.scylladb.cdc.connector.connector;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
-import com.scylladb.cdc.connector.cache.UtilityCache;
 import com.scylladb.cdc.connector.core.IScyllaConnector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.scylladb.cdc.model.worker.CheckPointDetails;
 import com.scylladb.cdc.model.worker.ScyllaApplicationContext;
 import com.scylladb.cdc.model.worker.ScyllaConnectorConfiguration;
-import com.scylladb.cdc.model.worker.TableConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
 import java.io.File;
 import java.io.IOException;
-import java.sql.Timestamp;
 import java.util.*;
 
 /**
@@ -30,20 +26,17 @@ public class ScyllaConnector implements IScyllaConnector {
     @Parameter(names = "--file", required = true, description = "Config file for the scylla connector: ")
     private String configFilePath;
 
-    private ScyllaConnectorConfiguration scyllaConnectorConfiguration;
     private ScyllaConnectorTask scyllaConnectorTask;
-    private String instanceName;
 
     @Override
     public void initialize() throws IOException {
         log.info("Initializing the configuration for the scylla connector: " + configFilePath);
-        this.scyllaConnectorConfiguration = new ObjectMapper(new YAMLFactory()).readValue(new File(configFilePath), ScyllaConnectorConfiguration.class);
+        ScyllaConnectorConfiguration scyllaConnectorConfiguration = new ObjectMapper(new YAMLFactory())
+            .readValue(new File(configFilePath), ScyllaConnectorConfiguration.class);
         log.debug(ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE));
         ScyllaApplicationContext.setScyllaConfiguration(scyllaConnectorConfiguration);
-        ScyllaApplicationContext.setInstanceName(this.scyllaConnectorConfiguration.getSourceIdOrName());
+        ScyllaApplicationContext.setInstanceName(scyllaConnectorConfiguration.getSourceIdOrName());
         this.scyllaConnectorTask = new ScyllaConnectorTask(scyllaConnectorConfiguration);
-        UtilityCache.cacheBuild();
-
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -83,10 +76,10 @@ public class ScyllaConnector implements IScyllaConnector {
         Runtime.getRuntime().addShutdownHook(new Thread("Fiber-SCYLLADB-shutdown-hook") {
             @Override
             public void run() {
-                log.warn("Stopping Fiber-SCYLLADB commuting process!!!");
+                log.warn("Stopping Fiber-SCYLLA-DB commuting process!!!");
                 Set<Thread> runningThreads = Thread.getAllStackTraces().keySet();
                 for (Thread th : runningThreads) {
-                    if (th != Thread.currentThread() && !th.isDaemon() && th.getClass().getName().startsWith("com.dview.dp.connectors")) {
+                    if (th != Thread.currentThread() && !th.isDaemon() && th.getClass().getName().startsWith("com.scylladb.cdc.connector.connector")) {
                         log.warn("Interrupting the {} for termination", th.getClass());
                         th.interrupt();
                     } else if (th != Thread.currentThread() && !th.isDaemon() && th.isInterrupted()) {
@@ -98,7 +91,7 @@ public class ScyllaConnector implements IScyllaConnector {
                         }
                     }
                 }
-                log.warn("<------- Shutdown Hook Called for Fiber-SCYLLADB Instance ---------------->");
+                log.warn("<------- Shutdown Hook Called for Fiber-SCYLLA-DB Instance ---------------->");
             }
         });
     }

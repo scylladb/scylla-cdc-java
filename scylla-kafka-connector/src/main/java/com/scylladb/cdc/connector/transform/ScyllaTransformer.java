@@ -22,10 +22,9 @@ import java.util.concurrent.ExecutionException;
 @Slf4j
 public class ScyllaTransformer implements ITransformer {
 
-    ScyllaConnectorConfiguration scyllaConnectorConfiguration;
+    private final ScyllaConnectorConfiguration scyllaConnectorConfiguration;
 
-    KafkaConnector kafkaConnector;
-    private final UtilityCache utilityCache;
+    private final KafkaConnector kafkaConnector;
 
     private Map<String, String> tableToPrimaryKeyMap = new HashMap<>();
 
@@ -38,7 +37,6 @@ public class ScyllaTransformer implements ITransformer {
     public ScyllaTransformer(ScyllaConnectorConfiguration scyllaConnectorConfiguration) {
         this.kafkaConnector = new KafkaConnector(scyllaConnectorConfiguration);
         this.scyllaConnectorConfiguration = scyllaConnectorConfiguration;
-        this.utilityCache = new UtilityCache();
         this.pollingTime = System.currentTimeMillis();
     }
 
@@ -181,20 +179,20 @@ public class ScyllaTransformer implements ITransformer {
             case ScyllaConstants.ROW_INSERT:
                 transformPayloadMap.put(ScyllaConstants.OPCODE, ScyllaConstants.INSERT_OPCODE);
                 putDataColumns(transformPayloadMap, change);
-                utilityCache.put(ScyllaConstants.UPDATED_CACHE, false);
+                UtilityCache.put(ScyllaConstants.UPDATED_CACHE, false);
                 break;
             case ScyllaConstants.ROW_UPDATE:
-                utilityCache.put(ScyllaConstants.UPDATED_CACHE, true);
+                UtilityCache.put(ScyllaConstants.UPDATED_CACHE, true);
                 break;
             case ScyllaConstants.ROW_DELETE:
-                utilityCache.put("delete", true);
+                UtilityCache.put("delete", true);
                 break;
             case ScyllaConstants.POST_IMAGE:
-                boolean isUpdate = utilityCache.get(ScyllaConstants.UPDATED_CACHE);
+                boolean isUpdate = UtilityCache.get(ScyllaConstants.UPDATED_CACHE);
                 if (isUpdate) {
                     transformPayloadMap.put(ScyllaConstants.OPCODE, ScyllaConstants.UPDATE_OPCODE);
                     putDataColumns(transformPayloadMap, change);
-                    utilityCache.put(ScyllaConstants.UPDATED_CACHE, false);
+                    UtilityCache.put(ScyllaConstants.UPDATED_CACHE, false);
                     break;
                 } else {
                     transformPayloadMap.clear();

@@ -2,14 +2,10 @@ package com.scylladb.cdc.connector.utils;
 
 import com.scylladb.cdc.connector.alerting.SlackMessage;
 import com.google.common.base.Throwables;
-import com.scylladb.cdc.model.worker.ScyllaApplicationContext;
 import com.scylladb.cdc.model.worker.ScyllaConnectorConfiguration;
 import com.scylladb.cdc.model.worker.TableConfig;
 import com.scylladb.cdc.model.TableName;
-import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
-import com.scylladb.cdc.model.worker.RawChange;
-import com.scylladb.cdc.model.worker.Task;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
@@ -63,15 +59,6 @@ public class ScyllaUtils {
 
     }
 
-    public static String decodedValue(String fieldName, String fieldValue) {
-        int leftSpace = 53 - fieldName.length();
-
-        if (fieldValue.length() > leftSpace) {
-            fieldValue = fieldValue.substring(0, leftSpace - 3) + "...";
-        }
-        return String.format("%1$" + leftSpace + "s", fieldValue);
-    }
-
     public static boolean isSupportedColumnSchema(ChangeSchema.ColumnDefinition cdef) {
         ChangeSchema.CqlType type = cdef.getCdcLogDataType().getCqlType();
         return type != ChangeSchema.CqlType.LIST && type != ChangeSchema.CqlType.MAP &&
@@ -87,17 +74,8 @@ public class ScyllaUtils {
         }
     }
 
-    public static void doCheckPointing(Task task, RawChange rawChange){
-        log.info("Starting checkpointing: " + rawChange.getId().getChangeTime().getTimestamp());
-        TableName tableName = task.id.getTable();
-        String keySpaceName = tableName.keyspace;     //Note: instance name is same as the keyspace name.
-        ChangeId changeId = rawChange.getId();
-        long changeTime = changeId.getChangeTime().getTimestamp()/1000;
-        ScyllaApplicationContext.updateCheckPoint(keySpaceName,changeTime);
-    }
-
     public static void sendSlackMessage(String slackWebhookUrl, String message){
-        try(CloseableHttpClient client = HttpClients.createDefault();) {
+        try(CloseableHttpClient client = HttpClients.createDefault()) {
             SlackMessage slackMessage = SlackMessage.builder()
                     .channel(ScyllaConstants.SLACK_CHANNEL)
                     .userName(ScyllaConstants.SLACK_USER)
