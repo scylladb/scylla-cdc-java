@@ -199,7 +199,7 @@ public class ScyllaTransformer implements ITransformer {
                 }
                 break;
             default:
-                throw new IllegalStateException("Default Case Can't Be Executed");
+                throw new IllegalStateException(String.format("WARN: OPCODE: %s, Namespace: %s & ObjectName: %s", opTypeString, namespace, objectName));
         }
 
         String primaryKey = tableToPrimaryKeyMap.get(objectName);
