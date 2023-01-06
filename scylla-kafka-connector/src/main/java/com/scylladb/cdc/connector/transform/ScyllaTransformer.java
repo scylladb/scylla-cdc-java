@@ -31,27 +31,19 @@ public class ScyllaTransformer implements ITransformer {
 
     private final Map<String, Long> checkpointMap = Collections.synchronizedMap(new HashMap<>());
 
-    private long pollingTime;
-
     public ScyllaTransformer(ScyllaConnectorConfiguration scyllaConnectorConfiguration) {
         this.kafkaConnector = new KafkaConnector(scyllaConnectorConfiguration);
         this.scyllaConnectorConfiguration = scyllaConnectorConfiguration;
-        this.pollingTime = System.currentTimeMillis();
     }
 
     /**
      * This method is the crux of this application which is responsible to get the task and change(row change) parameter
      * and build a json payload which will have some metadata also like createdAt and updatedAt
      */
-    private void processCheckpoint(String uniqueIdentifier, long checkpointTimestamp){
+    private void processCheckpoint(String uniqueIdentifier){
         //Case of polling from long history and data surge is High
-        if(checkpointTimestamp > pollingTime){
-            if(checkpointTimestamp - pollingTime >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
-                ScyllaApplicationContext.updateCheckPoint(uniqueIdentifier, checkpointMap.get(uniqueIdentifier));
-                pollingTime = checkpointTimestamp;
-                log.info("Pushed record successfully for: {}", uniqueIdentifier);
-            }
-        }
+        ScyllaApplicationContext.updateCheckPoint(uniqueIdentifier, checkpointMap.get(uniqueIdentifier));
+        log.info("Pushed record successfully for: {}", uniqueIdentifier);
     }
 
     @Override
@@ -73,8 +65,15 @@ public class ScyllaTransformer implements ITransformer {
             if (payloadMap.size() > 2) {
                 kafkaConnector.getConnector().send(new ProducerRecord<>(topicName, payloadMap.get(ScyllaConstants.ENTITY_ID).toString(), kafkaPayload));
                 String uniqueIdentifier = String.format("%s$%s", task.id.getTable().keyspace, task.id.getTable().name);
-                checkpointMap.put(uniqueIdentifier, cddTimeStamp/1000);
-                processCheckpoint(uniqueIdentifier, checkpointMap.get(uniqueIdentifier));
+
+                //Process Checkpointing
+                long oldCheckpoint = checkpointMap.get(uniqueIdentifier);
+                long cdcTimeStamp = cddTimeStamp/1000;
+
+                if(cdcTimeStamp > oldCheckpoint && cdcTimeStamp - oldCheckpoint >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
+                    checkpointMap.put(uniqueIdentifier, cddTimeStamp/1000);
+                    processCheckpoint(uniqueIdentifier);
+                }
             }
         }
     }
