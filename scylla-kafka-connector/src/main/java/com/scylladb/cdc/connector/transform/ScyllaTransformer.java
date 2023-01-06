@@ -43,13 +43,22 @@ public class ScyllaTransformer implements ITransformer {
      * This method is the crux of this application which is responsible to get the task and change(row change) parameter
      * and build a json payload which will have some metadata also like createdAt and updatedAt
      */
+    private void processCheckpoint(String uniqueIdentifier, long checkpointTimestamp){
+        //Case of polling from long history and data surge is High
+        if(checkpointTimestamp > pollingTime){
+            if(checkpointTimestamp - pollingTime >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
+                ScyllaApplicationContext.updateCheckPoint(uniqueIdentifier, checkpointMap.get(uniqueIdentifier));
+                pollingTime = checkpointTimestamp;
+                log.info("Pushed record successfully for: {}", uniqueIdentifier);
+            }
+        }
 
-    private void processCheckpoint(String uniqueIdentifier){
-        long currentTime  = System.currentTimeMillis();
-        if(currentTime - pollingTime >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
-            ScyllaApplicationContext.updateCheckPoint(uniqueIdentifier, checkpointMap.get(uniqueIdentifier));
-            pollingTime = currentTime;
-            log.info("Pushed record successfully for: {}", uniqueIdentifier);
+        //Case of ideal data from now
+        if(checkpointTimestamp < pollingTime){
+            if(pollingTime - checkpointTimestamp >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
+                ScyllaApplicationContext.updateCheckPoint(uniqueIdentifier, checkpointMap.get(uniqueIdentifier));
+                log.info("Pushed record successfully for: {}", uniqueIdentifier);
+            }
         }
     }
 
@@ -73,7 +82,7 @@ public class ScyllaTransformer implements ITransformer {
                 kafkaConnector.getConnector().send(new ProducerRecord<>(topicName, payloadMap.get(ScyllaConstants.ENTITY_ID).toString(), kafkaPayload));
                 String uniqueIdentifier = String.format("%s$%s", task.id.getTable().keyspace, task.id.getTable().name);
                 checkpointMap.put(uniqueIdentifier, cddTimeStamp/1000);
-                processCheckpoint(uniqueIdentifier);
+                processCheckpoint(uniqueIdentifier, checkpointMap.get(uniqueIdentifier));
             }
         }
     }
@@ -159,7 +168,6 @@ public class ScyllaTransformer implements ITransformer {
      * This method is responsible to build the payload from scratch.
      * It has the logic of handling the insert,update and delete appropriately
      */
-
     private Map<String, Object> buildPayload(Task task, RawChange change, long timestamp) throws ExecutionException {
         String namespace = task.id.getTable().keyspace;
         String objectName = task.id.getTable().name;
