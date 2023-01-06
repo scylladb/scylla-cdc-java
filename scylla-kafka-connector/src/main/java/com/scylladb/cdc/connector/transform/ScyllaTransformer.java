@@ -67,9 +67,18 @@ public class ScyllaTransformer implements ITransformer {
                 String uniqueIdentifier = String.format("%s$%s", task.id.getTable().keyspace, task.id.getTable().name);
 
                 //Process Checkpointing
-                long oldCheckpoint = checkpointMap.get(uniqueIdentifier);
+                long oldCheckpoint;
+                if (Objects.isNull(checkpointMap.get(uniqueIdentifier))) {
+                    oldCheckpoint = ScyllaApplicationContext.getCheckPointDetails(uniqueIdentifier).getLastReadTimestamp();
+                    checkpointMap.put(uniqueIdentifier, oldCheckpoint);
+                } else {
+                    oldCheckpoint = checkpointMap.get(uniqueIdentifier);
+                }
+
+                //Current Checkpoint
                 long cdcTimeStamp = cddTimeStamp/1000;
 
+                //Trigger point for checkpointing
                 if(cdcTimeStamp > oldCheckpoint && cdcTimeStamp - oldCheckpoint >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
                     checkpointMap.put(uniqueIdentifier, cddTimeStamp/1000);
                     processCheckpoint(uniqueIdentifier);
