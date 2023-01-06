@@ -52,14 +52,6 @@ public class ScyllaTransformer implements ITransformer {
                 log.info("Pushed record successfully for: {}", uniqueIdentifier);
             }
         }
-
-        //Case of ideal data from now
-        if(checkpointTimestamp < pollingTime){
-            if(pollingTime - checkpointTimestamp >= (6 * WorkerConfiguration.DEFAULT_QUERY_TIME_WINDOW_SIZE_MS)){
-                ScyllaApplicationContext.updateCheckPoint(uniqueIdentifier, checkpointMap.get(uniqueIdentifier));
-                log.info("Pushed record successfully for: {}", uniqueIdentifier);
-            }
-        }
     }
 
     @Override
