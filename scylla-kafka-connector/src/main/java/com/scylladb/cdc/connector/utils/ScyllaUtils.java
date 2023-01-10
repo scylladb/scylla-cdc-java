@@ -44,7 +44,7 @@ public class ScyllaUtils {
     }
 
     public static Map<String, String> generateTableToKeyMapping(
-        ScyllaConnectorConfiguration scyllaConnectorConfiguration) {
+            ScyllaConnectorConfiguration scyllaConnectorConfiguration) {
         Map<String, String> tableToPrimaryKeyMap = new HashMap<>();
         HashMap<String, List<TableConfig>> keySpacesAndTablesWithPrimaryKey = scyllaConnectorConfiguration.getKeySpacesAndTablesList();
         for (Map.Entry<String, List<TableConfig>> entry : keySpacesAndTablesWithPrimaryKey.entrySet()) {
@@ -57,13 +57,6 @@ public class ScyllaUtils {
         }
         return tableToPrimaryKeyMap;
 
-    }
-
-    public static boolean isSupportedColumnSchema(ChangeSchema.ColumnDefinition cdef) {
-        ChangeSchema.CqlType type = cdef.getCdcLogDataType().getCqlType();
-        return type != ChangeSchema.CqlType.LIST && type != ChangeSchema.CqlType.MAP &&
-                type != ChangeSchema.CqlType.SET && type != ChangeSchema.CqlType.UDT &&
-                type != ChangeSchema.CqlType.TUPLE;
     }
     private static void printAllTopicNames(Set<TableName> allTableNames) {
         String orgName = scyllaConnectorConfigurationObject.getOrg();

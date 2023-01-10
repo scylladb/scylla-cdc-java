@@ -6,6 +6,7 @@ import com.scylladb.cdc.connector.utils.JsonUtils;
 import com.scylladb.cdc.connector.utils.ScyllaConstants;
 import com.scylladb.cdc.connector.utils.ScyllaUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.scylladb.cdc.cql.driver3.Driver3Field;
 import com.scylladb.cdc.model.worker.ScyllaConnectorConfiguration;
 import com.scylladb.cdc.model.worker.*;
 import com.scylladb.cdc.model.worker.cql.Cell;
@@ -61,11 +62,12 @@ public class ScyllaTransformer implements ITransformer {
 
         String kafkaPayload = JsonUtils.OBJECT_MAPPER.writeValueAsString(payloadMap);
 
+
         if (RawChange.OperationType.ROW_INSERT.equals(change.getOperationType()) || (RawChange.OperationType.POST_IMAGE.equals(change.getOperationType()))) {
             if (payloadMap.size() > 2) {
                 kafkaConnector.getConnector().send(new ProducerRecord<>(topicName, payloadMap.get(ScyllaConstants.ENTITY_ID).toString(), kafkaPayload));
                 String uniqueIdentifier = String.format("%s$%s", task.id.getTable().keyspace, task.id.getTable().name);
-
+                System.out.println(kafkaPayload);
                 //Process Checkpointing
                 long oldCheckpoint;
                 if (Objects.isNull(checkpointMap.get(uniqueIdentifier))) {
@@ -108,8 +110,7 @@ public class ScyllaTransformer implements ITransformer {
      */
     private void putDataColumns(Map<String, Object> payload, RawChange change) {
         for (ChangeSchema.ColumnDefinition columnDefinition : change.getSchema().getNonCdcColumnDefinitions()) {
-            if (!ScyllaUtils.isSupportedColumnSchema(columnDefinition)) continue;
-
+            //if (!ScyllaUtils.isSupportedColumnSchema(columnDefinition)) continue;
             Cell columnName = change.getCell(columnDefinition.getColumnName());
             Object value = translateCellToKafka(columnName);
             payload.put(columnDefinition.getColumnName(), value);
@@ -133,6 +134,10 @@ public class ScyllaTransformer implements ITransformer {
 
         if (dataType.getCqlType() == ChangeSchema.CqlType.TIMEUUID) {
             return cell.getUUID().toString();
+        }
+
+        if (dataType.getCqlType() == ChangeSchema.CqlType.UDT) {
+            return convertIntoJavaObject(cell);
         }
 
         if (dataType.getCqlType() == ChangeSchema.CqlType.VARINT) {
@@ -271,5 +276,29 @@ public class ScyllaTransformer implements ITransformer {
 
     private void getTableToPrimaryKeyMap() {
         tableToPrimaryKeyMap = ScyllaUtils.generateTableToKeyMapping(scyllaConnectorConfiguration);
+    }
+
+    private LinkedHashMap<String,Object> convertIntoJavaObject(Cell cell){
+        LinkedHashMap<String,Object> convertedMap = new LinkedHashMap<>();
+        Object value = cell.getAsObject();
+        LinkedHashMap<String, Driver3Field> map = (LinkedHashMap<String, Driver3Field>) value;   //Using this approach as the object mapper approach is throwing error
+
+        for (Map.Entry<String, Driver3Field> entry : map.entrySet()) {
+            ChangeSchema.DataType dataType = entry.getValue().getDataType();
+            String key = entry.getKey();
+            String valueDataType = dataType.getCqlType().name();
+            switch (valueDataType){
+                case "BIGINT":
+                    convertedMap.put(key,entry.getValue().getLong());
+                    break;
+                case "TIMESTAMP":
+                    Date date = cell.getTimestamp();
+                    convertedMap.put(key,formatter.format(date));
+                    break;
+                default:
+                    convertedMap.put(key,entry.getValue().toString());
+            }
+        }
+        return convertedMap;
     }
 }
