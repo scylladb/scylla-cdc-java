@@ -26,5 +26,13 @@
             <version>4.1.75.Final</version>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger-system-backend</artifactId>
+        </dependency>
     </dependencies>
 </project>
