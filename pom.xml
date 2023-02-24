@@ -32,20 +32,20 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>com.google.flogger</groupId>
+                <artifactId>flogger</artifactId>
+                <version>${flogger.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.flogger</groupId>
+                <artifactId>flogger-system-backend</artifactId>
+                <version>${flogger.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <dependencies>
-        <dependency>
-            <groupId>com.google.flogger</groupId>
-            <artifactId>flogger</artifactId>
-            <version>${flogger.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.flogger</groupId>
-            <artifactId>flogger-system-backend</artifactId>
-            <version>${flogger.version}</version>
-        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

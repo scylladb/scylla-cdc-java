@@ -46,6 +46,14 @@
             <artifactId>snakeyaml</artifactId>
             <version>${snakeyaml.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger-system-backend</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
@@ -61,6 +69,12 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>com.google.flogger</exclude>
+                                    <exclude>org.slf4j</exclude>
+                                </excludes>
+                            </artifactSet>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
@@ -83,6 +97,9 @@
                                 <relocation>
                                     <pattern>com.google.</pattern>
                                     <shadedPattern>shaded.com.scylladb.cdc.driver3.</shadedPattern>
+                                    <excludes>
+                                        <exclude>com.google.common.flogger.*</exclude>
+                                    </excludes>
                                 </relocation>
                             </relocations>
                         </configuration>
