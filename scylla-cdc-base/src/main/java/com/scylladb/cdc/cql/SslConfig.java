@@ -1,12 +1,10 @@
 package com.scylladb.cdc.cql;
 
-import io.netty.handler.ssl.SslProvider;
-
 import java.util.ArrayList;
 import java.util.List;
 
 public class SslConfig {
-    public final SslProvider sslProvider;
+    public final String sslProviderString;
     public final String trustStorePath;
     public final String trustStorePassword;
     public final String keyStorePath;
@@ -15,8 +13,8 @@ public class SslConfig {
     public final String certPath;
     public final String privateKeyPath;
 
-    public SslConfig(SslProvider sslProvider, String trustStorePath, String trustStorePassword, String keyStorePath, String keyStorePassword, List<String> cipherSuites, String certPath, String privateKeyPath) {
-        this.sslProvider = sslProvider;
+    public SslConfig(String sslProviderString, String trustStorePath, String trustStorePassword, String keyStorePath, String keyStorePassword, List<String> cipherSuites, String certPath, String privateKeyPath) {
+        this.sslProviderString = sslProviderString;
         this.trustStorePath = trustStorePath;
         this.trustStorePassword = trustStorePassword;
         this.keyStorePath = keyStorePath;
@@ -31,7 +29,7 @@ public class SslConfig {
     }
 
     public static class Builder {
-        private SslProvider sslProvider = null;
+        private String sslProviderString = null;
         private String trustStorePath = null;
         private String trustStorePassword = null;
         private String keyStorePath = null;
@@ -40,8 +38,8 @@ public class SslConfig {
         private String certPath = null;
         private String privateKeyPath = null;
 
-        public Builder withSslProvider(SslProvider sslProvider) {
-            this.sslProvider = sslProvider;
+        public Builder withSslProviderString(String sslProviderString) {
+            this.sslProviderString = sslProviderString;
             return this;
         }
 
@@ -81,7 +79,7 @@ public class SslConfig {
         }
 
         public SslConfig build() {
-            return new SslConfig(sslProvider, trustStorePath, trustStorePassword, keyStorePath, keyStorePassword, cipherSuites, certPath, privateKeyPath);
+            return new SslConfig(sslProviderString, trustStorePath, trustStorePassword, keyStorePath, keyStorePassword, cipherSuites, certPath, privateKeyPath);
         }
     }
 }

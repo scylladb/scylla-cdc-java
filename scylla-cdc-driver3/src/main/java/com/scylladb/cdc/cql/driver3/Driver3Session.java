@@ -6,6 +6,7 @@ import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.SslConfig;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslProvider;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLException;
@@ -34,7 +35,7 @@ public class Driver3Session implements AutoCloseable {
             SslConfig sslConfig = cqlConfiguration.sslConfig;
             final SslContextBuilder sslContextBuilder = SslContextBuilder.forClient();
             System.out.println(sslConfig.getClass().getProtectionDomain().getCodeSource().getLocation());
-            sslContextBuilder.sslProvider(sslConfig.sslProvider);
+            sslContextBuilder.sslProvider(SslProvider.valueOf(sslConfig.sslProviderString));
             if (sslConfig.trustStorePath != null) {
                 final KeyStore trustKeyStore = createKeyStore(sslConfig.trustStorePath, sslConfig.trustStorePassword);
 
