@@ -48,6 +48,7 @@ public class WorkerThread implements AutoCloseable {
                 .withQueryTimeWindowSizeMs(DEFAULT_QUERY_WINDOW_SIZE_MS)
                 .withConfidenceWindowSizeMs(DEFAULT_CONFIDENCE_WINDOW_SIZE_MS)
                 .withClock(clock)
+                .withMinimalWaitForWindowMs(WorkerConfiguration.DEFAULT_MINIMAL_WAIT_FOR_WINDOW_MS)
                 .build(), groupedStreams);
     }
 

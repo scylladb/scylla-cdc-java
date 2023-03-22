@@ -3,7 +3,7 @@
     <parent>
         <groupId>com.scylladb</groupId>
         <artifactId>scylla-cdc</artifactId>
-        <version>1.3.1-SNAPSHOT</version>
+        <version>1.3.1-WINDOW</version>
     </parent>
     <artifactId>scylla-cdc-replicator</artifactId>
     <name>Java Library for Scylla CDC - replicator</name>

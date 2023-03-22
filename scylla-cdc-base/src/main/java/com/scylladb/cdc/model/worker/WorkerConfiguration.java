@@ -13,6 +13,7 @@ import com.scylladb.cdc.transport.WorkerTransport;
 public final class WorkerConfiguration {
     public static final long DEFAULT_QUERY_TIME_WINDOW_SIZE_MS = 30000;
     public static final long DEFAULT_CONFIDENCE_WINDOW_SIZE_MS = 30000;
+    public static final long DEFAULT_MINIMAL_WAIT_FOR_WINDOW_MS = 0;
     public static final RetryBackoff DEFAULT_WORKER_RETRY_BACKOFF =
             new ExponentialRetryBackoffWithJitter(10, 30000);
 
@@ -22,6 +23,7 @@ public final class WorkerConfiguration {
 
     public final long queryTimeWindowSizeMs;
     public final long confidenceWindowSizeMs;
+    public final long minimalWaitForWindowMs;
 
     public final RetryBackoff workerRetryBackoff;
 
@@ -30,7 +32,7 @@ public final class WorkerConfiguration {
     private final Clock clock;
     
     private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer, long queryTimeWindowSizeMs,
-            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock) {
+            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
@@ -41,6 +43,7 @@ public final class WorkerConfiguration {
         this.workerRetryBackoff = Preconditions.checkNotNull(workerRetryBackoff);
         this.executorService = executorService;
         this.clock = Preconditions.checkNotNull(clock);
+        this.minimalWaitForWindowMs = minimalWaitForWindowMs;
     }
     
     public ScheduledExecutorService getExecutorService() {
@@ -70,6 +73,8 @@ public final class WorkerConfiguration {
 
         private long queryTimeWindowSizeMs = DEFAULT_QUERY_TIME_WINDOW_SIZE_MS;
         private long confidenceWindowSizeMs = DEFAULT_CONFIDENCE_WINDOW_SIZE_MS;
+
+        private long minimalWaitForWindowMs = DEFAULT_MINIMAL_WAIT_FOR_WINDOW_MS;
 
         private RetryBackoff workerRetryBackoff = DEFAULT_WORKER_RETRY_BACKOFF;
 
@@ -146,12 +151,25 @@ public final class WorkerConfiguration {
             return this;
         }
 
+        /**
+         * Sets the minimal wait time between read windows.
+         * <p>
+         * Can be used as a simple way to throttle worker.
+         * @param minimalWaitForWindowMs
+         * @return
+         */
+        public Builder withMinimalWaitForWindowMs(long minimalWaitForWindowMs) {
+            Preconditions.checkArgument(minimalWaitForWindowMs >= 0);
+            this.minimalWaitForWindowMs = minimalWaitForWindowMs;
+            return this;
+        }
+
         public WorkerConfiguration build() {
             if (executorService == null) {
                 executorService = Executors.newScheduledThreadPool(1);
             }
             return new WorkerConfiguration(transport, cql, consumer, queryTimeWindowSizeMs, confidenceWindowSizeMs,
-                    workerRetryBackoff, executorService, clock);
+                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs);
         }
     }
 }
