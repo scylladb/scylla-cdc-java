@@ -15,7 +15,7 @@
     <properties>
         <scylla.driver.version>3.11.2.1</scylla.driver.version>
 
-        <jackson-databind.version>2.13.4.1</jackson-databind.version>
+        <jackson-databind.version>2.13.4.2</jackson-databind.version>
         <log4j.version>2.17.1</log4j.version>
         <snakeyaml.version>1.32</snakeyaml.version>
 
