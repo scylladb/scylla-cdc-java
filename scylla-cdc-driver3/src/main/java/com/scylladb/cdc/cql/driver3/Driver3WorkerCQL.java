@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -76,7 +77,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
             public void onFailure(Throwable t) {
                 result.completeExceptionally(t);
             }
-        });
+        }, MoreExecutors.directExecutor());
         return result;
     }
 
@@ -121,7 +122,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                         public void onFailure(Throwable t) {
                             fut.completeExceptionally(t);
                         }
-                    });
+                    }, MoreExecutors.directExecutor());
                 }
             } else {
                 // The first assumption here is that we can
@@ -202,7 +203,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
             public void onFailure(Throwable t) {
                 result.completeExceptionally(t);
             }
-        });
+        }, MoreExecutors.directExecutor());
         return result;
     }
 

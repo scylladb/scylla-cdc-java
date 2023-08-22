@@ -33,6 +33,7 @@ import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.scylladb.cdc.cql.BaseMasterCQL;
 import com.scylladb.cdc.model.TableName;
 
@@ -211,7 +212,7 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
                     public void onFailure(Throwable t) {
                         result.completeExceptionally(t);
                     }
-                });
+                }, MoreExecutors.directExecutor());
             }
         } else {
             assert (availCount == 1);
@@ -237,7 +238,7 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
                     public void onFailure(Throwable t) {
                         result.completeExceptionally(t);
                     }
-                });
+                }, MoreExecutors.directExecutor());
             }
         } else {
             for (int i = 0; i < availableWithoutFetching; i++) {
@@ -261,7 +262,7 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
             public void onFailure(Throwable t) {
                 result.completeExceptionally(t);
             }
-        });
+        }, MoreExecutors.directExecutor());
         return result;
     }
 
@@ -279,7 +280,7 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
             public void onFailure(Throwable t) {
                 result.completeExceptionally(t);
             }
-        });
+        }, MoreExecutors.directExecutor());
         return result;
     }
 

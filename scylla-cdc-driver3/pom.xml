@@ -13,11 +13,9 @@
     <packaging>jar</packaging>
 
     <properties>
-        <scylla.driver.version>3.11.2.1</scylla.driver.version>
+        <scylla.driver.version>3.11.4.0</scylla.driver.version>
 
-        <jackson-databind.version>2.13.4.1</jackson-databind.version>
         <log4j.version>2.17.1</log4j.version>
-        <snakeyaml.version>1.32</snakeyaml.version>
 
         <!-- Integration tests. -->
         <docker.skip>false</docker.skip>
@@ -35,16 +33,35 @@
             <groupId>com.scylladb</groupId>
             <artifactId>scylla-driver-core</artifactId>
             <version>${scylla.driver.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-common</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-handler</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>${jackson-databind.version}</version>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>32.0.0-jre</version>
         </dependency>
         <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-            <version>${snakeyaml.version}</version>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+            <version>4.1.94.Final</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler</artifactId>
+            <version>4.1.94.Final</version>
         </dependency>
         <dependency>
             <groupId>com.google.flogger</groupId>
@@ -61,7 +78,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.2.4</version>
+                <version>3.5.0</version>
                 <executions>
                     <execution>
                         <phase>package</phase>

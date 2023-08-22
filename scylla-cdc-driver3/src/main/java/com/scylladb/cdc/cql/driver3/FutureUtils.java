@@ -3,6 +3,7 @@ package com.scylladb.cdc.cql.driver3;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -20,7 +21,7 @@ class FutureUtils {
             public void onFailure(Throwable t) {
                 result.completeExceptionally(t);
             }
-        });
+        }, MoreExecutors.directExecutor());
         return result;
     }
 }
