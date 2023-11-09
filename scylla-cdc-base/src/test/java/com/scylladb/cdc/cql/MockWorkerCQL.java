@@ -119,6 +119,10 @@ public class MockWorkerCQL implements WorkerCQL {
         return finishedReaders.contains(task);
     }
 
+    public Set<Task> getFinishedReaders() {
+        return finishedReaders;
+    }
+
     public void setCQLErrorStrategy(ErrorInject errorStrategy) {
         this.cqlErrorStrategy = Preconditions.checkNotNull(errorStrategy);
     }
