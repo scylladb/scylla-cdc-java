@@ -152,7 +152,12 @@ abstract class TaskAction {
         @Override
         public CompletableFuture<TaskAction> run() {
             if (change.isPresent()) {
-                Task updatedTask = task.updateState(change.get().getId());
+                Task updatedTask;
+                if(change.get().isEndOfBatch()) {
+                    updatedTask = task.updateState(change.get().getId());
+                } else {
+                    updatedTask = task;
+                }
 
                 try {
                     CompletableFuture<TaskAction> taskActionFuture = workerConfiguration.consumer.getConsumerDispatch().consume(task, change.get(), updatedTask)
