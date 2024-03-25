@@ -28,7 +28,6 @@ public class Driver3Session implements AutoCloseable {
     public Driver3Session(CQLConfiguration cqlConfiguration) {
         Cluster.Builder clusterBuilder = Cluster.builder()
                 .withProtocolVersion(ProtocolVersion.NEWEST_SUPPORTED);
-
         clusterBuilder = clusterBuilder.addContactPointsWithPorts(cqlConfiguration.contactPoints);
 
         if (cqlConfiguration.sslConfig != null) {
@@ -107,7 +106,6 @@ public class Driver3Session implements AutoCloseable {
         // and Driver3WorkerCQLIT#testPreparedStatementOldSchemaAfterAlter
         // for more context.
         clusterBuilder = clusterBuilder.withProtocolVersion(ProtocolVersion.V4);
-
         String user = cqlConfiguration.user, password = cqlConfiguration.password;
         if (user != null && password != null) {
             clusterBuilder = clusterBuilder.withCredentials(user, password);
@@ -116,6 +114,12 @@ public class Driver3Session implements AutoCloseable {
         if (cqlConfiguration.getLocalDCName() != null) {
             clusterBuilder = clusterBuilder.withLoadBalancingPolicy(
                     DCAwareRoundRobinPolicy.builder().withLocalDc(cqlConfiguration.getLocalDCName()).build());
+        }
+
+        if (cqlConfiguration.queryOptionsFetchSize > 0) {
+            QueryOptions queryOptions = new QueryOptions();
+            queryOptions.setFetchSize(cqlConfiguration.queryOptionsFetchSize);
+            clusterBuilder = clusterBuilder.withQueryOptions(queryOptions);
         }
 
         driverCluster = clusterBuilder.build();

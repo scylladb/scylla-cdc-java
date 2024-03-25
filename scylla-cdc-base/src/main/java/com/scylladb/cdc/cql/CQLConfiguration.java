@@ -64,10 +64,11 @@ public class CQLConfiguration {
     private final ConsistencyLevel consistencyLevel;
     private final String localDCName;
     public final SslConfig sslConfig;
+    public final int queryOptionsFetchSize;
 
     private CQLConfiguration(List<InetSocketAddress> contactPoints,
                             String user, String password, ConsistencyLevel consistencyLevel,
-                            String localDCName, SslConfig sslConfig) {
+                            String localDCName, SslConfig sslConfig, int queryOptionsFetchSize) {
         this.contactPoints = Preconditions.checkNotNull(contactPoints);
         Preconditions.checkArgument(!contactPoints.isEmpty());
 
@@ -81,6 +82,7 @@ public class CQLConfiguration {
         this.consistencyLevel = Preconditions.checkNotNull(consistencyLevel);
         this.localDCName = localDCName;
         this.sslConfig = sslConfig;
+        this.queryOptionsFetchSize = queryOptionsFetchSize;
     }
 
     /**
@@ -123,6 +125,7 @@ public class CQLConfiguration {
         private ConsistencyLevel consistencyLevel = DEFAULT_CONSISTENCY_LEVEL;
         private String localDCName = null;
         private SslConfig sslConfig = null;
+        private int queryOptionsFetchSize = 0;
 
         public Builder addContactPoint(InetSocketAddress contactPoint) {
             Preconditions.checkNotNull(contactPoint);
@@ -189,8 +192,19 @@ public class CQLConfiguration {
             return this;
         }
 
+        /**
+         * Sets the default page fetch size for select queries. Will be passed to {@code QueryOptions}
+         * of the driver's {@code Cluster.Builder}. 0 means default to driver's default.
+         * @param fetchSize select query page fetch size.
+         * @return a reference to this builder.
+         */
+        public Builder withQueryOptionsFetchSize(int fetchSize) {
+            this.queryOptionsFetchSize = fetchSize;
+            return this;
+        }
+
         public CQLConfiguration build() {
-            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, sslConfig);
+            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, sslConfig, queryOptionsFetchSize);
         }
     }
 }
