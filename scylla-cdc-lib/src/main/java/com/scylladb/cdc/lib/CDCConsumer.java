@@ -198,7 +198,7 @@ public final class CDCConsumer implements AutoCloseable {
         }
 
         public Builder withSleepBeforeGenerationDoneMs(long sleepBeforeGenerationDoneMs) {
-            masterConfigurationBuilder.withSleepBeforeFirstGenerationMs(sleepBeforeGenerationDoneMs);
+            masterConfigurationBuilder.withSleepBeforeGenerationDoneMs(sleepBeforeGenerationDoneMs);
             return this;
         }
 
