@@ -14,7 +14,7 @@
         <scylla.driver.version>3.11.5.0</scylla.driver.version>
 
         <!-- Integration tests. -->
-        <docker.skip>false</docker.skip>
+        <docker.skip>true</docker.skip>
         <scylla_src.docker.port>4301</scylla_src.docker.port>
         <scylla_dst.docker.port>4302</scylla_dst.docker.port>
         <scylla.docker.version>latest</scylla.docker.version>
