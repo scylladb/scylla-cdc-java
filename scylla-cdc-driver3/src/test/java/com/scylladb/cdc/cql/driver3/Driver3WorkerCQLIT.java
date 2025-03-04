@@ -1,6 +1,7 @@
 package com.scylladb.cdc.cql.driver3;
 
 import com.datastax.driver.core.*;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ExecutionException;
@@ -10,6 +11,7 @@ import java.util.concurrent.TimeoutException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("integration")
 public class Driver3WorkerCQLIT extends BaseScyllaIntegrationTest {
     @Test
     public void testPreparedStatementSameSchemaBetweenPages() throws ExecutionException, InterruptedException, TimeoutException {

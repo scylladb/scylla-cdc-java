@@ -3,6 +3,7 @@ package com.scylladb.cdc.cql.driver3;
 import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.Timestamp;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.Calendar;
@@ -14,6 +15,7 @@ import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("integration")
 public class Driver3MasterCQLIT extends BaseScyllaIntegrationTest {
     @Test
     public void testMasterFetchesFirstGenerationId() throws InterruptedException, ExecutionException, TimeoutException {

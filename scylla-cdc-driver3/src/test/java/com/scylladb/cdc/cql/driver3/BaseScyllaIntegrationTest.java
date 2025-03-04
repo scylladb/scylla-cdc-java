@@ -18,6 +18,7 @@ import com.scylladb.cdc.model.worker.Task;
 import com.scylladb.cdc.model.worker.TaskState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -26,6 +27,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+@Tag("integration")
 public class BaseScyllaIntegrationTest {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
     protected static final long SCYLLA_TIMEOUT_MS = 3000;
