@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeoutException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@Tag("integration")
 public class Driver3SchemaFactoryIT extends BaseScyllaIntegrationTest {
     @Test
     public void testColumnKindSchemaGeneration() throws ExecutionException, InterruptedException, TimeoutException {

@@ -25,7 +25,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.3.0</version>
+                <version>3.7.1</version>
 
                 <configuration>
                     <descriptorRefs>
@@ -46,7 +46,7 @@
             </plugin>
             <plugin>
                 <artifactId>maven-gpg-plugin</artifactId>
-                <version>1.5</version>
+                <version>3.2.4</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
@@ -54,7 +54,7 @@
 
             <plugin>
                 <artifactId>maven-install-plugin</artifactId>
-                <version>2.4</version>
+                <version>3.1.4</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
@@ -62,7 +62,7 @@
 
             <plugin>
                 <artifactId>maven-deploy-plugin</artifactId>
-                <version>2.7</version>
+                <version>3.1.4</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
@@ -71,7 +71,7 @@
             <plugin>
                 <groupId>io.fabric8</groupId>
                 <artifactId>docker-maven-plugin</artifactId>
-                <version>0.34.1</version>
+                <version>0.45.1</version>
 
                 <configuration>
                     <imagePullPolicy>Always</imagePullPolicy>
@@ -131,7 +131,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.0.0-M5</version>
+                <version>3.5.2</version>
 
                 <configuration>
                     <systemPropertyVariables>
@@ -215,7 +215,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-jdk14</artifactId>
-            <version>1.7.25</version>
+            <version>2.0.7</version>
         </dependency>
     </dependencies>
 </project>

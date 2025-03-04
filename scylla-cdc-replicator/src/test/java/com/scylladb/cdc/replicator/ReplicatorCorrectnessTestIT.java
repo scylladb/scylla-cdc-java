@@ -14,6 +14,7 @@ import com.scylladb.cdc.model.TableName;
 
 import org.awaitility.core.ConditionFactory;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -29,6 +30,7 @@ import static org.awaitility.Awaitility.with;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.fail;
 
+@Tag("integration")
 public class ReplicatorCorrectnessTestIT extends BaseScyllaIntegrationTest {
       private static final String[] UDTsCreate = {
             "CREATE TYPE ks.udt_simple (a int, b int, c text)"

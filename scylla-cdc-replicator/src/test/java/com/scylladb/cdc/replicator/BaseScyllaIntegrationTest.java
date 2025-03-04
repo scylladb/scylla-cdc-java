@@ -12,6 +12,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.TestInstance;
 
 import java.net.InetSocketAddress;
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.*;
 
+@Tag("integration")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class BaseScyllaIntegrationTest {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();

@@ -13,7 +13,7 @@
         <plugins>
             <plugin>
                 <artifactId>maven-gpg-plugin</artifactId>
-                <version>1.5</version>
+                <version>3.2.4</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
