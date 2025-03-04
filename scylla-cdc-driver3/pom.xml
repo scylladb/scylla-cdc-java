@@ -13,7 +13,7 @@
     <packaging>jar</packaging>
 
     <properties>
-        <scylla.driver.version>3.11.5.0</scylla.driver.version>
+        <scylla.driver.version>3.11.5.5</scylla.driver.version>
 
         <log4j.version>2.17.1</log4j.version>
 
@@ -51,17 +51,17 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>32.0.0-jre</version>
+            <version>33.4.0-jre</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-common</artifactId>
-            <version>4.1.115.Final</version>
+            <version>4.1.119.Final</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-handler</artifactId>
-            <version>4.1.94.Final</version>
+            <version>4.1.119.Final</version>
         </dependency>
         <dependency>
             <groupId>com.google.flogger</groupId>

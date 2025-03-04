@@ -11,7 +11,7 @@
     <packaging>jar</packaging>
 
     <properties>
-        <guava.version>19.0</guava.version>
+        <guava.version>33.4.0-jre</guava.version>
     </properties>
 
     <dependencies>
@@ -23,7 +23,7 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-handler</artifactId>
-            <version>4.1.94.Final</version>
+            <version>4.1.119.Final</version>
             <scope>compile</scope>
         </dependency>
         <dependency>

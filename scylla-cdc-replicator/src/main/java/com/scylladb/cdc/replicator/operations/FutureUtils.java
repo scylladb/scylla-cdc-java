@@ -7,6 +7,7 @@ import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 
 public final class FutureUtils {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -16,28 +17,29 @@ public final class FutureUtils {
     }
 
     public static <T> CompletableFuture<Void> convert(ListenableFuture<T> fut, String errorMsg) {
-        CompletableFuture<Void> result = new CompletableFuture<>();
-        Futures.addCallback(fut, new FutureCallback<T>() {
+        CompletableFuture<T> completableFuture = new CompletableFuture<>();
 
-            @Override
-            public void onSuccess(T ignored) {
-                result.complete(null);
+        fut.addListener(() -> {
+            try {
+                completableFuture.complete(fut.get()); // Transfer result
+            } catch (Exception e) {
+                completableFuture.completeExceptionally(e); // Transfer exception
             }
+        }, MoreExecutors.directExecutor());
 
-            @Override
-            public void onFailure(Throwable t) {
+        return completableFuture
+            .thenAccept(ignored -> {}) // Explicitly consume and return Void
+            .exceptionally(t -> {
                 logger.atSevere().withCause(t).log(errorMsg);
-                result.completeExceptionally(t);
-            }
-        });
-        return result;
+                return null;
+            });
     }
 
     public static <T, R> CompletableFuture<R> transformDeferred(ListenableFuture<T> fut,
                                                                 Function<T, CompletableFuture<R>> consumer) {
         CompletableFuture<R> result = new CompletableFuture<>();
-        Futures.addCallback(fut, new FutureCallback<T>() {
 
+        Futures.addCallback(fut, new FutureCallback<T>() {
             @Override
             public void onSuccess(T input) {
                 try {
@@ -59,7 +61,8 @@ public final class FutureUtils {
                 t.printStackTrace();
                 result.completeExceptionally(t);
             }
-        });
+        }, MoreExecutors.directExecutor()); // Runs synchronously, avoids requiring an executor parameter
+
         return result;
     }
 
