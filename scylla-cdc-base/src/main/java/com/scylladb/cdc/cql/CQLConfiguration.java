@@ -64,12 +64,13 @@ public class CQLConfiguration {
     private final ConsistencyLevel consistencyLevel;
     private final String localDCName;
     private final String localRackName;
+    private final ReplicaOrdering replicaOrdering;
     public final SslConfig sslConfig;
     public final int queryOptionsFetchSize;
 
     private CQLConfiguration(List<InetSocketAddress> contactPoints,
                             String user, String password, ConsistencyLevel consistencyLevel,
-                            String localDCName, String localRackName, SslConfig sslConfig, int queryOptionsFetchSize) {
+                            String localDCName, String localRackName, ReplicaOrdering replicaOrdering, SslConfig sslConfig, int queryOptionsFetchSize) {
         this.contactPoints = Preconditions.checkNotNull(contactPoints);
         Preconditions.checkArgument(!contactPoints.isEmpty());
 
@@ -83,6 +84,7 @@ public class CQLConfiguration {
         this.consistencyLevel = Preconditions.checkNotNull(consistencyLevel);
         this.localDCName = localDCName;
         this.localRackName = localRackName;
+        this.replicaOrdering = Preconditions.checkNotNull(replicaOrdering);
         this.sslConfig = sslConfig;
         this.queryOptionsFetchSize = queryOptionsFetchSize;
     }
@@ -131,6 +133,18 @@ public class CQLConfiguration {
         return localRackName;
     }
 
+    /**
+     * Returns replica ordering.
+     * <p>
+     * Replica ordering defines how CQL driver iterates over data replicas
+     * when reads from CDC tables.
+     *
+     * @return replica ordering
+     */
+    public ReplicaOrdering getReplicaOrdering() {
+        return replicaOrdering;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -142,6 +156,7 @@ public class CQLConfiguration {
         private ConsistencyLevel consistencyLevel = DEFAULT_CONSISTENCY_LEVEL;
         private String localDCName = null;
         private String localRackName = null;
+        private ReplicaOrdering replicaOrdering = ReplicaOrdering.RANDOM;
         private SslConfig sslConfig = null;
         private int queryOptionsFetchSize = 0;
 
@@ -220,6 +235,20 @@ public class CQLConfiguration {
             return this;
         }
 
+        /**
+         * Sets the replica ordering for load balancing policy.
+         * <p>
+         * It allows to change the way reader iterates over data replicas
+         * when read data from
+         *
+         * @param replicaOrdering replica ordering to set.
+         * @return a reference to this builder.
+         */
+        public Builder withReplicaOrdering(ReplicaOrdering replicaOrdering) {
+            this.replicaOrdering = Preconditions.checkNotNull(replicaOrdering);
+            return this;
+        }
+
         public Builder withSslConfig(SslConfig sslConfig) {
             this.sslConfig = sslConfig;
             return this;
@@ -237,7 +266,7 @@ public class CQLConfiguration {
         }
 
         public CQLConfiguration build() {
-            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, sslConfig, queryOptionsFetchSize);
+            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, replicaOrdering, sslConfig, queryOptionsFetchSize);
         }
     }
 }

@@ -114,21 +114,34 @@ public class Driver3Session implements AutoCloseable {
             clusterBuilder = clusterBuilder.withCredentials(user, password);
         }
 
+        TokenAwarePolicy.ReplicaOrdering replicaOrdering;
+        switch (cqlConfiguration.getReplicaOrdering()) {
+            case NEUTRAL:
+                replicaOrdering = TokenAwarePolicy.ReplicaOrdering.NEUTRAL;
+                break;
+            case TOPOLOGICAL:
+                replicaOrdering = TokenAwarePolicy.ReplicaOrdering.TOPOLOGICAL;
+                break;
+            default:
+                replicaOrdering = TokenAwarePolicy.ReplicaOrdering.RANDOM;
+                break;
+        }
+
         if (cqlConfiguration.getLocalRackName() != null) {
             RackAwareRoundRobinPolicy.Builder builder = RackAwareRoundRobinPolicy.builder().withLocalRack(cqlConfiguration.getLocalRackName());
             if (cqlConfiguration.getLocalDCName() != null) {
                 builder = builder.withLocalDc(cqlConfiguration.getLocalDCName());
             }
             clusterBuilder = clusterBuilder.withLoadBalancingPolicy(
-                new TokenAwarePolicy(builder.build())
+                new TokenAwarePolicy(builder.build(), replicaOrdering)
             );
         } else if (cqlConfiguration.getLocalDCName() != null) {
             clusterBuilder = clusterBuilder.withLoadBalancingPolicy(
-                new TokenAwarePolicy(DCAwareRoundRobinPolicy.builder().withLocalDc(cqlConfiguration.getLocalDCName()).build())
+                new TokenAwarePolicy(DCAwareRoundRobinPolicy.builder().withLocalDc(cqlConfiguration.getLocalDCName()).build(), replicaOrdering)
             );
         } else {
             clusterBuilder = clusterBuilder.withLoadBalancingPolicy(
-                new TokenAwarePolicy(new RoundRobinPolicy())
+                new TokenAwarePolicy(new RoundRobinPolicy(), replicaOrdering)
             );
         }
 
