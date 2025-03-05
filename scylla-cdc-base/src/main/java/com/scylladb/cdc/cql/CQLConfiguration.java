@@ -63,12 +63,13 @@ public class CQLConfiguration {
     public final String password;
     private final ConsistencyLevel consistencyLevel;
     private final String localDCName;
+    private final String localRackName;
     public final SslConfig sslConfig;
     public final int queryOptionsFetchSize;
 
     private CQLConfiguration(List<InetSocketAddress> contactPoints,
                             String user, String password, ConsistencyLevel consistencyLevel,
-                            String localDCName, SslConfig sslConfig, int queryOptionsFetchSize) {
+                            String localDCName, String localRackName, SslConfig sslConfig, int queryOptionsFetchSize) {
         this.contactPoints = Preconditions.checkNotNull(contactPoints);
         Preconditions.checkArgument(!contactPoints.isEmpty());
 
@@ -81,6 +82,7 @@ public class CQLConfiguration {
 
         this.consistencyLevel = Preconditions.checkNotNull(consistencyLevel);
         this.localDCName = localDCName;
+        this.localRackName = localRackName;
         this.sslConfig = sslConfig;
         this.queryOptionsFetchSize = queryOptionsFetchSize;
     }
@@ -114,6 +116,21 @@ public class CQLConfiguration {
         return localDCName;
     }
 
+    /**
+     * Returns the name of the configured local rack.
+     * <p>
+     * This local rack name will be used to setup
+     * the connection to Scylla to prioritize sending requests to
+     * the nodes in the local rack (in the local datacenter). If this parameter
+     * was not configured, this method returns <code>null</code>.
+     *
+     * @return the name of configured local rack or
+     * <code>null</code> if it was not configured.
+     */
+    public String getLocalRackName() {
+        return localRackName;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -124,6 +141,7 @@ public class CQLConfiguration {
         private String password = null;
         private ConsistencyLevel consistencyLevel = DEFAULT_CONSISTENCY_LEVEL;
         private String localDCName = null;
+        private String localRackName = null;
         private SslConfig sslConfig = null;
         private int queryOptionsFetchSize = 0;
 
@@ -187,6 +205,21 @@ public class CQLConfiguration {
             return this;
         }
 
+        /**
+         * Sets the name of local rack.
+         * <p>
+         * This local rack name will be used to setup
+         * the connection to Scylla to prioritize sending requests to
+         * the nodes in the local rack (in local datacenter).
+         *
+         * @param localRackName the name of local rack to set.
+         * @return a reference to this builder.
+         */
+        public Builder withLocalRackName(String localRackName) {
+            this.localRackName = Preconditions.checkNotNull(localRackName);
+            return this;
+        }
+
         public Builder withSslConfig(SslConfig sslConfig) {
             this.sslConfig = sslConfig;
             return this;
@@ -204,7 +237,7 @@ public class CQLConfiguration {
         }
 
         public CQLConfiguration build() {
-            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, sslConfig, queryOptionsFetchSize);
+            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, sslConfig, queryOptionsFetchSize);
         }
     }
 }
