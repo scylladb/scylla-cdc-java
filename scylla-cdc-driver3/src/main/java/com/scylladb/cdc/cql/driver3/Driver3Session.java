@@ -2,6 +2,7 @@ package com.scylladb.cdc.cql.driver3;
 
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.policies.DCAwareRoundRobinPolicy;
+import com.datastax.driver.core.policies.RoundRobinPolicy;
 import com.datastax.driver.core.policies.TokenAwarePolicy;
 import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.SslConfig;
@@ -115,6 +116,10 @@ public class Driver3Session implements AutoCloseable {
         if (cqlConfiguration.getLocalDCName() != null) {
             clusterBuilder = clusterBuilder.withLoadBalancingPolicy(
                 new TokenAwarePolicy(DCAwareRoundRobinPolicy.builder().withLocalDc(cqlConfiguration.getLocalDCName()).build())
+            );
+        } else {
+            clusterBuilder = clusterBuilder.withLoadBalancingPolicy(
+                new TokenAwarePolicy(new RoundRobinPolicy())
             );
         }
 
