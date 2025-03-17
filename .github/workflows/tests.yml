@@ -38,6 +38,7 @@ jobs:
           require_tests: true
           report_paths: '**/target/*-reports/TEST-*.xml'
           follow_symlink: true
+          detailed_summary: true
 
 
   run-integration-tests:
@@ -75,3 +76,4 @@ jobs:
           require_tests: true
           report_paths: '**/target/*-reports/TEST-*.xml'
           follow_symlink: true
+          detailed_summary: true
