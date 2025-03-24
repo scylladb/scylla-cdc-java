@@ -1,11 +1,11 @@
 package com.scylladb.cdc.lib;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.Session;
-import com.datastax.driver.core.exceptions.InvalidTypeException;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.ChangeSchema;
@@ -17,7 +17,7 @@ import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.jupiter.api.Disabled;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -31,7 +31,6 @@ public class AlterTableIT {
       Preconditions.checkNotNull(systemProperties.getProperty("scylla.docker.version"));
 
   @Test
-  @Disabled // TODO: Enable when alters can be performed without downstream failures
   public void alterBaseTableAtRuntime() {
     String keyspace = "testks";
     String table = "altertest";
@@ -76,12 +75,19 @@ public class AlterTableIT {
       thread.start();
 
       AtomicBoolean failedDueToInvalidTypeEx = new AtomicBoolean(false);
+      AtomicReference<RawChange> firstChange, lastChange;
+      firstChange = new AtomicReference<>(null);
+      lastChange = new AtomicReference<>(null);
       RawChangeConsumer changeConsumer =
           change -> {
             try {
-              // printDetails(change)
-              String toString = change.toString();
+              firstChange.compareAndSet(null, change);
+              lastChange.set(change);
+              String toString =
+                  change.toString(); // forces Driver3RawChange to go through all ColumnDefinitions
             } catch (Exception ex) {
+              // Meant to catch InvalidTypeException, but it's shaded as part of driver3 and not
+              // exposed.
               failedDueToInvalidTypeEx.set(true);
             }
             return CompletableFuture.completedFuture(null);
@@ -104,6 +110,37 @@ public class AlterTableIT {
         e.printStackTrace();
       }
       thread.interrupt();
+
+      // Verify the schema of first and last RawChange
+      RawChange sample = firstChange.get();
+      assertEquals("cdc$stream_id", sample.getSchema().getColumnDefinition(0).getColumnName());
+      assertEquals("cdc$time", sample.getSchema().getColumnDefinition(1).getColumnName());
+      assertEquals("cdc$batch_seq_no", sample.getSchema().getColumnDefinition(2).getColumnName());
+      assertEquals(
+          "cdc$deleted_column3", sample.getSchema().getColumnDefinition(3).getColumnName());
+      assertEquals("cdc$end_of_batch", sample.getSchema().getColumnDefinition(4).getColumnName());
+      assertEquals("cdc$operation", sample.getSchema().getColumnDefinition(5).getColumnName());
+      assertEquals("cdc$ttl", sample.getSchema().getColumnDefinition(6).getColumnName());
+      assertEquals("column1", sample.getSchema().getColumnDefinition(7).getColumnName());
+      assertEquals("column2", sample.getSchema().getColumnDefinition(8).getColumnName());
+      assertEquals("column3", sample.getSchema().getColumnDefinition(9).getColumnName());
+
+      sample = lastChange.get();
+      assertEquals("cdc$stream_id", sample.getSchema().getColumnDefinition(0).getColumnName());
+      assertEquals("cdc$time", sample.getSchema().getColumnDefinition(1).getColumnName());
+      assertEquals("cdc$batch_seq_no", sample.getSchema().getColumnDefinition(2).getColumnName());
+      assertEquals(
+          "cdc$deleted_column3", sample.getSchema().getColumnDefinition(3).getColumnName());
+      assertEquals(
+          "cdc$deleted_column4", sample.getSchema().getColumnDefinition(4).getColumnName());
+      assertEquals("cdc$end_of_batch", sample.getSchema().getColumnDefinition(5).getColumnName());
+      assertEquals("cdc$operation", sample.getSchema().getColumnDefinition(6).getColumnName());
+      assertEquals("cdc$ttl", sample.getSchema().getColumnDefinition(7).getColumnName());
+      assertEquals("column1", sample.getSchema().getColumnDefinition(8).getColumnName());
+      assertEquals("column2", sample.getSchema().getColumnDefinition(9).getColumnName());
+      assertEquals("column3", sample.getSchema().getColumnDefinition(10).getColumnName());
+      assertEquals("column4", sample.getSchema().getColumnDefinition(11).getColumnName());
+
       assertFalse(failedDueToInvalidTypeEx.get());
     }
   }
