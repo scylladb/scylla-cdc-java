@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static com.scylladb.cdc.model.worker.WorkerThread.DEFAULT_CONFIDENCE_WINDOW_SIZE_MS;
 import static com.scylladb.cdc.model.worker.WorkerThread.DEFAULT_QUERY_WINDOW_SIZE_MS;
 import static org.awaitility.Awaitility.with;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -80,6 +81,54 @@ public class WorkerTest {
 
             DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 3, TEST_TABLE_NAME,
                     TEST_GENERATION_START_MS, TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS)));
+        }
+    }
+
+    @Test
+    public void testWorkerWaitForWindow() {
+        // Worker should start reading windows
+        // from the beginning of the generation
+        // AND should respect the minimal wait time for
+        // reading next window.
+
+        final long TEST_MINIMAL_WAIT_FOR_WINDOW_MS = 5*1000;
+        // To prevent exceptions like org.awaitility.core.ConditionTimeoutException:
+        // Condition was evaluated in 9 seconds 999 milliseconds which is earlier than expected minimum timeout 10 seconds
+        final long EPSILON_MS = 15;
+
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+        Consumer noOpConsumer = Consumer.syncRawChangeConsumer(c -> {});
+        WorkerConfiguration.Builder builder = WorkerConfiguration.builder();
+        builder.withCQL(mockWorkerCQL)
+            .withTransport(workerTransport)
+            .withConsumer(noOpConsumer)
+            .withQueryTimeWindowSizeMs(DEFAULT_QUERY_WINDOW_SIZE_MS)
+            .withConfidenceWindowSizeMs(DEFAULT_CONFIDENCE_WINDOW_SIZE_MS)
+            .withClock(Clock.systemDefaultZone())
+            .withMinimalWaitForWindowMs(TEST_MINIMAL_WAIT_FOR_WINDOW_MS)
+            .build();
+        Map<TaskId, SortedSet<StreamId>> groupedStreams =
+            MockGenerationMetadata.generationMetadataToTaskMap(TEST_GENERATION, Collections.singleton(TEST_TABLE_NAME));
+
+        ConditionFactory customAwait =
+            with().pollInterval(1, TimeUnit.MILLISECONDS).await()
+                .atLeast(TEST_MINIMAL_WAIT_FOR_WINDOW_MS - EPSILON_MS, TimeUnit.MILLISECONDS)
+                .atMost(TEST_MINIMAL_WAIT_FOR_WINDOW_MS + DEFAULT_AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+        try (WorkerThread workerThread = new WorkerThread(builder.build(), groupedStreams)) {
+            customAwait.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
+                TEST_GENERATION_START_MS, TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS)));
+            customAwait.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
+                TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS,
+                TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS)));
+            customAwait.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
+                TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS,
+                TEST_GENERATION_START_MS + 3 * DEFAULT_QUERY_WINDOW_SIZE_MS)));
+            customAwait.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
+                TEST_GENERATION_START_MS + 3 * DEFAULT_QUERY_WINDOW_SIZE_MS,
+                TEST_GENERATION_START_MS + 4 * DEFAULT_QUERY_WINDOW_SIZE_MS)));
         }
     }
 

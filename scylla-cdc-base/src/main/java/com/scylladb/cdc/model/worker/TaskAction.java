@@ -81,6 +81,7 @@ abstract class TaskAction {
             Date end = task.state.getWindowEndTimestamp().toDate();
             Date now = Date.from(workerConfiguration.getClock().instant());
             long toWait = end.getTime() - now.getTime() + workerConfiguration.confidenceWindowSizeMs;
+            toWait = Long.max(toWait, workerConfiguration.minimalWaitForWindowMs);
             if (toWait > 0) {
                 return delay(toWait);
             }
