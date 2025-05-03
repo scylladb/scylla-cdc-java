@@ -9,9 +9,13 @@ import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.master.MockGenerationMetadata;
 import com.scylladb.cdc.transport.MockWorkerTransport;
 import org.awaitility.core.ConditionFactory;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.*;
@@ -24,8 +28,7 @@ import java.util.stream.Collectors;
 import static com.scylladb.cdc.model.worker.WorkerThread.DEFAULT_CONFIDENCE_WINDOW_SIZE_MS;
 import static com.scylladb.cdc.model.worker.WorkerThread.DEFAULT_QUERY_WINDOW_SIZE_MS;
 import static org.awaitility.Awaitility.with;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class WorkerTest {
     private static final long DEFAULT_AWAIT_TIMEOUT_MS = 2000;
@@ -60,27 +63,53 @@ public class WorkerTest {
     @Test
     public void testWorkerReadsAnyWindows() {
         // Worker should start reading windows
-        // from the beginning of the generation.
+        // from the beginning of the generation
+        // up to the current time minus confidence window.
+        // Next, it should read a new window starting
+        // at last window and ending at current time
+        // minus confidence window.
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+        Consumer noOpConsumer = Consumer.syncRawChangeConsumer(c -> {});
+        long mockCurrentTime = TEST_GENERATION_START_MS + 15000;
+        Clock clock = Clock.fixed(Instant.ofEpochMilli(mockCurrentTime), ZoneOffset.systemDefault());
+
+        try (WorkerThread workerThread = new WorkerThread(
+                mockWorkerCQL, workerTransport, noOpConsumer, TEST_GENERATION, clock, TEST_TABLE_NAME)) {
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
+                    TEST_GENERATION_START_MS, mockCurrentTime - DEFAULT_CONFIDENCE_WINDOW_SIZE_MS)));
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 3, TEST_TABLE_NAME,
+                    TEST_GENERATION_START_MS, mockCurrentTime - DEFAULT_CONFIDENCE_WINDOW_SIZE_MS)));
+
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
+                    mockCurrentTime - DEFAULT_CONFIDENCE_WINDOW_SIZE_MS,
+                    mockCurrentTime - DEFAULT_CONFIDENCE_WINDOW_SIZE_MS + DEFAULT_QUERY_WINDOW_SIZE_MS)));
+        }
+    }
+
+    @Test
+    public void testWorkerReadsWindowsAtLeastQueryTime() {
+        // Worker should read windows no smaller than query time
+        // window size.
 
         MockWorkerTransport workerTransport = new MockWorkerTransport();
         MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
         Consumer noOpConsumer = Consumer.syncRawChangeConsumer(c -> {});
 
+        Clock clock = generateClock(300);
+
         try (WorkerThread workerThread = new WorkerThread(
-                mockWorkerCQL, workerTransport, noOpConsumer, TEST_GENERATION, TEST_TABLE_NAME)) {
-            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
-                    TEST_GENERATION_START_MS, TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS)));
+                mockWorkerCQL, workerTransport, noOpConsumer, TEST_GENERATION, clock, TEST_TABLE_NAME)) {
+            // Wait until the reader is finished reading some number of windows.
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.getFinishedReaders().size() > 100);
 
-            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
-                    TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS,
-                    TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS)));
-
-            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
-                    TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS,
-                    TEST_GENERATION_START_MS + 3 * DEFAULT_QUERY_WINDOW_SIZE_MS)));
-
-            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 3, TEST_TABLE_NAME,
-                    TEST_GENERATION_START_MS, TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS)));
+            // All windows should be at least query time window size.
+            for (Task task : mockWorkerCQL.getFinishedReaders()) {
+                Date windowStart = task.state.getWindowStartTimestamp().toDate();
+                Date windowEnd = task.state.getWindowEndTimestamp().toDate();
+                assertTrue(Duration.between(windowStart.toInstant(), windowEnd.toInstant()).toMillis() >= DEFAULT_QUERY_WINDOW_SIZE_MS);
+            }
         }
     }
 
@@ -155,11 +184,7 @@ public class WorkerTest {
             // Expecting to see a window queried from time point (now - ttl).
             // Multiplying by 1000 to convert from seconds to milliseconds.
             DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
-                    (now - ttl) * 1000, (now - ttl) * 1000 + DEFAULT_QUERY_WINDOW_SIZE_MS)));
-
-            // And no window before that:
-            assertFalse(mockWorkerCQL.wasCreateReaderInvoked(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
-                    (now - ttl) * 1000 - DEFAULT_QUERY_WINDOW_SIZE_MS, (now - ttl) * 1000)));
+                    (now - ttl) * 1000, now * 1000 - DEFAULT_CONFIDENCE_WINDOW_SIZE_MS)));
         }
     }
 
@@ -203,18 +228,17 @@ public class WorkerTest {
             // from TTL, "discarding" task1.
             DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
                     (now - ttl) * 1000, (now - ttl) * 1000 + DEFAULT_QUERY_WINDOW_SIZE_MS)));
-            assertFalse(mockWorkerCQL.wasCreateReaderInvoked(generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
-                    (now - ttl) * 1000 - DEFAULT_QUERY_WINDOW_SIZE_MS, (now - ttl) * 1000)));
 
             // task2 - after TTL, so Worker should start reading
             // from it.
             DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(task2));
-            assertFalse(mockWorkerCQL.wasCreateReaderInvoked(task2.updateState(task2.state.moveToNextWindow(-DEFAULT_QUERY_WINDOW_SIZE_MS))));
 
-            // task3 - intersecting with TTL. For simplicity,
-            // the Worker does not trim it and starts from it.
-            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(task3));
-            assertFalse(mockWorkerCQL.wasCreateReaderInvoked(task3.updateState(task3.state.moveToNextWindow(-DEFAULT_QUERY_WINDOW_SIZE_MS))));
+            // task3 - intersecting with TTL. The worker trims it.
+            Task trimmedTask3 = generateTask(TEST_GENERATION, 2, TEST_TABLE_NAME,
+                    (now - ttl) * 1000 /* Original window: - 3 */,
+                    (now - ttl) * 1000 - 3 + DEFAULT_QUERY_WINDOW_SIZE_MS);
+
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(trimmedTask3));
         }
     }
 
@@ -222,6 +246,8 @@ public class WorkerTest {
     public void testWorkerConsumesSingleVNodeChangesInOrder() {
         // Worker should consume changes within a single
         // vnode in order of stream id and timestamp.
+
+        Clock clock = generateClock(300);
 
         MockRawChange change1 = MockRawChange.builder()
                 .withChangeSchema(TEST_CHANGE_SCHEMA)
@@ -276,15 +302,18 @@ public class WorkerTest {
         Consumer accumulatingConsumer = Consumer.syncRawChangeConsumer(observedChanges::add);
 
         try (WorkerThread workerThread = new WorkerThread(
-                mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, TEST_TABLE_NAME)) {
+                mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, clock, TEST_TABLE_NAME)) {
             DEFAULT_AWAIT.until(() -> observedChanges.equals(rawChanges));
         }
     }
 
-    @Test
-    public void testWorkerConsumesMultiVNodeChanges() {
+    @ParameterizedTest
+    @ValueSource(ints = {300, 20, -300}) // Test starting reading before any changes, after all changes or in-between.
+    public void testWorkerConsumesMultiVNodeChanges(int clockOffset) {
         // Worker should be able to read changes
         // from all vnodes, many windows.
+
+        Clock clock = generateClock(clockOffset);
 
         List<MockRawChange> rawChanges = new ArrayList<>();
         for (int vnode = 0; vnode < 16; vnode++) {
@@ -404,7 +433,7 @@ public class WorkerTest {
 
         try (WorkerThread workerThread = new WorkerThread(
                 mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, TEST_TABLE_NAME)) {
-            DEFAULT_AWAIT.until(() -> observedChanges.equals(rawChanges.subList(3, 4)));
+            DEFAULT_AWAIT.until(() -> observedChanges.equals(rawChanges.subList(3, 5)));
         }
 
         // Test with another savedTask:
@@ -417,7 +446,9 @@ public class WorkerTest {
 
         try (WorkerThread workerThread = new WorkerThread(
                 mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, TEST_TABLE_NAME)) {
-            DEFAULT_AWAIT.until(() -> observedChanges.equals(rawChanges.subList(1, 4)));
+            DEFAULT_AWAIT.until(() -> observedChanges.containsAll(rawChanges.subList(1, 5)));
+            // No duplicates:
+            assertEquals(4, observedChanges.size());
         }
     }
 
@@ -425,6 +456,9 @@ public class WorkerTest {
     public void testWorkerSavesMovedWindowStateToTransport() {
         // Worker should call save state after each
         // moving of window.
+
+        long mockCurrentTime = TEST_GENERATION_START_MS;
+        Clock clock = Clock.fixed(Instant.ofEpochMilli(mockCurrentTime), ZoneOffset.systemDefault());
 
         MockWorkerTransport workerTransport = new MockWorkerTransport();
         MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
@@ -437,7 +471,7 @@ public class WorkerTest {
                 TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS, TEST_GENERATION_START_MS + 3 * DEFAULT_QUERY_WINDOW_SIZE_MS);
 
         try (WorkerThread workerThread = new WorkerThread(
-                mockWorkerCQL, workerTransport, noOpConsumer, TEST_GENERATION, TEST_TABLE_NAME)) {
+                mockWorkerCQL, workerTransport, noOpConsumer, TEST_GENERATION, clock, TEST_TABLE_NAME)) {
             // Wait for the third window to be committed to transport.
             DEFAULT_AWAIT.until(() -> workerTransport.getMoveStateToNextWindowInvocations(thirdWindow.id).size() >= 2);
         }
@@ -454,6 +488,9 @@ public class WorkerTest {
     public void testWorkerSavesWithinWindowStateToTransport() {
         // Worker should call save state after
         // each successful reading of a change.
+
+        long mockCurrentTime = TEST_GENERATION_START_MS;
+        Clock clock = Clock.fixed(Instant.ofEpochMilli(mockCurrentTime), ZoneOffset.systemDefault());
 
         MockRawChange change1 = MockRawChange.builder()
                 .withChangeSchema(TEST_CHANGE_SCHEMA)
@@ -481,7 +518,7 @@ public class WorkerTest {
         Consumer accumulatingConsumer = Consumer.syncRawChangeConsumer(observedChanges::add);
 
         try (WorkerThread workerThread = new WorkerThread(
-                mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, TEST_TABLE_NAME)) {
+                mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, clock, TEST_TABLE_NAME)) {
             DEFAULT_AWAIT.until(() -> observedChanges.equals(rawChanges));
         }
 
@@ -613,6 +650,9 @@ public class WorkerTest {
         // then constant CQL failure, restart and successful
         // reading of next changes.
 
+        long mockCurrentTime = TEST_GENERATION_START_MS + 5 * DEFAULT_QUERY_WINDOW_SIZE_MS;
+        Clock clock = Clock.fixed(Instant.ofEpochMilli(mockCurrentTime), ZoneOffset.systemDefault());
+
         MockRawChange change1 = MockRawChange.builder()
                 .withChangeSchema(TEST_CHANGE_SCHEMA)
                 .withStreamId(TEST_GENERATION, 0, 0)
@@ -662,7 +702,7 @@ public class WorkerTest {
         mockWorkerCQL.setCQLErrorStrategy(errorStrategy);
 
         try (WorkerThread workerThread = new WorkerThread(
-                mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, TEST_TABLE_NAME)) {
+                mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, clock, TEST_TABLE_NAME)) {
             // Wait for a CQL failure.
             DEFAULT_AWAIT.until(() -> mockWorkerCQL.getFailureCount() > 2);
 
@@ -672,14 +712,14 @@ public class WorkerTest {
 
         // Check if the transport has the correct TaskState.
         Task failedTask = generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
-                TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS,
-                TEST_GENERATION_START_MS + 3 * DEFAULT_QUERY_WINDOW_SIZE_MS);
+                TEST_GENERATION_START_MS,
+                mockCurrentTime - DEFAULT_CONFIDENCE_WINDOW_SIZE_MS);
         TaskState fetchedTaskState = workerTransport.getTaskStates(Collections.singleton(failedTask.id)).get(failedTask.id);
         assertEquals(fetchedTaskState, failedTask.state.update(change2.getId()));
 
         // Restart Worker.
         try (WorkerThread workerThread = new WorkerThread(
-                mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, TEST_TABLE_NAME)) {
+                mockWorkerCQL, workerTransport, accumulatingConsumer, TEST_GENERATION, clock, TEST_TABLE_NAME)) {
             // Let it fail a few times more.
 
             int initialFailureCount = mockWorkerCQL.getFailureCount();
@@ -704,5 +744,17 @@ public class WorkerTest {
         TaskState taskState = new TaskState(new Timestamp(new Date(windowStartMs)),
                 new Timestamp(new Date(windowEndMs)), Optional.empty());
         return new Task(taskId, streamIds, taskState);
+    }
+
+    /**
+     * Creates a clock that starts {@code offsetMsGenerationStartMs} milliseconds before
+     * test generation start.
+     * @param offsetMsGenerationStart the offset in milliseconds before test generation start
+     * @return a clock offset by {@code offsetMsGenerationStartMs} to the test generation start.
+     */
+    private Clock generateClock(long offsetMsGenerationStart) {
+        Clock clock = Clock.systemDefaultZone();
+        clock = Clock.offset(clock, Duration.between(clock.instant(), Instant.ofEpochMilli(TEST_GENERATION_START_MS - offsetMsGenerationStart)));
+        return clock;
     }
 }
