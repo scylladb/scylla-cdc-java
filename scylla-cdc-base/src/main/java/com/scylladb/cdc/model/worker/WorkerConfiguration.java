@@ -15,7 +15,7 @@ public final class WorkerConfiguration {
     public static final long DEFAULT_CONFIDENCE_WINDOW_SIZE_MS = 30000;
     public static final long DEFAULT_MINIMAL_WAIT_FOR_WINDOW_MS = 0;
     public static final RetryBackoff DEFAULT_WORKER_RETRY_BACKOFF =
-            new ExponentialRetryBackoffWithJitter(10, 30000);
+            new ExponentialRetryBackoffWithJitter(50, 30000, 0.20);
 
     public final WorkerTransport transport;
     public final WorkerCQL cql;
