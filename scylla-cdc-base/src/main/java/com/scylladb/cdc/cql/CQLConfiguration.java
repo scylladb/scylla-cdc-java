@@ -67,10 +67,20 @@ public class CQLConfiguration {
     private final ReplicaOrdering replicaOrdering;
     public final SslConfig sslConfig;
     public final int queryOptionsFetchSize;
+    // Part of driver's pooling options
+    public final Integer corePoolLocal;
+    public final Integer maxPoolLocal;
+    public final Integer poolingMaxQueueSize;
+    public final Integer poolingMaxRequestsPerConnectionLocal;
+    public final Integer poolTimeoutMillis;
 
     private CQLConfiguration(List<InetSocketAddress> contactPoints,
-                            String user, String password, ConsistencyLevel consistencyLevel,
-                            String localDCName, String localRackName, ReplicaOrdering replicaOrdering, SslConfig sslConfig, int queryOptionsFetchSize) {
+                             String user, String password, ConsistencyLevel consistencyLevel,
+                             String localDCName, String localRackName, ReplicaOrdering replicaOrdering,
+                             SslConfig sslConfig, int queryOptionsFetchSize, Integer corePoolLocal,
+                             Integer maxPoolLocal, Integer poolingMaxQueueSize,
+                             Integer poolingMaxRequestsPerConnectionLocal,
+                             Integer poolTimeoutMillis) {
         this.contactPoints = Preconditions.checkNotNull(contactPoints);
         Preconditions.checkArgument(!contactPoints.isEmpty());
 
@@ -87,6 +97,11 @@ public class CQLConfiguration {
         this.replicaOrdering = Preconditions.checkNotNull(replicaOrdering);
         this.sslConfig = sslConfig;
         this.queryOptionsFetchSize = queryOptionsFetchSize;
+        this.corePoolLocal = corePoolLocal;
+        this.maxPoolLocal = maxPoolLocal;
+        this.poolingMaxQueueSize = poolingMaxQueueSize;
+        this.poolingMaxRequestsPerConnectionLocal = poolingMaxRequestsPerConnectionLocal;
+        this.poolTimeoutMillis = poolTimeoutMillis;
     }
 
     /**
@@ -159,6 +174,11 @@ public class CQLConfiguration {
         private ReplicaOrdering replicaOrdering = ReplicaOrdering.RANDOM;
         private SslConfig sslConfig = null;
         private int queryOptionsFetchSize = 0;
+        private Integer corePoolLocal = null;
+        private Integer maxPoolLocal = null;
+        private Integer poolingMaxQueueSize = null;
+        private Integer poolingMaxRequestsPerConnectionLocal = null;
+        private Integer poolTimeoutMillis = null;
 
         public Builder addContactPoint(InetSocketAddress contactPoint) {
             Preconditions.checkNotNull(contactPoint);
@@ -265,8 +285,65 @@ public class CQLConfiguration {
             return this;
         }
 
+        /**
+         * Target number of connections per pool passed to driver's PoolingOptions.
+         * {@code null} means use driver's defaults.
+         * @param corePoolLocal
+         * @return a reference to this builder.
+         */
+        public Builder withCorePoolLocal(Integer corePoolLocal) {
+            this.corePoolLocal = corePoolLocal;
+            return this;
+        }
+
+        /**
+         * Max number of connections per pool passed to driver's PoolingOptions.
+         * {@code null} means use driver's defaults.
+         * @param maxPoolLocal
+         * @return a reference to this builder.
+         */
+        public Builder withMaxPoolLocal(Integer maxPoolLocal) {
+            this.maxPoolLocal = maxPoolLocal;
+            return this;
+        }
+
+        /**
+         * Max queue size passed to driver's PoolingOptions. Driver will queue up to this many
+         * requests at once until it starts returning BusyPoolException.
+         * {@code null} means use driver's defaults.
+         * @param poolingMaxQueueSize
+         * @return a reference to this builder.
+         */
+        public Builder withPoolingMaxQueueSize(Integer poolingMaxQueueSize) {
+            this.poolingMaxQueueSize = poolingMaxQueueSize;
+            return this;
+        }
+
+        /**
+         * Max number of requests per connection passed to driver's PoolingOptions.
+         * {@code null} means use driver's defaults.
+         * @param poolingMaxRequestsPerConnectionLocal
+         * @return a reference to this builder.
+         */
+        public Builder withPoolingMaxRequestsPerConnectionLocal(Integer poolingMaxRequestsPerConnectionLocal) {
+            this.poolingMaxRequestsPerConnectionLocal = poolingMaxRequestsPerConnectionLocal;
+            return this;
+        }
+
+        /**
+         * Pool timeout in milliseconds passed to driver's PoolingOptions.
+         * Requests waiting longer for available connection than this value will be rejected.
+         * {@code null} means use driver's defaults.
+         * @param poolTimeoutMillis
+         * @return a reference to this builder.
+         */
+        public Builder withPoolTimeoutMillis(Integer poolTimeoutMillis) {
+            this.poolTimeoutMillis = poolTimeoutMillis;
+            return this;
+        }
+
         public CQLConfiguration build() {
-            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, replicaOrdering, sslConfig, queryOptionsFetchSize);
+            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, replicaOrdering, sslConfig, queryOptionsFetchSize, corePoolLocal, maxPoolLocal, poolingMaxQueueSize, poolingMaxRequestsPerConnectionLocal, poolTimeoutMillis);
         }
     }
 }
