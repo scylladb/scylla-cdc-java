@@ -4,15 +4,12 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
+import com.scylladb.cdc.cql.NoisyCQLExceptionWrapper;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
-
-import shaded.com.scylladb.cdc.driver3.driver.core.exceptions.BusyPoolException;
-import shaded.com.scylladb.cdc.driver3.driver.core.exceptions.NoHostAvailableException;
 
 abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -52,17 +49,15 @@ abstract class TaskAction {
             // this TaskAction once again.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
             boolean suppressLogging = false;
-            if (workerConfiguration.suppressNoisyExceptions) {
-                if (workerConfiguration.isNoisyExceptionInduced(ex)) {
-                    if (System.currentTimeMillis() < workerConfiguration.getNoisyExceptionsSuppressedUntil()) {
+            if (ex instanceof NoisyCQLExceptionWrapper) {
+                ex = ex.getCause();
+                if (workerConfiguration.isNoisyExceptionSuppressionEnabled()) {
+                    if (workerConfiguration.areNoisyExceptionsCurrentlySuppressed()) {
+                        // Currently suppressed
                         suppressLogging = true;
-                    }
-                    else {
+                    } else {
                         // Suppress future calls but not this one
                         workerConfiguration.suppressNoisyExceptions(workerConfiguration.noisyExceptionsSuppressionWindowMs);
-                        String noisyExceptionsStrings = workerConfiguration.noisyExceptions.stream().map(Class::getSimpleName).collect(Collectors.joining(", "));
-                        logger.atFiner().withCause(ex).log("Encountered one of the (%s) when reading next window for Task %s with state %s." +
-                            " Suppressing logging of it for %d ms.", noisyExceptionsStrings, task.id, task.state, workerConfiguration.noisyExceptionsSuppressionWindowMs);
                     }
                 }
             }
@@ -128,17 +123,15 @@ abstract class TaskAction {
             // ReadNewWindowTaskAction - read a window from state defined in task.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
             boolean suppressLogging = false;
-            if (workerConfiguration.suppressNoisyExceptions) {
-                if (workerConfiguration.isNoisyExceptionInduced(ex)) {
-                    if (System.currentTimeMillis() < workerConfiguration.getNoisyExceptionsSuppressedUntil()) {
+            if (ex instanceof NoisyCQLExceptionWrapper) {
+                ex = ex.getCause();
+                if (workerConfiguration.isNoisyExceptionSuppressionEnabled()) {
+                    if (workerConfiguration.areNoisyExceptionsCurrentlySuppressed()) {
+                        // Currently suppressed
                         suppressLogging = true;
-                    }
-                    else {
+                    } else {
                         // Suppress future calls but not this one
                         workerConfiguration.suppressNoisyExceptions(workerConfiguration.noisyExceptionsSuppressionWindowMs);
-                        String noisyExceptionsStrings = workerConfiguration.noisyExceptions.stream().map(Class::getSimpleName).collect(Collectors.joining(", "));
-                        logger.atFiner().withCause(ex).log("Encountered one of the (%s) when reading a CDC change for Task %s with state %s." +
-                            " Suppressing logging of it for %d ms.", noisyExceptionsStrings, task.id, task.state, workerConfiguration.noisyExceptionsSuppressionWindowMs);
                     }
                 }
             }
