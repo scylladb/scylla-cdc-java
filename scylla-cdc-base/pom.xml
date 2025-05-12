@@ -34,5 +34,10 @@
             <groupId>com.google.flogger</groupId>
             <artifactId>flogger-system-backend</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.scylladb</groupId>
+            <artifactId>scylla-cdc-driver3</artifactId>
+            <version>1.3.4-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 </project>

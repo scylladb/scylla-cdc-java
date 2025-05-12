@@ -1,14 +1,21 @@
 package com.scylladb.cdc.model.worker;
 
 import java.time.Clock;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.transport.WorkerTransport;
+import shaded.com.scylladb.cdc.driver3.driver.core.EndPoint;
+import shaded.com.scylladb.cdc.driver3.driver.core.exceptions.BusyPoolException;
+import shaded.com.scylladb.cdc.driver3.driver.core.exceptions.NoHostAvailableException;
+import shaded.com.scylladb.cdc.driver3.driver.core.exceptions.OverloadedException;
+import shaded.com.scylladb.cdc.driver3.driver.core.exceptions.ReadTimeoutException;
 
 public final class WorkerConfiguration {
     public static final long DEFAULT_QUERY_TIME_WINDOW_SIZE_MS = 30000;
@@ -30,9 +37,18 @@ public final class WorkerConfiguration {
     private final ScheduledExecutorService executorService;
 
     private final Clock clock;
+
+    public final boolean suppressNoisyExceptions;
+
+    protected final long noisyExceptionsSuppressionWindowMs = 15000;
+
+    private long noisyExceptionsSuppressedUntil = 0;
+
+    protected final ImmutableSet<Class<? extends Throwable>> noisyExceptions =
+        ImmutableSet.of(BusyPoolException.class, OverloadedException.class, ReadTimeoutException.class);
     
     private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer, long queryTimeWindowSizeMs,
-            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs) {
+            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs, boolean suppressNoisyExceptions) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
@@ -44,6 +60,7 @@ public final class WorkerConfiguration {
         this.executorService = executorService;
         this.clock = Preconditions.checkNotNull(clock);
         this.minimalWaitForWindowMs = minimalWaitForWindowMs;
+        this.suppressNoisyExceptions = suppressNoisyExceptions;
     }
     
     public ScheduledExecutorService getExecutorService() {
@@ -59,6 +76,45 @@ public final class WorkerConfiguration {
      */
     public Clock getClock() {
         return clock;
+    }
+
+    /**
+     * Returns timestamp in milliseconds marking the latest moment the BusyPoolException, OverloadedException
+     * and ReadTimeoutException are to be silenced.
+     * @return timestamp in milliseconds.
+     */
+    public long getNoisyExceptionsSuppressedUntil() {
+        return noisyExceptionsSuppressedUntil;
+    }
+
+    /**
+     * Suppresses the logging of BusyPoolException, OverloadedException
+     * and ReadTimeoutException for a given duration in milliseconds.
+     * @param durationMs
+     */
+    public void suppressNoisyExceptions(long durationMs) {
+        this.noisyExceptionsSuppressedUntil = System.currentTimeMillis() + durationMs;
+    }
+
+    public boolean isNoisyException(Throwable ex) {
+        return (noisyExceptions.stream().anyMatch(v -> v.isInstance(ex)));
+    }
+
+    public boolean isNoisyExceptionInduced(Throwable ex) {
+        if (isNoisyException(ex)) {
+            return true;
+        }
+
+        if (ex instanceof NoHostAvailableException) {
+            Map<EndPoint, Throwable> errors = ((NoHostAvailableException) ex).getErrors();
+            if (errors.isEmpty()) {
+                return false;
+            }
+            if(errors.values().stream().allMatch(this::isNoisyException)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static Builder builder() {
@@ -79,6 +135,8 @@ public final class WorkerConfiguration {
         private RetryBackoff workerRetryBackoff = DEFAULT_WORKER_RETRY_BACKOFF;
 
         private Clock clock = Clock.systemDefaultZone();
+
+        private Boolean suppressNoisyExceptions = false;
 
         public Builder withTransport(WorkerTransport transport) {
             this.transport = Preconditions.checkNotNull(transport);
@@ -133,6 +191,11 @@ public final class WorkerConfiguration {
             return this;
         }
 
+        public Builder withSuppressNoisyExceptions(boolean suppressNoisyExceptions) {
+            this.suppressNoisyExceptions = suppressNoisyExceptions;
+            return this;
+        }
+
         /**
          * Sets the <code>Clock</code> in the configuration.
          * <p>
@@ -169,7 +232,7 @@ public final class WorkerConfiguration {
                 executorService = Executors.newScheduledThreadPool(1);
             }
             return new WorkerConfiguration(transport, cql, consumer, queryTimeWindowSizeMs, confidenceWindowSizeMs,
-                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs);
+                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs, suppressNoisyExceptions);
         }
     }
 }

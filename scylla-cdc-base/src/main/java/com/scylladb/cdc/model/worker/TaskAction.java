@@ -4,11 +4,15 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
+
+import shaded.com.scylladb.cdc.driver3.driver.core.exceptions.BusyPoolException;
+import shaded.com.scylladb.cdc.driver3.driver.core.exceptions.NoHostAvailableException;
 
 abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -47,8 +51,25 @@ abstract class TaskAction {
             // Exception occured while starting up the reader. Retry by starting
             // this TaskAction once again.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
-            logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
+            boolean suppressLogging = false;
+            if (workerConfiguration.suppressNoisyExceptions) {
+                if (workerConfiguration.isNoisyExceptionInduced(ex)) {
+                    if (System.currentTimeMillis() < workerConfiguration.getNoisyExceptionsSuppressedUntil()) {
+                        suppressLogging = true;
+                    }
+                    else {
+                        // Suppress future calls but not this one
+                        workerConfiguration.suppressNoisyExceptions(workerConfiguration.noisyExceptionsSuppressionWindowMs);
+                        String noisyExceptionsStrings = workerConfiguration.noisyExceptions.stream().map(Class::getSimpleName).collect(Collectors.joining(", "));
+                        logger.atFiner().withCause(ex).log("Encountered one of the (%s) when reading next window for Task %s with state %s." +
+                            " Suppressing logging of it for %d ms.", noisyExceptionsStrings, task.id, task.state, workerConfiguration.noisyExceptionsSuppressionWindowMs);
+                    }
+                }
+            }
+            if (!suppressLogging) {
+                logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
                     "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+            }
             return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }
@@ -106,8 +127,25 @@ abstract class TaskAction {
             // Exception occured while reading the window, we will have to restart
             // ReadNewWindowTaskAction - read a window from state defined in task.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
-            logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
+            boolean suppressLogging = false;
+            if (workerConfiguration.suppressNoisyExceptions) {
+                if (workerConfiguration.isNoisyExceptionInduced(ex)) {
+                    if (System.currentTimeMillis() < workerConfiguration.getNoisyExceptionsSuppressedUntil()) {
+                        suppressLogging = true;
+                    }
+                    else {
+                        // Suppress future calls but not this one
+                        workerConfiguration.suppressNoisyExceptions(workerConfiguration.noisyExceptionsSuppressionWindowMs);
+                        String noisyExceptionsStrings = workerConfiguration.noisyExceptions.stream().map(Class::getSimpleName).collect(Collectors.joining(", "));
+                        logger.atFiner().withCause(ex).log("Encountered one of the (%s) when reading a CDC change for Task %s with state %s." +
+                            " Suppressing logging of it for %d ms.", noisyExceptionsStrings, task.id, task.state, workerConfiguration.noisyExceptionsSuppressionWindowMs);
+                    }
+                }
+            }
+            if (!suppressLogging) {
+                logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
                     "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+            }
             return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }
