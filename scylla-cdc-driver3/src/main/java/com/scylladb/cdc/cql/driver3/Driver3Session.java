@@ -33,6 +33,24 @@ public class Driver3Session implements AutoCloseable {
                 .withProtocolVersion(ProtocolVersion.NEWEST_SUPPORTED);
         clusterBuilder = clusterBuilder.addContactPointsWithPorts(cqlConfiguration.contactPoints);
 
+        PoolingOptions poolingOptions = new PoolingOptions();
+        if (cqlConfiguration.poolingMaxQueueSize != null) {
+            poolingOptions.setMaxQueueSize(cqlConfiguration.poolingMaxQueueSize);
+        }
+        if (cqlConfiguration.poolingMaxRequestsPerConnectionLocal != null) {
+            poolingOptions.setMaxRequestsPerConnection(HostDistance.LOCAL, cqlConfiguration.poolingMaxRequestsPerConnectionLocal);
+        }
+        if (cqlConfiguration.maxPoolLocal != null) {
+            poolingOptions.setMaxConnectionsPerHost(HostDistance.LOCAL, cqlConfiguration.maxPoolLocal);
+        }
+        if (cqlConfiguration.corePoolLocal != null) {
+            poolingOptions.setCoreConnectionsPerHost(HostDistance.LOCAL, cqlConfiguration.corePoolLocal);
+        }
+        if (cqlConfiguration.poolTimeoutMillis != null) {
+            poolingOptions.setPoolTimeoutMillis(cqlConfiguration.poolTimeoutMillis);
+        }
+        clusterBuilder.withPoolingOptions(poolingOptions);
+
         if (cqlConfiguration.sslConfig != null) {
             SslConfig sslConfig = cqlConfiguration.sslConfig;
             final SslContextBuilder sslContextBuilder = SslContextBuilder.forClient();
