@@ -8,7 +8,6 @@ import java.util.Collection;
 import java.util.List;
 
 public class CQLConfiguration {
-    private static final int DEFAULT_PORT = 9042;
     private static final ConsistencyLevel DEFAULT_CONSISTENCY_LEVEL = ConsistencyLevel.QUORUM;
 
     /**
@@ -73,6 +72,7 @@ public class CQLConfiguration {
     public final Integer poolingMaxQueueSize;
     public final Integer poolingMaxRequestsPerConnectionLocal;
     public final Integer poolTimeoutMillis;
+    public final int defaultPort;
 
     private CQLConfiguration(List<InetSocketAddress> contactPoints,
                              String user, String password, ConsistencyLevel consistencyLevel,
@@ -80,9 +80,12 @@ public class CQLConfiguration {
                              SslConfig sslConfig, int queryOptionsFetchSize, Integer corePoolLocal,
                              Integer maxPoolLocal, Integer poolingMaxQueueSize,
                              Integer poolingMaxRequestsPerConnectionLocal,
-                             Integer poolTimeoutMillis) {
+                             Integer poolTimeoutMillis,
+                             int defaultPort
+                             ) {
         this.contactPoints = Preconditions.checkNotNull(contactPoints);
         Preconditions.checkArgument(!contactPoints.isEmpty());
+        this.defaultPort = defaultPort;
 
         this.user = user;
         this.password = password;
@@ -134,6 +137,18 @@ public class CQLConfiguration {
     }
 
     /**
+     * Returns default port.
+     * <p>
+     * This port is used with every host driver auto discovers that host no port information available
+     *
+     * @return default port
+     * <code>null</code> if it was not configured.
+     */
+    public int getDefaultPort() {
+        return defaultPort;
+    }
+
+    /**
      * Returns the name of the configured local rack.
      * <p>
      * This local rack name will be used to setup
@@ -166,6 +181,7 @@ public class CQLConfiguration {
 
     public static class Builder {
         private final List<InetSocketAddress> contactPoints = new ArrayList<>();
+        private int defaultPort = 9042;
         private String user = null;
         private String password = null;
         private ConsistencyLevel consistencyLevel = DEFAULT_CONSISTENCY_LEVEL;
@@ -200,7 +216,19 @@ public class CQLConfiguration {
         }
 
         public Builder addContactPoint(String host) {
-            return addContactPoint(host, DEFAULT_PORT);
+            return addContactPoint(host, defaultPort);
+        }
+
+        /**
+         * Changes default port not only for contact points, but also for nodes driver will discover.
+         * To be set before calling `addContactPoint`
+         *
+         * @param port a port number that will be a default
+         * @return self
+         */
+        public Builder withDefaultPort(int port) {
+            this.defaultPort = port;
+            return this;
         }
 
         public Builder withCredentials(String user, String password) {
@@ -343,7 +371,7 @@ public class CQLConfiguration {
         }
 
         public CQLConfiguration build() {
-            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, replicaOrdering, sslConfig, queryOptionsFetchSize, corePoolLocal, maxPoolLocal, poolingMaxQueueSize, poolingMaxRequestsPerConnectionLocal, poolTimeoutMillis);
+            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, replicaOrdering, sslConfig, queryOptionsFetchSize, corePoolLocal, maxPoolLocal, poolingMaxQueueSize, poolingMaxRequestsPerConnectionLocal, poolTimeoutMillis, defaultPort);
         }
     }
 }

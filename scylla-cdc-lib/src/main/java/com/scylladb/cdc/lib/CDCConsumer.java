@@ -187,6 +187,11 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        public Builder withDefaultPort(int defaultPort) {
+            cqlConfigurationBuilder.withDefaultPort(defaultPort);
+            return this;
+        }
+
         public Builder withCredentials(String user, String password) {
             cqlConfigurationBuilder.withCredentials(user, password);
             return this;
