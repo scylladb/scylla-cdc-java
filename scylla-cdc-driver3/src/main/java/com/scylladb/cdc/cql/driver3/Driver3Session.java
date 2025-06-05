@@ -31,7 +31,9 @@ public class Driver3Session implements AutoCloseable {
     public Driver3Session(CQLConfiguration cqlConfiguration) {
         Cluster.Builder clusterBuilder = Cluster.builder()
                 .withProtocolVersion(ProtocolVersion.NEWEST_SUPPORTED);
-        clusterBuilder = clusterBuilder.addContactPointsWithPorts(cqlConfiguration.contactPoints);
+        clusterBuilder = clusterBuilder
+            .withPort(cqlConfiguration.defaultPort)
+            .addContactPointsWithPorts(cqlConfiguration.contactPoints);
 
         PoolingOptions poolingOptions = new PoolingOptions();
         if (cqlConfiguration.poolingMaxQueueSize != null) {
