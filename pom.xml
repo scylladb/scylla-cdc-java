@@ -61,8 +61,59 @@
     </dependencies>
 
     <build>
+        <plugins>
+            <plugin>
+                <groupId>org.sonatype.plugins</groupId>
+                <artifactId>nexus-staging-maven-plugin</artifactId>
+                <version>1.6.8</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <serverId>ossrh</serverId>
+                    <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+                    <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                    <!-- skipLocalStaging>true</skipLocalStaging -->
+                </configuration>
+            </plugin>
+            <plugin>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>2.5.3</version>
+                <configuration>
+                    <tagNameFormat>scylla-cdc-@{project.version}</tagNameFormat>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <!-- useReleaseProfile>false</useReleaseProfile>
+                    <releaseProfiles>release</releaseProfiles>
+                    <goals>deploy</goals-->
+                    <localCheckout>true</localCheckout>
+                    <pushChanges>false</pushChanges>
+                    <arguments>-Dgpg.passphrase=${gpg.passphrase}</arguments>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.maven.scm</groupId>
+                        <artifactId>maven-scm-provider-gitexe</artifactId>
+                        <version>1.9.5</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
+                <plugin>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>2.8.2</version>
+                    <configuration>
+                        <deployAtEnd>true</deployAtEnd>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>default-deploy</id>
+                            <phase>deploy</phase>
+                            <goals>
+                                <goal>deploy</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
@@ -75,27 +126,6 @@
                             </property>
                         </systemPropertyVariables>
                     </configuration>
-                </plugin>
-                <plugin>
-                    <artifactId>maven-release-plugin</artifactId>
-                    <version>2.5.3</version>
-                    <configuration>
-                        <tagNameFormat>scylla-cdc-@{project.version}</tagNameFormat>
-                        <autoVersionSubmodules>true</autoVersionSubmodules>
-                        <!-- useReleaseProfile>false</useReleaseProfile>
-                        <releaseProfiles>release</releaseProfiles>
-                        <goals>deploy</goals-->
-                        <localCheckout>true</localCheckout>
-                        <pushChanges>false</pushChanges>
-                        <arguments>-Dgpg.passphrase=${gpg.passphrase}</arguments>
-                    </configuration>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.apache.maven.scm</groupId>
-                            <artifactId>maven-scm-provider-gitexe</artifactId>
-                            <version>1.9.5</version>
-                        </dependency>
-                    </dependencies>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -182,17 +212,6 @@
                                 </configuration>
                             </execution>
                         </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.sonatype.plugins</groupId>
-                        <artifactId>nexus-staging-maven-plugin</artifactId>
-                        <extensions>true</extensions>
-                        <configuration>
-                            <serverId>ossrh</serverId>
-                            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                            <autoReleaseAfterClose>true</autoReleaseAfterClose>
-                            <!-- skipLocalStaging>true</skipLocalStaging -->
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>
