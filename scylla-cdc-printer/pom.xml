@@ -13,7 +13,6 @@
         <plugins>
             <plugin>
                 <artifactId>maven-gpg-plugin</artifactId>
-                <version>3.2.4</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
@@ -21,7 +20,6 @@
 
             <plugin>
                 <artifactId>maven-install-plugin</artifactId>
-                <version>2.4</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
@@ -29,29 +27,12 @@
 
             <plugin>
                 <artifactId>maven-deploy-plugin</artifactId>
-                <version>2.7</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
             </plugin>
         </plugins>
     </build>
-    <profiles>
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.plugins</groupId>
-                        <artifactId>nexus-staging-maven-plugin</artifactId>
-                        <configuration>
-                            <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
     <dependencies>
         <dependency>
             <groupId>com.scylladb</groupId>

@@ -8,6 +8,7 @@
     <description>A library for reading the Scylla CDC log.</description>
     <url>https://github.com/scylladb/scylla-cdc-java</url>
     <inceptionYear>2020</inceptionYear>
+
     <modules>
         <module>scylla-cdc-base</module>
         <module>scylla-cdc-lib</module>
@@ -21,6 +22,8 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <flogger.version>0.8</flogger.version>
+        <gpg.passphrase/>
+        <release.autopublish>false</release.autopublish>
     </properties>
 
     <dependencyManagement>
@@ -66,7 +69,6 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.2</version>
                     <configuration>
                         <systemPropertyVariables>
                             <property>
@@ -78,27 +80,57 @@
                 </plugin>
                 <plugin>
                     <artifactId>maven-release-plugin</artifactId>
-                    <version>2.5.3</version>
                     <configuration>
                         <tagNameFormat>scylla-cdc-@{project.version}</tagNameFormat>
                         <autoVersionSubmodules>true</autoVersionSubmodules>
-                        <!-- useReleaseProfile>false</useReleaseProfile>
                         <releaseProfiles>release</releaseProfiles>
-                        <goals>deploy</goals-->
+                        <useReleaseProfile>false</useReleaseProfile>
                         <localCheckout>true</localCheckout>
                         <pushChanges>false</pushChanges>
-                        <arguments>-Dgpg.passphrase=${gpg.passphrase}</arguments>
+                        <arguments>-Dgpg.passphrase=${gpg.passphrase} -Drelease.autopublish=${release.autopublish}</arguments>
                     </configuration>
                     <dependencies>
                         <dependency>
                             <groupId>org.apache.maven.scm</groupId>
                             <artifactId>maven-scm-provider-gitexe</artifactId>
-                            <version>1.9.5</version>
+                            <version>2.1.0</version>
                         </dependency>
                     </dependencies>
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.3</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.2.7</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-install-plugin</artifactId>
+                <version>3.1.4</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.1.4</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>3.1.1</version>
+            </plugin>
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.8.0</version>
+            </plugin>
+        </plugins>
     </build>
 
     <!--
@@ -119,7 +151,6 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.2.4</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
@@ -149,8 +180,6 @@
                             </execution>
                         </executions>
                     </plugin>
-                    <!--
-                    TODO: re-enable when there are javadocs.
                     <plugin>
                         <artifactId>maven-javadoc-plugin</artifactId>
                         <executions>
@@ -162,11 +191,9 @@
                             </execution>
                         </executions>
                     </plugin>
-                    -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.2.4</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
@@ -184,14 +211,14 @@
                         </executions>
                     </plugin>
                     <plugin>
-                        <groupId>org.sonatype.plugins</groupId>
-                        <artifactId>nexus-staging-maven-plugin</artifactId>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
                         <extensions>true</extensions>
                         <configuration>
-                            <serverId>ossrh</serverId>
-                            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                            <autoReleaseAfterClose>true</autoReleaseAfterClose>
-                            <!-- skipLocalStaging>true</skipLocalStaging -->
+                            <publishingServerId>central</publishingServerId>
+                            <excludeArtifacts>scylla-cdc-printer,scylla-cdc-replicator</excludeArtifacts>
+                            <autoPublish>${release.autopublish}</autoPublish>
+                            <waitUntil>validated</waitUntil>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -217,12 +244,12 @@
 
     <distributionManagement>
         <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <id>central</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots</url>
         </snapshotRepository>
         <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+            <id>central</id>
+            <url>https://central.sonatype.com/repository/maven-releases</url>
         </repository>
     </distributionManagement>
 
