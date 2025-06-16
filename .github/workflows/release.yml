@@ -28,10 +28,10 @@ jobs:
         with:
           java-version: '11'
           distribution: 'temurin'
-          server-id: ossrh
+          server-id: central
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          server-username: OSSRH_USERNAME
-          server-password: OSSRH_PASSWORD
+          server-username: SONATYPE_TOKEN_USERNAME
+          server-password: SONATYPE_TOKEN_PASSWORD
 
       - name: Configure Git user
         run: |
@@ -47,15 +47,15 @@ jobs:
       - name: Prepare release
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: $MVNCMD release:prepare -DpushChanges=false -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
+        run: $MVNCMD release:prepare -DskipTests -DpushChanges=false -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
 
       - name: Perform release
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          SONATYPE_TOKEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_USERNAME }}
+          SONATYPE_TOKEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASSWORD }}
         if: ${{ github.event.inputs.dryrun == 'false' }}
-        run: $MVNCMD release:perform -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
+        run: $MVNCMD release:perform -DskipTests -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
 
       - name: Push changes to SCM
         if: ${{ github.event.inputs.dryrun == 'false' }}
