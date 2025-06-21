@@ -111,9 +111,9 @@
                 <extensions>true</extensions>
                 <configuration>
                     <publishingServerId>central</publishingServerId>
-                    <autoPublish>true</autoPublish>
-                    <skipPublishing>false</skipPublishing>
-                    <waitForPublishCompletion>true</waitForPublishCompletion>
+                    <autoPublish>false</autoPublish>
+                    <skipPublishing>true</skipPublishing>
+                    <waitForPublishCompletion>false</waitForPublishCompletion>
                     <waitUntil>validated</waitUntil>
                 </configuration>
             </plugin>
