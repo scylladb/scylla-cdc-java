@@ -12,12 +12,8 @@
     <modules>
         <module>scylla-cdc-base</module>
         <module>scylla-cdc-lib</module>
-<!--
-        Find a way to disable more than one plugin via central-publishing-maven-plugin configuration.
-
         <module>scylla-cdc-replicator</module>
         <module>scylla-cdc-printer</module>
--->
         <module>scylla-cdc-driver3</module>
     </modules>
 
@@ -180,8 +176,20 @@
 
         <profile>
             <id>release</id>
+            <modules>
+                <module>scylla-cdc-base</module>
+                <module>scylla-cdc-lib</module>
+                <module>scylla-cdc-driver3</module>
+            </modules>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-deploy-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <artifactId>maven-source-plugin</artifactId>
                         <executions>
