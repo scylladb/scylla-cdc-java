@@ -50,10 +50,32 @@ public final class Master {
         }
     }
 
+    private static boolean isTabletsBased(MasterConfiguration masterConfiguration) {
+        boolean tabletsBased = false;
+        boolean first = true;
+        for (TableName table : masterConfiguration.tables) {
+            boolean usesTablets = masterConfiguration.cql.usesTablets(table);
+            if (first) {
+                tabletsBased = usesTablets;
+                first = false;
+            } else {
+                if (tabletsBased != usesTablets) {
+                    throw new IllegalArgumentException("All tables must either use tablets or not use tablets.");
+                }
+            }
+        }
+        return tabletsBased;
+    }
+
     // Returns the current CDC metadata model.
     private CDCMetadataModel getCurrentCDCMetadataModel() throws InterruptedException, ExecutionException {
-        logger.atInfo().log("Using GenerationBasedCDCMetadataModel for CDC metadata model.");
-        return GenerationBasedCDCMetadataModel.getCurrentCDCMetadataModel(masterConfiguration);
+        if (isTabletsBased(masterConfiguration)) {
+            logger.atInfo().log("Using TabletBasedCDCMetadataModel for CDC metadata model.");
+            return TabletBasedCDCMetadataModel.getCurrentCDCMetadataModel(masterConfiguration);
+        } else {
+            logger.atInfo().log("Using GenerationBasedCDCMetadataModel for CDC metadata model.");
+            return GenerationBasedCDCMetadataModel.getCurrentCDCMetadataModel(masterConfiguration);
+        }
     }
 
     public Optional<Throwable> validate() {
