@@ -21,6 +21,7 @@ public class MockMasterCQL implements MasterCQL {
     private volatile Map<TableName, List<GenerationMetadata>> tableGenerationMetadatas = new HashMap<>();
     private volatile Map<TableName, Optional<Long>> tablesTTL = new HashMap<>();
     private volatile boolean shouldInjectFailure = false;
+    private volatile boolean usesTablets = false;
     private final AtomicInteger failedFetchCount = new AtomicInteger(0);
     private final AtomicInteger successfulFetchCount = new AtomicInteger(0);
 
@@ -46,6 +47,10 @@ public class MockMasterCQL implements MasterCQL {
 
     public void setTableGenerationMetadatas(Map<TableName, List<GenerationMetadata>> tableGenerationMetadatas) {
         this.tableGenerationMetadatas = tableGenerationMetadatas;
+    }
+
+    public void setUsesTablets(boolean usesTablets) {
+        this.usesTablets = usesTablets;
     }
 
     public int getFailedFetchCount() {
@@ -186,4 +191,8 @@ public class MockMasterCQL implements MasterCQL {
         return CompletableFuture.completedFuture(Optional.empty());
     }
 
+    @Override
+    public Boolean usesTablets(TableName tableName) {
+        return usesTablets;
+    }
 }
