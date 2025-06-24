@@ -93,4 +93,10 @@ public class MockMasterTransport implements MasterTransport {
         // Add to general invocations list
         configureWorkersInvocations.add(workerTasks.getTasks());
     }
+
+    @Override
+    public boolean areTasksCompleted(Set<TaskId> tasks) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'areTasksCompleted'");
+    }
 }
