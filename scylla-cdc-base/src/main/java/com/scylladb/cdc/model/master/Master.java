@@ -43,10 +43,36 @@ public final class Master {
         }
     }
 
+    private static boolean isTabletsBased(MasterConfiguration masterConfiguration) {
+        boolean tabletsBased = false;
+        boolean first = true;
+        for (TableName table : masterConfiguration.tables) {
+            boolean usesTablets = masterConfiguration.cql.usesTablets(table);
+            if (first) {
+                tabletsBased = usesTablets;
+                first = false;
+            } else {
+                if (tabletsBased != usesTablets) {
+                    throw new IllegalArgumentException(String.format(
+                        "Mixed tablet configuration detected: table '%s' %s tablets, but other tables in the configuration %s tablets. " +
+                        "All tables in the same CDC configuration must consistently use either tablet-based replication or vnodes-based.",
+                        table, usesTablets ? "uses" : "does not use", tabletsBased ? "use" : "do not use"
+                    ));
+                }
+            }
+        }
+        return tabletsBased;
+    }
+
     // Returns the current CDC metadata model.
     private CDCMetadataModel getCurrentCDCMetadataModel() throws InterruptedException, ExecutionException {
-        logger.atFine().log("Using GenerationBasedCDCMetadataModel for CDC metadata model.");
-        return new GenerationBasedCDCMetadataModel(masterConfiguration);
+        if (isTabletsBased(masterConfiguration)) {
+            logger.atFine().log("Using TabletBasedCDCMetadataModel for CDC metadata model.");
+            return new TabletBasedCDCMetadataModel(masterConfiguration);
+        } else {
+            logger.atFine().log("Using GenerationBasedCDCMetadataModel for CDC metadata model.");
+            return new GenerationBasedCDCMetadataModel(masterConfiguration);
+        }
     }
 
     public Optional<Throwable> validate() {
