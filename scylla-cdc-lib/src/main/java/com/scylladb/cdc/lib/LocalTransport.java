@@ -78,6 +78,20 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
+    public boolean areTasksCompleted(Set<TaskId> tasks) {
+        if (taskStates.isEmpty()) {
+            return false;
+        }
+        for (TaskId id : tasks) {
+            TaskState state = taskStates.get(id);
+            if (state == null || !state.hasReachedEnd()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
     public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 

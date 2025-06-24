@@ -42,7 +42,7 @@ public final class Worker {
      * state is build based on the ID of this generation.
      */
     private static TaskState getInitialStateForStreams(GroupedTasks workerTasks, long windowSizeMs) {
-        return TaskState.createInitialFor(workerTasks.getGenerationId(), windowSizeMs);
+        return TaskState.createInitialFor(workerTasks.getGenerationId(), windowSizeMs, Optional.empty());
     }
 
     /*
@@ -108,7 +108,7 @@ public final class Worker {
         return () -> a.run().handle((na, ex) -> {
             if (ex != null) {
                 logger.atSevere().withCause(ex).log("Unhandled exception in Worker.");
-            } else if (!shouldStop()) {
+            } else if (na != null && !shouldStop()) {
                 getExecutorService().submit(makeCallable(na));
             }
             return null;

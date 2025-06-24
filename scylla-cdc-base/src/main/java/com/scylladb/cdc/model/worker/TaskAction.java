@@ -189,6 +189,14 @@ abstract class TaskAction {
             TaskState newState = task.state.moveToNextWindow(workerConfiguration.queryTimeWindowSizeMs);
             workerConfiguration.transport.moveStateToNextWindow(task.id, newState);
             Task newTask = task.updateState(newState);
+
+            // Check if we've reached the end timestamp - if so, we're done with this task
+            if (newTask.hasReachedEnd()) {
+                logger.atFine().log("Task %s has reached its end timestamp %s, stopping.",
+                        task.id, newTask.state.getEndTimestamp().get());
+                return CompletableFuture.completedFuture(null);
+            }
+
             return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(workerConfiguration, newTask, 0));
         }
     }

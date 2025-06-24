@@ -704,7 +704,7 @@ public class WorkerTest {
                 .collect(Collectors.toCollection(TreeSet::new));
 
         TaskState taskState = new TaskState(new Timestamp(new Date(windowStartMs)),
-                new Timestamp(new Date(windowEndMs)), Optional.empty());
+                new Timestamp(new Date(windowEndMs)), Optional.empty(), Optional.empty());
         return new Task(taskId, streamIds, taskState);
     }
 }

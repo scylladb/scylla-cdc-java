@@ -13,15 +13,21 @@ public final class TaskState {
     private final Timestamp windowStart;
     private final Timestamp windowEnd;
     private final Optional<ChangeId> lastConsumedChangeId;
+    private final Optional<Timestamp> endTimestamp;
 
-    public TaskState(Timestamp start, Timestamp end, Optional<ChangeId> lastConsumed) {
+    public TaskState(Timestamp start, Timestamp end, Optional<ChangeId> lastConsumed, Optional<Timestamp> endTimestamp) {
         windowStart = Preconditions.checkNotNull(start);
         windowEnd = Preconditions.checkNotNull(end);
         lastConsumedChangeId = Preconditions.checkNotNull(lastConsumed);
+        this.endTimestamp = Preconditions.checkNotNull(endTimestamp);
     }
 
     public Optional<ChangeId> getLastConsumedChangeId() {
         return lastConsumedChangeId;
+    }
+
+    public Optional<Timestamp> getEndTimestamp() {
+        return endTimestamp;
     }
 
     public UUID getWindowStart() {
@@ -45,6 +51,10 @@ public final class TaskState {
         return windowStart.compareTo(t) > 0;
     }
 
+    public boolean hasReachedEnd() {
+        return endTimestamp.isPresent() && windowStart.compareTo(endTimestamp.get()) >= 0;
+    }
+
     public UUID getWindowEnd() {
         // Without -1, we would be reading windows 1ms too long.
         return TimeUUID.endOf(windowEnd.toDate().getTime() - 1);
@@ -55,11 +65,29 @@ public final class TaskState {
     }
 
     public TaskState moveToNextWindow(long nextWindowSizeMs) {
-        return new TaskState(windowEnd, windowEnd.plus(nextWindowSizeMs, ChronoUnit.MILLIS), Optional.empty());
+        Timestamp nextWindowStart = windowEnd;
+        Timestamp nextWindowEnd = windowEnd.plus(nextWindowSizeMs, ChronoUnit.MILLIS);
+
+        // If endTimestamp is present, ensure both nextWindowStart and nextWindowEnd
+        // are not greater than the endTimestamp
+        if (endTimestamp.isPresent()) {
+            nextWindowStart = nextWindowStart.compareTo(endTimestamp.get()) < 0 ? nextWindowStart : endTimestamp.get();
+            nextWindowEnd = nextWindowEnd.compareTo(endTimestamp.get()) < 0 ? nextWindowEnd : endTimestamp.get();
+        }
+
+        return new TaskState(nextWindowStart, nextWindowEnd, Optional.empty(), endTimestamp);
     }
 
     public TaskState update(ChangeId seen) {
-        return new TaskState(windowStart, windowEnd, Optional.of(seen));
+        return new TaskState(windowStart, windowEnd, Optional.of(seen), endTimestamp);
+    }
+
+    public TaskState withEndTimestamp(Timestamp endTimestamp) {
+        Timestamp windowEnd = this.windowEnd;
+        if (endTimestamp.compareTo(windowEnd) < 0) {
+            windowEnd = endTimestamp;
+        }
+        return new TaskState(windowStart, windowEnd, lastConsumedChangeId, Optional.of(endTimestamp));
     }
 
     @Override
@@ -69,18 +97,20 @@ public final class TaskState {
         }
         TaskState o = (TaskState) other;
         return windowStart.equals(o.windowStart) && windowEnd.equals(o.windowEnd)
-                && lastConsumedChangeId.equals(o.lastConsumedChangeId);
+                && lastConsumedChangeId.equals(o.lastConsumedChangeId)
+                && endTimestamp.equals(o.endTimestamp);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(windowStart, windowEnd, lastConsumedChangeId);
+        return Objects.hash(windowStart, windowEnd, lastConsumedChangeId, endTimestamp);
     }
 
     @Override
     public String toString() {
-        return String.format("TaskState(%s (%s), %s (%s), %s)", getWindowStart(), windowStart, getWindowEnd(),
-                windowEnd, lastConsumedChangeId);
+        return String.format("TaskState(%s (%s), %s (%s), %s, endTimestamp: %s)",
+                getWindowStart(), windowStart, getWindowEnd(),
+                windowEnd, lastConsumedChangeId, endTimestamp);
     }
 
     /*
@@ -89,9 +119,13 @@ public final class TaskState {
      * Such initial state starts at the beginning of the generation and spans for
      * |windowSizeMs| milliseconds.
      */
-    public static TaskState createInitialFor(GenerationId generation, long windowSizeMs) {
+    public static TaskState createInitialFor(GenerationId generation, long windowSizeMs, Optional<Timestamp> endTimestamp) {
         Timestamp generationStart = generation.getGenerationStart();
-        return new TaskState(generationStart, generationStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
+        Timestamp windowEnd = generationStart.plus(windowSizeMs, ChronoUnit.MILLIS);
+        if (endTimestamp.isPresent() && windowEnd.compareTo(endTimestamp.get()) > 0) {
+            windowEnd = endTimestamp.get();
+        }
+        return new TaskState(generationStart, windowEnd, Optional.empty(), endTimestamp);
     }
 
     /* If the state is before |minimumWindowStart| then this method returns a state
@@ -105,7 +139,7 @@ public final class TaskState {
         // If the entire state is before minimumWindowStart,
         // return a new state starting at minimumWindowStart.
         if (this.windowEnd.compareTo(minimumWindowStart) < 0) {
-            return new TaskState(minimumWindowStart, minimumWindowStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
+            return new TaskState(minimumWindowStart, minimumWindowStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty(), endTimestamp);
         }
 
         return this;
