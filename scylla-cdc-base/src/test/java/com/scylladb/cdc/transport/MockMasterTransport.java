@@ -3,6 +3,7 @@ package com.scylladb.cdc.transport;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.master.GenerationMetadata;
@@ -12,6 +13,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class MockMasterTransport implements MasterTransport {
     private volatile Timestamp currentFullyConsumedTimestamp = new Timestamp(new Date(0));
     private volatile Optional<GenerationId> currentGenerationId = Optional.empty();
+    private final Map<TableName, Optional<GenerationId>> tableGenerationIds = new HashMap<>();
     private final List<Map<TaskId, SortedSet<StreamId>>> configureWorkersInvocations = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger areTasksFullyConsumedUntilCount = new AtomicInteger(0);
 
@@ -38,6 +41,10 @@ public class MockMasterTransport implements MasterTransport {
 
     public void setCurrentGenerationId(Optional<GenerationId> newGenerationId) {
         currentGenerationId = Preconditions.checkNotNull(newGenerationId);
+    }
+
+    public void setCurrentGenerationId(TableName tableName, Optional<GenerationId> generationId) {
+        tableGenerationIds.put(tableName, generationId);
     }
 
     public Map<TaskId, SortedSet<StreamId>> getConfigureWorkersInvocation(int index) {
@@ -72,6 +79,18 @@ public class MockMasterTransport implements MasterTransport {
 
     @Override
     public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
+        configureWorkersInvocations.add(workerTasks.getTasks());
+    }
+
+    @Override
+    public Optional<GenerationId> getCurrentGenerationId(TableName tableName) {
+        return tableGenerationIds.getOrDefault(tableName, Optional.empty());
+    }
+
+    @Override
+    public void configureWorkers(TableName tableName, GroupedTasks workerTasks)
+            throws InterruptedException {
+        // Add to general invocations list
         configureWorkersInvocations.add(workerTasks.getTasks());
     }
 }
