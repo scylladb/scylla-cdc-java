@@ -20,4 +20,6 @@ public interface MasterTransport {
     // Tablets-based CDC methods
     Optional<GenerationId> getCurrentGenerationId(TableName tableName);
     void configureWorkers(TableName tableName, GroupedTasks workerTasks) throws InterruptedException;
+
+    boolean areTasksCompleted(Set<TaskId> tasks);
 }
