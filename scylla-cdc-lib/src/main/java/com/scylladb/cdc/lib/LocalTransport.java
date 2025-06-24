@@ -130,6 +130,11 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         }
     }
 
+    @Override
+    public void stopWorkers() throws InterruptedException {
+        stopWorkerThread();
+    }
+
     private void startNewWorkerThread(GroupedTasks workerTasks) {
         WorkerConfiguration workerConfiguration = workerConfigurationBuilder
                 .withTransport(this)

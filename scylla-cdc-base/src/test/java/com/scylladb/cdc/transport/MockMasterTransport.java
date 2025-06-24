@@ -28,6 +28,9 @@ public class MockMasterTransport implements MasterTransport {
     private final List<Map<TaskId, SortedSet<StreamId>>> configureWorkersInvocations = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger areTasksFullyConsumedUntilCount = new AtomicInteger(0);
 
+
+    private final AtomicInteger stopWorkersCount = new AtomicInteger(0);
+
     public void setCurrentFullyConsumedTimestamp(Timestamp newTimestamp) {
         currentFullyConsumedTimestamp = Preconditions.checkNotNull(newTimestamp);
     }
@@ -62,6 +65,10 @@ public class MockMasterTransport implements MasterTransport {
         return areTasksFullyConsumedUntilCount.get();
     }
 
+    public int getStopWorkersCount() {
+        return stopWorkersCount.get();
+    }
+
     public ConfigureWorkersTracker tracker(ConditionFactory await) {
         return new ConfigureWorkersTracker(this, await);
     }
@@ -93,4 +100,10 @@ public class MockMasterTransport implements MasterTransport {
         // Add to general invocations list
         configureWorkersInvocations.add(workerTasks.getTasks());
     }
+
+    @Override
+    public void stopWorkers() throws InterruptedException {
+        stopWorkersCount.incrementAndGet();
+    }
+
 }
