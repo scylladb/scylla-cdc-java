@@ -99,4 +99,10 @@ public class MockMasterTransport implements MasterTransport {
         // TODO Auto-generated method stub
         throw new UnsupportedOperationException("Unimplemented method 'areTasksCompleted'");
     }
+
+    @Override
+    public void stopWorkers() throws InterruptedException {
+        // TODO Auto-generated method stub
+    }
+
 }
