@@ -12,6 +12,7 @@ public interface MasterCQL {
 
     CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName);
     CompletableFuture<Optional<Throwable>> validateTable(TableName table);
+    Boolean usesTablets(TableName tableName);
 
     // Vnode-based CDC methods
     CompletableFuture<Optional<GenerationId>> fetchFirstGenerationId();
