@@ -28,6 +28,8 @@ import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.TableMetadata;
+import com.datastax.driver.core.querybuilder.Ordering;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
@@ -40,6 +42,26 @@ import com.scylladb.cdc.model.TableName;
 public final class Driver3MasterCQL extends BaseMasterCQL {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
     private final Session session;
+
+    /**
+     * Enum representing the state of a CDC stream for a specific timestamp.
+     * These match the values used in the system.cdc_streams table.
+     */
+    public enum StreamState {
+        CURRENT(0), // the stream is active in this timestamp
+        CLOSED(1), // the stream was active in the previous timestamp and it's not active in this timestamp
+        OPENED(2); // the stream is a new stream opened in this timestamp
+
+        private final int value;
+
+        StreamState(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
 
     // (Streams description table V2)
     //
@@ -57,6 +79,8 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
     // and system_distributed.cdc_streams_descriptions_v2 tables.
     private PreparedStatement legacyFetchSmallestGenerationAfterStmt;
     private PreparedStatement legacyFetchStreamsStmt;
+    private PreparedStatement fetchSmallestTableGenerationAfterStmt;
+    private PreparedStatement fetchTableStreamsStmt;
 
     public Driver3MasterCQL(Driver3Session session) {
         this.session = Preconditions.checkNotNull(session).getDriverSession();
@@ -155,6 +179,25 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
         }
     }
 
+    private CompletableFuture<PreparedStatement> getFetchSmallestTableGenerationAfter() {
+        if (fetchSmallestTableGenerationAfterStmt != null) {
+            return CompletableFuture.completedFuture(fetchSmallestTableGenerationAfterStmt);
+        } else {
+            ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                    select().min(column("timestamp")).from("system", "cdc_timestamps")
+                            .where(eq("keyspace_name", bindMarker()))
+                            .and(eq("table_name", bindMarker()))
+                            .and(gt("timestamp", bindMarker()))
+                            .orderBy(QueryBuilder.asc("timestamp"))
+                            .limit(1)
+            );
+            return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+                fetchSmallestTableGenerationAfterStmt = preparedStatement;
+                return preparedStatement;
+            });
+        }
+    }
+
     private CompletableFuture<PreparedStatement> getLegacyFetchStreams() {
         if (legacyFetchStreamsStmt != null) {
             return CompletableFuture.completedFuture(legacyFetchStreamsStmt);
@@ -180,6 +223,24 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
             );
             return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
                 fetchStreamsStmt = preparedStatement;
+                return preparedStatement;
+            });
+        }
+    }
+
+    private CompletableFuture<PreparedStatement> getFetchTableStreams() {
+        if (fetchTableStreamsStmt != null) {
+            return CompletableFuture.completedFuture(fetchTableStreamsStmt);
+        } else {
+            ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                    select().column("stream_id").from("system", "cdc_streams")
+                            .where(eq("keyspace_name", bindMarker()))
+                            .and(eq("table_name", bindMarker()))
+                            .and(eq("timestamp", bindMarker()))
+                            .and(eq("stream_state", StreamState.CURRENT.getValue()))
+            );
+            return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+                fetchTableStreamsStmt = preparedStatement;
                 return preparedStatement;
             });
         }
@@ -295,6 +356,23 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
                         executeOne(statement.bind(after)).thenApply(o -> o.map(r -> r.getTimestamp(0))));
             }
         });
+    }
+
+    @Override
+    protected CompletableFuture<Optional<Date>> fetchSmallestTableGenerationAfter(TableName tableName, Date after) {
+        return getFetchSmallestTableGenerationAfter().thenCompose(statement ->
+                executeOne(statement.bind(tableName.keyspace, tableName.name, after)).thenApply(o -> o.map(r -> r.getTimestamp(0))));
+    }
+
+    @Override
+    protected CompletableFuture<Set<ByteBuffer>> fetchStreamsForTableGeneration(TableName tableName, Date generationStart) {
+        return getFetchTableStreams().thenCompose(statement ->
+            executeMany(statement.bind(tableName.keyspace, tableName.name, generationStart)).thenApply(
+                rows -> rows.stream()
+                        .map(row -> row.getBytes("stream_id"))
+                        .collect(Collectors.toSet())
+            )
+        );
     }
 
     @Override
