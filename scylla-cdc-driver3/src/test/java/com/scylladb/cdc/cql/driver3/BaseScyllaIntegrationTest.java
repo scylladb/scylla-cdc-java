@@ -172,7 +172,7 @@ public class BaseScyllaIntegrationTest {
 
         return new Task(new TaskId(generationId, vnode, table),
                 Sets.newTreeSet(Collections.singleton(streamId)),
-                new TaskState(new Timestamp(new Date(0)), new Timestamp(new Date()), Optional.empty()));
+                new TaskState(new Timestamp(new Date(0)), new Timestamp(new Date()), Optional.empty(), Optional.empty()));
     }
 
     /**
