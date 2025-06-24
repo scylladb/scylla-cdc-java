@@ -104,6 +104,7 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
         // Remove all existing tasks from taskStates that belong to this table and no longer in the configuration
+        // TODO MICHAEL stop tasks
         Iterator<TaskId> it = taskStates.keySet().iterator();
         while (it.hasNext()) {
             TaskId taskId = it.next();
@@ -128,6 +129,11 @@ class LocalTransport implements MasterTransport, WorkerTransport {
                 }
             }
         }
+    }
+
+    @Override
+    public void stopWorkers() throws InterruptedException {
+        stopWorkerThread();
     }
 
     private void startNewWorkerThread(GroupedTasks workerTasks) {

@@ -93,4 +93,10 @@ public class MockMasterTransport implements MasterTransport {
         // Add to general invocations list
         configureWorkersInvocations.add(workerTasks.getTasks());
     }
+
+    @Override
+    public void stopWorkers() throws InterruptedException {
+        // TODO Auto-generated method stub
+    }
+
 }
