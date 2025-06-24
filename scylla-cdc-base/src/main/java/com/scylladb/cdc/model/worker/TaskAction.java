@@ -9,6 +9,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
+import com.scylladb.cdc.model.Timestamp;
 
 abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -118,8 +119,30 @@ abstract class TaskAction {
                 workerConfiguration.transport.setState(task.id, newState);
             }
             try {
-                CompletableFuture<TaskAction> taskActionFuture = reader.nextChange().
-                        thenApply(change -> new ConsumeChangeTaskAction(workerConfiguration, task, reader, change, tryAttempt));
+                CompletableFuture<TaskAction> taskActionFuture = reader.nextChange().thenCompose(changeOpt -> {
+                    if (changeOpt.isPresent()) {
+                        RawChange change = changeOpt.get();
+
+                        // If we discover a closed_time while reading, we need to abort and retry after
+                        // updating the task's end timestamp. The correctness relies on us not consuming
+                        // changes with a timestamp greater than the closed_time when closed_time is set.
+                        Optional<Date> closedTimeOpt = change.getClosedTime();
+                        if (closedTimeOpt.isPresent() && !task.state.getEndTimestamp().isPresent()) {
+                            Date closedTime = closedTimeOpt.get();
+                            logger.atFine().log("Found closed_time %s in change from stream %s, updating task %s end timestamp.",
+                                    closedTime, change.getId().getStreamId(), task.id);
+
+                            Task updatedTask = task.withEndTimestamp(new Timestamp(closedTime));
+
+                            return CompletableFuture.completedFuture(
+                                    new ReadNewWindowTaskAction(workerConfiguration, updatedTask, 0));
+                        }
+                    }
+
+                    return CompletableFuture.completedFuture(
+                            new ConsumeChangeTaskAction(workerConfiguration, task, reader, changeOpt, tryAttempt));
+                });
+
                 return FutureUtils.thenComposeExceptionally(taskActionFuture, this::onException);
             } catch (Throwable ex) {
                 return onException(ex);
