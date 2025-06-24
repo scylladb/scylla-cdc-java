@@ -417,4 +417,15 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
 
         return CompletableFuture.completedFuture(Optional.empty());
     }
+
+    @Override
+    public Boolean usesTablets(TableName table) {
+        KeyspaceMetadata keyspaceMetadata = session.getCluster().getMetadata().getKeyspace(table.keyspace);
+        if (keyspaceMetadata == null) {
+            throw new IllegalArgumentException(
+                    String.format("Did not find table '%s.%s' in Scylla cluster - missing keyspace '%s'.",
+                            table.keyspace, table.name, table.keyspace));
+        }
+        return keyspaceMetadata.usesTablets();
+    }
 }
