@@ -165,4 +165,38 @@ public final class Worker {
         Collection<TaskAction> actions = queueFirstActionForEachTask(workerTasks);
         performActionsUntilStopRequested(actions);
     }
+
+    /**
+     * Adds new tasks dynamically to the running worker.
+     *
+     * @param workerTasks the tasks to add
+     * @throws ExecutionException if there's an error preparing the task
+     * @throws InterruptedException if the thread is interrupted
+     */
+    public void addTasks(GroupedTasks workerTasks) throws ExecutionException, InterruptedException {
+        Map<TaskId, SortedSet<StreamId>> newTasks = workerTasks.getTasks();
+
+        if (shouldStop) {
+            throw new IllegalStateException("Cannot add tasks to a stopped worker");
+        }
+
+        if (newTasks.isEmpty()) {
+            return;
+        }
+
+        // Prepare any new tables
+        Set<TableName> tables = newTasks.keySet().stream()
+                .map(TaskId::getTable)
+                .collect(Collectors.toSet());
+
+        workerConfiguration.cql.prepare(tables);
+
+        // Create and submit actions for the new tasks
+        Collection<TaskAction> newActions = queueFirstActionForEachTask(workerTasks);
+
+        ScheduledExecutorService executorService = getExecutorService();
+        executorService.invokeAll(newActions.stream()
+                .map(this::makeCallable)
+                .collect(Collectors.toSet()));
+    }
 }
