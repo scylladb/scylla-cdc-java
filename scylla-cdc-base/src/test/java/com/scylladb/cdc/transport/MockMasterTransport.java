@@ -71,7 +71,7 @@ public class MockMasterTransport implements MasterTransport {
     }
 
     @Override
-    public void configureWorkers(Map<TaskId, SortedSet<StreamId>> workerConfigurations) {
-        configureWorkersInvocations.add(workerConfigurations);
+    public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
+        configureWorkersInvocations.add(workerTasks.getTasks());
     }
 }

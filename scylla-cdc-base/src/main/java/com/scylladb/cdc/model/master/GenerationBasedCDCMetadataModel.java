@@ -6,6 +6,7 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.transport.GroupedTasks;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -15,13 +16,13 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
     private final MasterConfiguration masterConfiguration;
     private GenerationMetadata generationMetadata;
     private final Set<TableName> tables;
-    private Map<TaskId, SortedSet<StreamId>> tasks;
+    private GroupedTasks tasks;
 
     public GenerationBasedCDCMetadataModel(GenerationMetadata generationMetadata, Set<TableName> tables, MasterConfiguration masterConfiguration) {
         this.masterConfiguration = masterConfiguration;
         this.tables = Collections.unmodifiableSet(new HashSet<>(tables));
         this.generationMetadata = generationMetadata;
-        this.tasks = Collections.unmodifiableMap(createTasks(generationMetadata, this.tables));
+        this.tasks = createTasks(generationMetadata, this.tables);
     }
 
     /**
@@ -29,7 +30,7 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
      */
     private void setGenerationMetadata(GenerationMetadata generationMetadata) {
         this.generationMetadata = generationMetadata;
-        this.tasks = Collections.unmodifiableMap(createTasks(generationMetadata, this.tables));
+        this.tasks = createTasks(generationMetadata, this.tables);
     }
 
     /**
@@ -41,16 +42,16 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
         setGenerationMetadata(nextGen);
     }
 
-    private static Map<TaskId, SortedSet<StreamId>> createTasks(GenerationMetadata generation, Set<TableName> tables) {
+    private static GroupedTasks createTasks(GenerationMetadata generation, Set<TableName> tables) {
         SortedSet<StreamId> streams = generation.getStreams();
-        Map<TaskId, SortedSet<StreamId>> tasks = new HashMap<>();
+        Map<TaskId, SortedSet<StreamId>> taskMap = new HashMap<>();
         for (StreamId s : streams) {
             for (TableName t : tables) {
                 TaskId taskId = new TaskId(generation.getId(), s.getVNodeId(), t);
-                tasks.computeIfAbsent(taskId, id -> new TreeSet<>()).add(s);
+                taskMap.computeIfAbsent(taskId, id -> new TreeSet<>()).add(s);
             }
         }
-        return tasks;
+        return new GroupedTasks(taskMap, generation);
     }
 
     public GenerationMetadata getGenerationMetadata() {
@@ -120,20 +121,20 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
     public void runMasterStep() throws InterruptedException {
         try {
             // Advance through done generations
-            while (generationDone(this.getGenerationMetadata(), this.tasks.keySet())) {
+            while (generationDone(this.getGenerationMetadata(), this.tasks.getTaskIds())) {
                 advanceToNextGeneration();
             }
 
-            Map<TaskId, SortedSet<StreamId>> tasks = this.tasks;
+            Map<TaskId, SortedSet<StreamId>> taskMap = this.tasks.getTasks();
 
             FluentLogger.forEnclosingClass().atInfo().log("Master found a new generation: %s. Will call transport.configureWorkers().", this.getGenerationMetadata().getId());
-            tasks.forEach((task, streams) ->
+            taskMap.forEach((task, streams) ->
                     FluentLogger.forEnclosingClass().atFine().log("Created Task: %s with streams: %s", task, streams));
 
-            masterConfiguration.transport.configureWorkers(tasks);
+            masterConfiguration.transport.configureWorkers(this.tasks);
 
             // Wait for the generation to be done
-            while (!generationDone(this.getGenerationMetadata(), tasks.keySet())) {
+            while (!generationDone(this.getGenerationMetadata(), this.tasks.getTaskIds())) {
                 Thread.sleep(masterConfiguration.sleepBeforeGenerationDoneMs);
                 if (!this.getGenerationMetadata().isClosed()) {
                     this.generationMetadata = refreshEnd(this.getGenerationMetadata());
