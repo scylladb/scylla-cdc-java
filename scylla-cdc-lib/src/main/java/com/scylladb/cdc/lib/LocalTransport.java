@@ -211,4 +211,23 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     public boolean isReadyToStart() {
         return currentWorker == null;
     }
+
+    @Override
+    public void updateGenerationMetadata(TableName table, GenerationMetadata metadata) {
+        if (!metadata.getId().equals(currentGenerationByTable.get(table).getId())) {
+            throw new IllegalArgumentException("Cannot update generation metadata for table " + table + " with a different ID: " + metadata.getId());
+        }
+        logger.atInfo().log("Updating generation metadata for table %s: %s", table, metadata);
+        currentGenerationByTable.put(table, metadata);
+    }
+
+    @Override
+    public Optional<Timestamp> getTableEndTimestamp(TableName table) {
+        // if the table is not configured, return empty
+        GenerationMetadata metadata = currentGenerationByTable.get(table);
+        if (metadata == null) {
+            return Optional.empty();
+        }
+        return metadata.getEnd();
+    }
 }

@@ -10,6 +10,7 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.model.master.GenerationMetadata;
 
 public interface MasterTransport {
     // Vnode-based CDC methods
@@ -22,4 +23,6 @@ public interface MasterTransport {
     void configureWorkers(TableName tableName, GroupedTasks workerTasks) throws InterruptedException;
 
     boolean areTasksCompleted(Set<TaskId> tasks);
+
+    void updateGenerationMetadata(TableName table, GenerationMetadata metadata);
 }
