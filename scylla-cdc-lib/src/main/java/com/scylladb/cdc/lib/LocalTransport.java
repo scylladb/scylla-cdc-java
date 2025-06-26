@@ -21,6 +21,7 @@ import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.model.worker.Worker;
 import com.scylladb.cdc.model.worker.WorkerConfiguration;
 import com.scylladb.cdc.transport.MasterTransport;
+import com.scylladb.cdc.transport.GroupedTasks;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 class LocalTransport implements MasterTransport, WorkerTransport {
@@ -60,15 +61,17 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
-    public void configureWorkers(Map<TaskId, SortedSet<StreamId>> workerConfigurations) throws InterruptedException {
+    public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
+        Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
+
+        // Remove task states for tasks no longer in the configuration
         Iterator<TaskId> it = taskStates.keySet().iterator();
         while (it.hasNext()) {
-            if (!workerConfigurations.containsKey(it.next())) {
+            if (!tasks.containsKey(it.next())) {
                 it.remove();
             }
         }
-        currentGenerationId = workerConfigurations.keySet().stream()
-                .findAny().map(TaskId::getGenerationId);
+        currentGenerationId = Optional.ofNullable(workerTasks.getGenerationId());
         stop();
 
         WorkerConfiguration workerConfiguration = workerConfigurationBuilder
@@ -79,7 +82,7 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         Worker w = new Worker(workerConfiguration);
         Thread t = new Thread(workersThreadGroup, () -> {
             try {
-                w.run(workerConfigurations);
+                w.run(workerTasks);
             } catch (InterruptedException | ExecutionException e) {
                 logger.atSevere().withCause(e).log("Unhandled exception");
             } 
