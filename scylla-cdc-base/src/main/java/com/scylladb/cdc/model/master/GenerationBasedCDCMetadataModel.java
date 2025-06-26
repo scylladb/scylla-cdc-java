@@ -19,6 +19,7 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.transport.GroupedTasks;
 
 public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -96,7 +97,7 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
         return masterConfiguration.cql.fetchGenerationMetadata(generation.getNextGenerationId().get()).get();
     }
 
-    private Map<TaskId, SortedSet<StreamId>> createTasks(GenerationMetadata generation) {
+    private GroupedTasks createTasks(GenerationMetadata generation) {
         SortedSet<StreamId> streams = generation.getStreams();
         Map<TaskId, SortedSet<StreamId>> tasks = new HashMap<>();
         for (StreamId s : streams) {
@@ -105,7 +106,7 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
                 tasks.computeIfAbsent(taskId, id -> new TreeSet<>()).add(s);
             }
         }
-        return tasks;
+        return new GroupedTasks(tasks, generation);
     }
 
     private GenerationMetadata refreshEnd(GenerationMetadata generation)
@@ -118,19 +119,19 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
     public void runMasterLoop() throws InterruptedException, ExecutionException {
         GenerationId generationId = getGenerationId();
         GenerationMetadata generation = masterConfiguration.cql.fetchGenerationMetadata(generationId).get();
-        Map<TaskId, SortedSet<StreamId>> tasks = createTasks(generation);
+        GroupedTasks tasks = createTasks(generation);
         while (!Thread.currentThread().isInterrupted()) {
-            while (generationDone(generation, tasks.keySet())) {
+            while (generationDone(generation, tasks.getTaskIds())) {
                 generation = getNextGeneration(generation);
                 tasks = createTasks(generation);
             }
 
             logger.atInfo().log("Master found a new generation: %s. Will call transport.configureWorkers().", generation.getId());
-            tasks.forEach((task, streams) ->
+            tasks.getTasks().forEach((task, streams) ->
                     logger.atFine().log("Created Task: %s with streams: %s", task, streams));
 
             masterConfiguration.transport.configureWorkers(tasks);
-            while (!generationDone(generation, tasks.keySet())) {
+            while (!generationDone(generation, tasks.getTaskIds())) {
                 Thread.sleep(masterConfiguration.sleepBeforeGenerationDoneMs);
                 if (!generation.isClosed()) {
                     generation = refreshEnd(generation);

@@ -22,6 +22,7 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.transport.GroupedTasks;
 
 public final class Worker {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -34,23 +35,14 @@ public final class Worker {
     }
 
     /*
-     * Get a generation ID of given set of streams. It is assumed that all streams
-     * in a set belong to the same generation. The set is assumed to be non-empty.
-     */
-    private static GenerationId getGenerationIdOfStreams(Map<TaskId, SortedSet<StreamId>> groupedStreams) {
-        return groupedStreams.entrySet().stream().map(e -> e.getKey().getGenerationId()).findAny().get();
-    }
-
-    /*
      * Return an initial task state for given set of streams. Such an initial state
      * is used when the task has not been run before.
      *
      * All streams are assumed to belong to the same generation and the initial
      * state is build based on the ID of this generation.
      */
-    private static TaskState getInitialStateForStreams(Map<TaskId, SortedSet<StreamId>> groupedStreams,
-                                                       long windowSizeMs) {
-        return TaskState.createInitialFor(getGenerationIdOfStreams(groupedStreams), windowSizeMs);
+    private static TaskState getInitialStateForStreams(GroupedTasks workerTasks, long windowSizeMs) {
+        return TaskState.createInitialFor(workerTasks.getGenerationId(), windowSizeMs);
     }
 
     /*
@@ -62,11 +54,12 @@ public final class Worker {
      *
      * Additionally, the state is trimmed according to the table's TTL value.
      */
-    private Stream<Task> createTasksWithState(Map<TaskId, SortedSet<StreamId>> groupedStreams) throws ExecutionException, InterruptedException {
-        Map<TaskId, TaskState> states = workerConfiguration.transport.getTaskStates(groupedStreams.keySet());
-        TaskState initialState = getInitialStateForStreams(groupedStreams, workerConfiguration.queryTimeWindowSizeMs);
+    private Stream<Task> createTasksWithState(GroupedTasks workerTasks) throws ExecutionException, InterruptedException {
+        Map<TaskId, SortedSet<StreamId>> taskMap = workerTasks.getTasks();
+        Map<TaskId, TaskState> states = workerConfiguration.transport.getTaskStates(taskMap.keySet());
+        TaskState initialState = getInitialStateForStreams(workerTasks, workerConfiguration.queryTimeWindowSizeMs);
 
-        Set<TableName> tableNames = groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet());
+        Set<TableName> tableNames = taskMap.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet());
         Date now = Date.from(workerConfiguration.getClock().instant());
 
         // The furthest point in time where there might be
@@ -82,7 +75,7 @@ public final class Worker {
             minimumWindowStarts.put(tableName, new Timestamp(minimumWindowStart));
         }
 
-        return groupedStreams.entrySet().stream().map(taskStreams -> {
+        return taskMap.entrySet().stream().map(taskStreams -> {
             TaskId id = taskStreams.getKey();
             SortedSet<StreamId> streams = taskStreams.getValue();
             TaskState state = states.getOrDefault(id, initialState);
@@ -97,9 +90,9 @@ public final class Worker {
      * This includes fetching saved state of each task or creating a new initial
      * state for tasks that haven't run successfully before.
      */
-    private Collection<TaskAction> queueFirstActionForEachTask(Map<TaskId, SortedSet<StreamId>> groupedStreams)
+    private Collection<TaskAction> queueFirstActionForEachTask(GroupedTasks workerTasks)
             throws ExecutionException, InterruptedException {
-        return createTasksWithState(groupedStreams).map(task -> TaskAction.createFirstAction(workerConfiguration, task))
+        return createTasksWithState(workerTasks).map(task -> TaskAction.createFirstAction(workerConfiguration, task))
                 .collect(Collectors.toSet());
     }
 
@@ -161,17 +154,15 @@ public final class Worker {
      * The assumptions are: 1. There is at least one task 2. Each task has at least
      * a single stream to fetch 3. All tasks belong to the same generation
      */
-    public void run(Map<TaskId, SortedSet<StreamId>> groupedStreams) throws InterruptedException, ExecutionException {
-        Preconditions.checkNotNull(groupedStreams);
-        Preconditions.checkArgument(!groupedStreams.isEmpty(), "No tasks");
-        Preconditions.checkArgument(groupedStreams.entrySet().stream().noneMatch(e -> e.getValue().isEmpty()),
+    public void run(GroupedTasks workerTasks) throws InterruptedException, ExecutionException {
+        Preconditions.checkNotNull(workerTasks, "Worker tasks cannot be null");
+        Map<TaskId, SortedSet<StreamId>> taskMap = workerTasks.getTasks();
+        Preconditions.checkArgument(!taskMap.isEmpty(), "No tasks");
+        Preconditions.checkArgument(taskMap.entrySet().stream().noneMatch(e -> e.getValue().isEmpty()),
                 "Task with no streams");
-        Preconditions.checkArgument(
-                groupedStreams.keySet().stream().map(TaskId::getGenerationId).distinct().count() == 1,
-                "Tasks from different generations");
 
-        workerConfiguration.cql.prepare(groupedStreams.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet()));
-        Collection<TaskAction> actions = queueFirstActionForEachTask(groupedStreams);
+        workerConfiguration.cql.prepare(taskMap.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet()));
+        Collection<TaskAction> actions = queueFirstActionForEachTask(workerTasks);
         performActionsUntilStopRequested(actions);
     }
 }
