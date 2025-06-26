@@ -7,6 +7,7 @@ import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.master.MockGenerationMetadata;
+import com.scylladb.cdc.transport.GroupedTasks;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 import java.time.Clock;
@@ -26,7 +27,7 @@ public class WorkerThread implements AutoCloseable {
     private final Worker worker;
     private final Future<Throwable> workerRunFuture;
 
-    public WorkerThread(WorkerConfiguration workerConfiguration, Map<TaskId, SortedSet<StreamId>> groupedStreams) {
+    public WorkerThread(WorkerConfiguration workerConfiguration, GroupedTasks groupedStreams) {
         Preconditions.checkNotNull(workerConfiguration);
         this.worker = new Worker(workerConfiguration);
         this.workerRunFuture = Executors.newSingleThreadExecutor().submit(() -> {
@@ -40,7 +41,7 @@ public class WorkerThread implements AutoCloseable {
     }
 
     public WorkerThread(WorkerCQL workerCQL, WorkerTransport workerTransport, Consumer consumer, Clock clock,
-                        Map<TaskId, SortedSet<StreamId>> groupedStreams) {
+                        GroupedTasks groupedStreams) {
         this(WorkerConfiguration.builder()
                 .withCQL(workerCQL)
                 .withTransport(workerTransport)
@@ -54,7 +55,7 @@ public class WorkerThread implements AutoCloseable {
 
     public WorkerThread(WorkerCQL workerCQL, WorkerTransport workerTransport, Consumer consumer,
                         GenerationMetadata generationMetadata, Clock clock, Set<TableName> tableNames) {
-        this(workerCQL, workerTransport, consumer, clock, MockGenerationMetadata.generationMetadataToTaskMap(generationMetadata, tableNames));
+        this(workerCQL, workerTransport, consumer, clock, MockGenerationMetadata.generationMetadataToWorkerTasks(generationMetadata, tableNames));
     }
 
     public WorkerThread(WorkerCQL workerCQL, WorkerTransport workerTransport, Consumer consumer,

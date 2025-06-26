@@ -13,5 +13,5 @@ import com.scylladb.cdc.model.Timestamp;
 public interface MasterTransport {
     Optional<GenerationId> getCurrentGenerationId();
     boolean areTasksFullyConsumedUntil(Set<TaskId> tasks, Timestamp until);
-    void configureWorkers(Map<TaskId, SortedSet<StreamId>> workerConfigurations) throws InterruptedException;
+    void configureWorkers(GroupedTasks workerTasks) throws InterruptedException;
 }

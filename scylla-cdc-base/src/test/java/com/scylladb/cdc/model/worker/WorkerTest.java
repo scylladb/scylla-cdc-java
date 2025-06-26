@@ -8,6 +8,8 @@ import com.scylladb.cdc.model.*;
 import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.master.MockGenerationMetadata;
 import com.scylladb.cdc.transport.MockWorkerTransport;
+import com.scylladb.cdc.transport.GroupedTasks;
+
 import org.awaitility.core.ConditionFactory;
 import org.junit.jupiter.api.Test;
 
@@ -109,8 +111,8 @@ public class WorkerTest {
             .withClock(Clock.systemDefaultZone())
             .withMinimalWaitForWindowMs(TEST_MINIMAL_WAIT_FOR_WINDOW_MS)
             .build();
-        Map<TaskId, SortedSet<StreamId>> groupedStreams =
-            MockGenerationMetadata.generationMetadataToTaskMap(TEST_GENERATION, Collections.singleton(TEST_TABLE_NAME));
+        GroupedTasks groupedStreams =
+            MockGenerationMetadata.generationMetadataToWorkerTasks(TEST_GENERATION, Collections.singleton(TEST_TABLE_NAME));
 
         ConditionFactory customAwait =
             with().pollInterval(1, TimeUnit.MILLISECONDS).await()
