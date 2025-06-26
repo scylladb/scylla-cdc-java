@@ -4,6 +4,7 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.VNodeId;
+import com.scylladb.cdc.transport.GroupedTasks;
 import com.scylladb.cdc.model.Timestamp;
 
 import java.nio.ByteBuffer;
@@ -40,6 +41,12 @@ public class MockGenerationMetadata {
             }
         }
         return new GenerationMetadata(start, end, streams);
+    }
+
+    public static GroupedTasks generationMetadataToWorkerTasks(
+            GenerationMetadata generationMetadata, Set<TableName> tableNames) {
+        Map<TaskId, SortedSet<StreamId>> generationMetadataMap = generationMetadataToTaskMap(generationMetadata, tableNames);
+        return new GroupedTasks(generationMetadataMap, generationMetadata);
     }
 
     public static Map<TaskId, SortedSet<StreamId>> generationMetadataToTaskMap(
