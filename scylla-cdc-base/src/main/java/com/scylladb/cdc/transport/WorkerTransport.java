@@ -1,9 +1,13 @@
 package com.scylladb.cdc.transport;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
+import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.model.worker.Worker;
 
@@ -23,4 +27,11 @@ public interface WorkerTransport {
     default boolean shouldStop() {
         return false;
     }
+
+    /**
+     * Gets the end timestamp for tasks related to the given table, if set.
+     * @return Optional containing the end timestamp if set, empty Optional otherwise
+     */
+    public Optional<Timestamp> getTableEndTimestamp(TableName table);
+
 }

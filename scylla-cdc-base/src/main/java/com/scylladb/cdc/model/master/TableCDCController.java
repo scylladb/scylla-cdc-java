@@ -136,6 +136,10 @@ public class TableCDCController {
             currentGeneration = currentGeneration.withEnd(end);
             logger.atFine().log("Updated end timestamp for table %s generation %s to %s",
                     table, currentGeneration.getId(), end);
+
+            // Propagate the end timestamp to transport so tasks can be updated
+            masterConfiguration.transport.updateGenerationMetadata(this.table, currentGeneration);
+
             return true;
         }
         return false;

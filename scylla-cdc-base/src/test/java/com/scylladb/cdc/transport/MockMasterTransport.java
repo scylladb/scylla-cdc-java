@@ -105,4 +105,9 @@ public class MockMasterTransport implements MasterTransport {
         // TODO Auto-generated method stub
     }
 
+    @Override
+    public void updateGenerationMetadata(TableName table, GenerationMetadata metadata) {
+        // TODO Auto-generated method stub
+    }
+
 }
