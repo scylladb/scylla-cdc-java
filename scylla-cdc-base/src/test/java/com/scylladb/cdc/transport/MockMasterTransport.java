@@ -40,6 +40,9 @@ public class MockMasterTransport implements MasterTransport {
     // Store only the most recent generation metadata per table
     private final Map<TableName, GenerationMetadata> tableGenerationMetadatas = new ConcurrentHashMap<>();
 
+    // Set to store completed generation ids
+    private final Set<GenerationId> completedGenerations = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
     public void setCurrentFullyConsumedTimestamp(Timestamp newTimestamp) {
         currentFullyConsumedTimestamp = Preconditions.checkNotNull(newTimestamp);
     }
@@ -151,10 +154,43 @@ public class MockMasterTransport implements MasterTransport {
         tableGenerationMetadatas.put(table, metadata);
     }
 
+    /**
+     * Sets a generation as completed.
+     * @param generationId The generation ID to mark as completed.
+     */
+    public void setGenerationCompleted(GenerationId generationId) {
+        Preconditions.checkNotNull(generationId);
+        completedGenerations.add(generationId);
+    }
+
+    /**
+     * Checks if a specific generation is marked as completed.
+     * @param generationId The generation ID to check.
+     * @return true if the generation is completed, false otherwise.
+     */
+    public boolean isGenerationCompleted(GenerationId generationId) {
+        return completedGenerations.contains(generationId);
+    }
+
     @Override
     public boolean areTasksCompleted(Set<TaskId> tasks) {
         areTasksFullyConsumedUntilCount.incrementAndGet();
-        return true; // For testing purposes, always return true
+
+        // If there are no tasks, consider them completed
+        if (tasks == null || tasks.isEmpty()) {
+            return true;
+        }
+
+        for (TaskId taskId : tasks) {
+            // Check if the generation of this task is completed
+            GenerationId genId = taskId.getGenerationId();
+            if (!completedGenerations.contains(genId)) {
+                return false;
+            }
+        }
+
+        // All tasks are either before currentFullyConsumedTimestamp or their generation is completed
+        return true;
     }
 
 }
