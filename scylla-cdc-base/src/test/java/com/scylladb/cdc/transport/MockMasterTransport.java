@@ -99,4 +99,9 @@ public class MockMasterTransport implements MasterTransport {
         // TODO Auto-generated method stub
         throw new UnsupportedOperationException("Unimplemented method 'areTasksCompleted'");
     }
+
+    @Override
+    public void updateGenerationMetadata(TableName table, GenerationMetadata metadata) {
+        // TODO Auto-generated method stub
+    }
 }
