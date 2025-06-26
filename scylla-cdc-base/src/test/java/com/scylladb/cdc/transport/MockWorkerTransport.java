@@ -1,6 +1,9 @@
 package com.scylladb.cdc.transport;
 
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
+import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.worker.TaskState;
 
 import java.util.*;
@@ -40,4 +43,11 @@ public class MockWorkerTransport implements WorkerTransport {
         return moveStateToNextWindowInvocations.stream().filter(t -> t.getKey().equals(taskId))
                 .map(AbstractMap.SimpleEntry::getValue).collect(Collectors.toList());
     }
+
+    @Override
+    public Optional<Timestamp> getTableEndTimestamp(TableName table) {
+        // TODO Auto-generated method stub
+        return Optional.empty();
+    }
+
 }

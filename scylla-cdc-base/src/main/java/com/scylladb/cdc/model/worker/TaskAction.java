@@ -9,6 +9,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.Timestamp;
 
 abstract class TaskAction {
@@ -246,14 +247,31 @@ abstract class TaskAction {
 
         @Override
         public CompletableFuture<TaskAction> run() {
-            TaskState newState = task.state.moveToNextWindow(workerConfiguration.queryTimeWindowSizeMs);
-            workerConfiguration.transport.moveStateToNextWindow(task.id, newState);
-            Task newTask = task.updateState(newState);
+            // Check for end timestamp updates before moving to next window
+            Task taskToUse = task;
+
+            // Use Optional-based method for getting table end timestamp
+            TableName tableName = task.id.getTable();
+            Optional<Timestamp> endTimestampOpt = workerConfiguration.transport.getTableEndTimestamp(tableName);
+
+            if (endTimestampOpt.isPresent() && !task.state.getEndTimestamp().isPresent()) {
+                Timestamp endTimestamp = endTimestampOpt.get();
+
+                logger.atInfo().log("Found end timestamp %s for table %s, updating task %s",
+                        endTimestamp, tableName, task.id);
+
+                TaskState newState = task.state.withEndTimestamp(endTimestamp);
+                taskToUse = task.updateState(newState);
+            }
+
+            TaskState newState = taskToUse.state.moveToNextWindow(workerConfiguration.queryTimeWindowSizeMs);
+            workerConfiguration.transport.moveStateToNextWindow(taskToUse.id, newState);
+            Task newTask = taskToUse.updateState(newState);
 
             // Check if we've reached the end timestamp - if so, we're done with this task
             if (newTask.hasReachedEnd()) {
                 logger.atInfo().log("Task %s has reached its end timestamp %s, stopping.",
-                        task.id, newTask.state.getEndTimestamp().get());
+                        newTask.id, newTask.state.getEndTimestamp().get());
                 return CompletableFuture.completedFuture(null);
             }
 
