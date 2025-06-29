@@ -26,4 +26,6 @@ public interface MasterTransport {
     boolean areTasksCompleted(Set<TaskId> tasks);
 
     void updateGenerationMetadata(TableName table, GenerationMetadata metadata);
+
+    Optional<Timestamp> getLastConsumedChangeTimestamp(Set<TaskId> tasks);
 }

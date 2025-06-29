@@ -1,5 +1,6 @@
 package com.scylladb.cdc.lib;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -176,6 +177,26 @@ class LocalTransport implements MasterTransport, WorkerTransport {
             }
         });
         return result;
+    }
+
+    // Returns the maximum timestamp of a consumed change for the given tasks.
+    @Override
+    public Optional<Timestamp> getLastConsumedChangeTimestamp(Set<TaskId> tasks) {
+        Timestamp maxTimestamp = null;
+        for (TaskId task : tasks) {
+            TaskState state = taskStates.get(task);
+            if (state != null && state.getLastConsumedChangeId().isPresent()) {
+                // Extract the timestamp from the change ID
+                Optional<Date> changeDate = state.getLastConsumedChangeDate();
+                if (changeDate.isPresent()) {
+                    Timestamp changeTimestamp = new Timestamp(changeDate.get());
+                    if (maxTimestamp == null || changeTimestamp.compareTo(maxTimestamp) > 0) {
+                        maxTimestamp = changeTimestamp;
+                    }
+                }
+            }
+        }
+        return Optional.ofNullable(maxTimestamp);
     }
 
     @Override
