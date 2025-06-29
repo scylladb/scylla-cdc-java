@@ -59,9 +59,15 @@ public class TableCDCController {
             throw new IllegalStateException("No next generation available for table: " + table);
         }
 
+        Optional<Timestamp> prevGenEnd = this.tasks.getEndReadTimestamp();
+
         this.currentGeneration = masterConfiguration.cql.fetchTableGenerationMetadata(table, nextGenId.get()).get();
-        this.tasks = createTasks(currentGeneration, table);
+        this.tasks = createTasks(currentGeneration, table).withStartReadTimestamp(prevGenEnd);
         logger.atInfo().log("Advanced to next generation for table: %s with ID: %s and streams: %s", table, nextGenId.get(), currentGeneration.getStreams());
+    }
+
+    public void rereadGenerationWithEndTimestamp(Timestamp maxConsumedTimestamp) throws InterruptedException, ExecutionException {
+        this.tasks = createTasks(currentGeneration, table).withEndReadTimestamp(Optional.of(maxConsumedTimestamp));
     }
 
     private static GroupedTasks createTasks(GenerationMetadata generation, TableName table) {
@@ -163,7 +169,16 @@ public class TableCDCController {
         refreshEnd();
 
         if (isGenerationDone()) {
-            advanceToNextGeneration();
+            Timestamp expectedEndTimestamp = this.tasks.getEndReadTimestamp().orElse(currentGeneration.getEnd().get());
+            Optional<Timestamp> maxConsumedTimestamp = masterConfiguration.transport.getLastConsumedChangeTimestamp(tasks.getTasks().keySet());
+            if (maxConsumedTimestamp.isPresent() && maxConsumedTimestamp.get().compareTo(expectedEndTimestamp) > 0) {
+                logger.atInfo().log("Max consumed timestamp %s is after the end of current generation %s",
+                        maxConsumedTimestamp, currentGeneration.getEnd().get());
+                rereadGenerationWithEndTimestamp(maxConsumedTimestamp.get());
+            } else {
+                advanceToNextGeneration();
+            }
+
             configureWorkers();
         }
     }
