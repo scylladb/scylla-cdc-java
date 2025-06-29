@@ -1,6 +1,7 @@
 package com.scylladb.cdc.model.worker;
 
 import java.time.temporal.ChronoUnit;
+import java.util.Date;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,6 +25,10 @@ public final class TaskState {
 
     public Optional<ChangeId> getLastConsumedChangeId() {
         return lastConsumedChangeId;
+    }
+
+    public Optional<Date> getLastConsumedChangeDate() {
+        return lastConsumedChangeId.map(ChangeId::getChangeTime).map(changeTime -> changeTime.getDate());
     }
 
     public Optional<Timestamp> getEndTimestamp() {
