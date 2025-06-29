@@ -42,7 +42,7 @@ public final class Worker {
      * state is build based on the ID of this generation.
      */
     private static TaskState getInitialStateForStreams(GroupedTasks workerTasks, long windowSizeMs) {
-        return TaskState.createInitialFor(workerTasks.getGenerationId(), windowSizeMs, Optional.empty());
+        return TaskState.createInitialFor(workerTasks.getStartReadTimestamp(), windowSizeMs, workerTasks.getEndReadTimestamp());
     }
 
     /*
