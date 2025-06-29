@@ -53,12 +53,7 @@ public class TabletBasedCDCMetadataModel implements CDCMetadataModel {
 
                 // Check if any table's generation is done or needs refresh
                 for (TableCDCController controller : tableControllers.values()) {
-
-                    controller.refreshEnd();
-
-                    if (controller.skipToNextGeneration()) {
-                        controller.configureWorkers();
-                    }
+                    controller.runMasterStep();
                 }
             }
         }

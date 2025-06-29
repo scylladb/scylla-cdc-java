@@ -193,4 +193,10 @@ public class MockMasterTransport implements MasterTransport {
         return true;
     }
 
+    @Override
+    public Optional<Timestamp> getLastConsumedChangeTimestamp(Set<TaskId> tasks) {
+        // TODO Auto-generated method stub
+        return Optional.empty();
+    }
+
 }

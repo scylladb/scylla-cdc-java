@@ -80,6 +80,10 @@ public final class Worker {
             SortedSet<StreamId> streams = taskStreams.getValue();
             TaskState state = states.getOrDefault(id, initialState);
             state = state.trimTaskState(minimumWindowStarts.get(id.getTable()), workerConfiguration.queryTimeWindowSizeMs);
+            if (workerTasks.getEndReadTimestamp().isPresent()) {
+                // If the end read timestamp is set, always set it in the task state
+                state = state.withEndTimestamp(workerTasks.getEndReadTimestamp().get());
+            }
             return new Task(id, streams, state);
         });
     }
