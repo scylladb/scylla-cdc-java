@@ -54,9 +54,10 @@ public class WorkerTest {
             new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 4, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
             new ChangeSchema.ColumnDefinition("cdc$operation", 5, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null),
             new ChangeSchema.ColumnDefinition("cdc$ttl", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null),
-            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.CLUSTERING_KEY),
-            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.PARTITION_KEY),
-            new ChangeSchema.ColumnDefinition("v", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.REGULAR)
+            new ChangeSchema.ColumnDefinition("cdc$closed_time", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMESTAMP), null, null),
+            new ChangeSchema.ColumnDefinition("ck", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.CLUSTERING_KEY),
+            new ChangeSchema.ColumnDefinition("pk", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.PARTITION_KEY),
+            new ChangeSchema.ColumnDefinition("v", 10, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.REGULAR)
     ));
 
     @Test
@@ -765,6 +766,92 @@ public class WorkerTest {
             // Verify changes outside the range were not consumed
             assertFalse(observedChanges.contains(beforeRangeChange));
             assertFalse(observedChanges.contains(afterRangeChange));
+        }
+    }
+
+    @Test
+    public void testWorkerDiscoversAndRespectsClosedTime() {
+        // This test verifies that the Worker correctly handles CDC closed time,
+        // when it is not set initially but discovered during reading.
+        // Scenario:
+        // 2. Initially we start reading without an end timestamp constraint
+        // 3. The second change has a CDC closed time set
+        // 4. While reading, we discover the closed time and update the task state
+        // 5. The worker should detect this closed time and stop reading at that point
+        // 6. Only changes before the closed time should be processed
+
+        GenerationMetadata testGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(),
+                1, TEST_GENERATION_STREAMS_PER_VNODE_COUNT);
+
+        // Calculate timestamps to ensure both changes are within the same query window
+        long baseTimeMs = TEST_GENERATION_START_MS;
+        long closedTimeMs = baseTimeMs + 10; // Closed time is 10ms after the base time
+
+        // First change - no closed time, before the closed time
+        MockRawChange changeWithoutClosedTime = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(testGeneration, 0, 0)
+                .withTimeMs(baseTimeMs) // Within a single window
+                .addPrimaryKey("pk", 1)
+                .addPrimaryKey("ck", 2)
+                .addAtomicRegularColumn("v", 3)
+                .build();
+
+        // Second change - with closed time set, timestamp is after closed time
+        // When the worker encounters this change, it should detect the closed time
+        // and update the task state to stop at this point
+        MockRawChange changeWithClosedTime = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(testGeneration, 0, 1)
+                .withTimeMs(closedTimeMs + 5) // after the closed time
+                .withClosedTime(new Date(closedTimeMs)) // Setting closed time as Date
+                .addPrimaryKey("pk", 4)
+                .addPrimaryKey("ck", 5)
+                .addAtomicRegularColumn("v", 6)
+                .build();
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+
+        List<MockRawChange> rawChanges = Lists.newArrayList(changeWithoutClosedTime, changeWithClosedTime);
+        mockWorkerCQL.setRawChanges(rawChanges);
+
+        List<RawChange> observedChanges = Collections.synchronizedList(new ArrayList<>());
+        Consumer accumulatingConsumer = Consumer.syncRawChangeConsumer(observedChanges::add);
+
+        // Create the task ID for later verification of task state
+        VNodeId vnodeId = new VNodeId(0);
+        TaskId taskId = new TaskId(testGeneration.getId(), vnodeId, TEST_TABLE_NAME);
+        Timestamp closedTimestamp = new Timestamp(new Date(closedTimeMs));
+
+        try (WorkerThread workerThread = new WorkerThread(
+                mockWorkerCQL, workerTransport, accumulatingConsumer,
+                testGeneration, Clock.systemDefaultZone(), Collections.singleton(TEST_TABLE_NAME))) {
+
+            // Wait until at least one change is processed
+            DEFAULT_AWAIT.until(() -> observedChanges.size() > 0);
+
+            // Wait until the task state is updated with end timestamp equal to the closed time
+            // This indicates the worker has discovered the closed time and updated the state
+            DEFAULT_AWAIT.until(() -> {
+                Map<TaskId, TaskState> taskStates = workerTransport.getTaskStates(Collections.singleton(taskId));
+                if (!taskStates.containsKey(taskId)) {
+                    return false;
+                }
+
+                TaskState state = taskStates.get(taskId);
+                return state.getEndTimestamp().isPresent() &&
+                       state.getEndTimestamp().get().equals(closedTimestamp);
+            });
+
+            // Verify we only processed one change
+            assertEquals(observedChanges.size(), 1);
+
+            // Verify we only got the change without closed time
+            // The change with closed time should be filtered out
+            List<MockRawChange> expectedChanges = Collections.singletonList(changeWithoutClosedTime);
+            assertEquals(expectedChanges, observedChanges);
         }
     }
 
