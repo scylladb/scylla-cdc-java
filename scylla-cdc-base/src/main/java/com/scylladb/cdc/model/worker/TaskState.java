@@ -119,13 +119,12 @@ public final class TaskState {
      * Such initial state starts at the beginning of the generation and spans for
      * |windowSizeMs| milliseconds.
      */
-    public static TaskState createInitialFor(GenerationId generation, long windowSizeMs, Optional<Timestamp> endTimestamp) {
-        Timestamp generationStart = generation.getGenerationStart();
-        Timestamp windowEnd = generationStart.plus(windowSizeMs, ChronoUnit.MILLIS);
-        if (endTimestamp.isPresent() && windowEnd.compareTo(endTimestamp.get()) > 0) {
-            windowEnd = endTimestamp.get();
+    public static TaskState createInitialFor(Timestamp startReadTimestamp, long windowSizeMs, Optional<Timestamp> endReadTimestamp) {
+        Timestamp windowEnd = startReadTimestamp.plus(windowSizeMs, ChronoUnit.MILLIS);
+        if (endReadTimestamp.isPresent() && windowEnd.compareTo(endReadTimestamp.get()) > 0) {
+            windowEnd = endReadTimestamp.get();
         }
-        return new TaskState(generationStart, windowEnd, Optional.empty(), endTimestamp);
+        return new TaskState(startReadTimestamp, windowEnd, Optional.empty(), endReadTimestamp);
     }
 
     /* If the state is before |minimumWindowStart| then this method returns a state
