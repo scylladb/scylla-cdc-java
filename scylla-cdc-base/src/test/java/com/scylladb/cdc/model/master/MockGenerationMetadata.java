@@ -44,9 +44,15 @@ public class MockGenerationMetadata {
     }
 
     public static GroupedTasks generationMetadataToWorkerTasks(
-            GenerationMetadata generationMetadata, Set<TableName> tableNames) {
+            GenerationMetadata generationMetadata, Set<TableName> tableNames, Optional<Timestamp> startReadTimestamp,
+            Optional<Timestamp> endReadTimestamp) {
         Map<TaskId, SortedSet<StreamId>> generationMetadataMap = generationMetadataToTaskMap(generationMetadata, tableNames);
-        return new GroupedTasks(generationMetadataMap, generationMetadata);
+        return new GroupedTasks(generationMetadataMap, generationMetadata, startReadTimestamp, endReadTimestamp);
+    }
+
+    public static GroupedTasks generationMetadataToWorkerTasks(
+            GenerationMetadata generationMetadata, Set<TableName> tableNames) {
+        return generationMetadataToWorkerTasks(generationMetadata, tableNames, Optional.empty(), Optional.empty());
     }
 
     public static Map<TaskId, SortedSet<StreamId>> generationMetadataToTaskMap(
