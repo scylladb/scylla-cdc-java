@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.LinkedHashSet;
 import java.util.Collections;
+import java.util.Date;
 import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Objects;
@@ -96,6 +97,11 @@ public class MockRawChange implements RawChange {
 
         public Builder withTTL(long ttl) {
             this.columnValues.put("cdc$ttl", ttl);
+            return this;
+        }
+
+        public Builder withClosedTime(Date closedTime) {
+            this.columnValues.put("cdc$closed_time", closedTime);
             return this;
         }
 
