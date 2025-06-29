@@ -694,6 +694,80 @@ public class WorkerTest {
         }
     }
 
+    @Test
+    public void testWorkerConsumesChangesWithinExplicitTimeRange() {
+        // Worker should only consume changes that fall within
+        // explicitly provided start and end timestamps
+
+        // Create multiple changes at various timestamps
+        MockRawChange beforeRangeChange = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 0)
+                .withTimeMs(TEST_GENERATION_START_MS + 10) // Early timestamp
+                .addPrimaryKey("pk", 1)
+                .addPrimaryKey("ck", 2)
+                .addAtomicRegularColumn("v", 3)
+                .build();
+
+        MockRawChange inRangeChange1 = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 1)
+                .withTimeMs(TEST_GENERATION_START_MS + 50) // Within range
+                .addPrimaryKey("pk", 4)
+                .addPrimaryKey("ck", 5)
+                .addAtomicRegularColumn("v", 6)
+                .build();
+
+        MockRawChange inRangeChange2 = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 2)
+                .withTimeMs(TEST_GENERATION_START_MS + 75) // Within range
+                .addPrimaryKey("pk", 7)
+                .addPrimaryKey("ck", 8)
+                .addAtomicRegularColumn("v", 9)
+                .build();
+
+        MockRawChange afterRangeChange = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 0)
+                .withTimeMs(TEST_GENERATION_START_MS + 120) // Late timestamp
+                .addPrimaryKey("pk", 10)
+                .addPrimaryKey("ck", 11)
+                .addAtomicRegularColumn("v", 12)
+                .build();
+
+        // Define our explicit time range (50-100 ms from generation start)
+        Timestamp startReadTimestamp = new Timestamp(new Date(TEST_GENERATION_START_MS + 40));
+        Timestamp endReadTimestamp = new Timestamp(new Date(TEST_GENERATION_START_MS + 100));
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+
+        List<MockRawChange> rawChanges = Lists.newArrayList(
+                beforeRangeChange, inRangeChange1, inRangeChange2, afterRangeChange);
+        mockWorkerCQL.setRawChanges(rawChanges);
+
+        List<RawChange> observedChanges = Collections.synchronizedList(new ArrayList<>());
+        Consumer accumulatingConsumer = Consumer.syncRawChangeConsumer(observedChanges::add);
+
+        try (WorkerThread workerThread = new WorkerThread(
+                mockWorkerCQL, workerTransport, accumulatingConsumer,
+                TEST_GENERATION, Clock.systemDefaultZone(), Collections.singleton(TEST_TABLE_NAME),
+                Optional.of(startReadTimestamp), Optional.of(endReadTimestamp))) {
+
+            // Only the changes within our time range should be consumed
+            DEFAULT_AWAIT.until(() -> observedChanges.size() == 2);
+
+            // Verify we got exactly the changes within the time range
+            List<MockRawChange> expectedChanges = Lists.newArrayList(inRangeChange1, inRangeChange2);
+            assertEquals(expectedChanges, observedChanges);
+
+            // Verify changes outside the range were not consumed
+            assertFalse(observedChanges.contains(beforeRangeChange));
+            assertFalse(observedChanges.contains(afterRangeChange));
+        }
+    }
+
     private Task generateTask(GenerationMetadata generationMetadata, int vnodeIndex, TableName tableName,
                               long windowStartMs, long windowEndMs) {
         VNodeId vnodeId = new VNodeId(vnodeIndex);

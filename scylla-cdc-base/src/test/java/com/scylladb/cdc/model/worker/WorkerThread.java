@@ -5,6 +5,7 @@ import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
+import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.master.MockGenerationMetadata;
 import com.scylladb.cdc.transport.GroupedTasks;
@@ -13,6 +14,7 @@ import com.scylladb.cdc.transport.WorkerTransport;
 import java.time.Clock;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.*;
@@ -56,6 +58,15 @@ public class WorkerThread implements AutoCloseable {
     public WorkerThread(WorkerCQL workerCQL, WorkerTransport workerTransport, Consumer consumer,
                         GenerationMetadata generationMetadata, Clock clock, Set<TableName> tableNames) {
         this(workerCQL, workerTransport, consumer, clock, MockGenerationMetadata.generationMetadataToWorkerTasks(generationMetadata, tableNames));
+    }
+
+    public WorkerThread(WorkerCQL workerCQL, WorkerTransport workerTransport, Consumer consumer,
+                        GenerationMetadata generationMetadata, Clock clock, Set<TableName> tableNames,
+                        Optional<Timestamp> startReadTimestamp, Optional<Timestamp> endReadTimestamp) {
+        this(workerCQL, workerTransport, consumer, clock,
+            MockGenerationMetadata.generationMetadataToWorkerTasks(generationMetadata, tableNames)
+                .withStartReadTimestamp(startReadTimestamp)
+                .withEndReadTimestamp(endReadTimestamp));
     }
 
     public WorkerThread(WorkerCQL workerCQL, WorkerTransport workerTransport, Consumer consumer,
