@@ -669,6 +669,67 @@ public class MasterTest {
         }
     }
 
+    @Test
+    public void testMasterDiscoverTableGenerationEndTabletMode() {
+        // Test that in tablet mode, Master correctly discovers when a generation end timestamp
+        // is set and updates the transport with the new metadata
+
+        // Create mock transport and tracker
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        // Create CQL mock with tablets mode enabled
+        MockMasterCQL masterCQL = new MockMasterCQL();
+        masterCQL.setUsesTablets(true);
+
+        // Use a single table for the test
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+        TableName testTable = tableNames.iterator().next();
+
+        // Create a generation with no end timestamp initially
+        GenerationMetadata openGeneration = mockGenerationMetadata(
+                mockTimestamp(5), Optional.empty(), 1, 1);
+
+        // Set up the table generation metadata
+        Map<TableName, List<GenerationMetadata>> tableGenerations = new HashMap<>();
+        tableGenerations.put(testTable, Lists.newArrayList(openGeneration));
+        masterCQL.setTableGenerationMetadatas(tableGenerations);
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames)) {
+            // Wait for initial configuration of workers with the open generation
+            masterTransportTracker.awaitConfigureWorkers(testTable, openGeneration);
+
+            // Verify that the current generation metadata has no end timestamp using getCurrentGenerationMetadata
+            GenerationMetadata initialMetadata = masterTransport.getCurrentGenerationMetadata(testTable);
+            assertEquals(false, initialMetadata.getEnd().isPresent(), "Generation should not have end timestamp initially");
+            assertEquals(openGeneration.getId(), initialMetadata.getId(), "Generation ID should match");
+
+            // Update the same generation with an end timestamp
+            Timestamp endTimestamp = mockTimestamp(15);
+            GenerationMetadata closedGeneration = openGeneration.withEnd(endTimestamp);
+
+            // Update the table generations list in the cql layer with the updated generation
+            Map<TableName, List<GenerationMetadata>> updatedTableGenerations = new HashMap<>();
+            updatedTableGenerations.put(testTable, Lists.newArrayList(closedGeneration));
+            masterCQL.setTableGenerationMetadatas(updatedTableGenerations);
+
+            // Wait for the master to discover the updated end timestamp
+            // and call updateGenerationMetadata on the transport
+            DEFAULT_AWAIT.until(() -> {
+                GenerationMetadata currentMetadata = masterTransport.getCurrentGenerationMetadata(testTable);
+                return currentMetadata != null &&
+                       currentMetadata.getEnd().isPresent() &&
+                       currentMetadata.getEnd().get().equals(endTimestamp);
+            });
+
+            // Verify the metadata was correctly updated using getCurrentGenerationMetadata
+            GenerationMetadata updatedMetadata = masterTransport.getCurrentGenerationMetadata(testTable);
+            assertEquals(openGeneration.getId(), updatedMetadata.getId(), "Generation ID should match");
+            assertEquals(true, updatedMetadata.getEnd().isPresent(), "Generation should have end timestamp");
+            assertEquals(endTimestamp, updatedMetadata.getEnd().get(), "End timestamp should match the set value");
+        }
+    }
+
     private static Timestamp mockTimestamp(long minutesAfterEpoch) {
         // Minutes to milliseconds:
         return new Timestamp(new Date(minutesAfterEpoch * 60 * 1000));
