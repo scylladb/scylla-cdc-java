@@ -730,6 +730,76 @@ public class MasterTest {
         }
     }
 
+    @Test
+    public void testMasterContinuesFromLastConsumedTimestamp() {
+        // Test that the Master continues reading from the last consumed timestamp when
+        // transitioning between generations in tablet mode, to ensure no changes are consumed twice
+
+        // Create mock transport and tracker
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        // Create CQL mock with tablets mode enabled
+        MockMasterCQL masterCQL = new MockMasterCQL();
+        masterCQL.setUsesTablets(true);
+
+        // Use a single table with multiple generations
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+        TableName testTable = tableNames.iterator().next();
+
+        // Create test data with two generations for the table
+        // with specific start/end timestamps for testing transition
+        GenerationMetadata firstGen = mockGenerationMetadata(
+                mockTimestamp(5), Optional.of(mockTimestamp(15)), 4, 1);
+        GenerationMetadata secondGen = mockGenerationMetadata(
+                mockTimestamp(15), Optional.empty(), 4, 1);
+
+        Map<TableName, List<GenerationMetadata>> tableGenerations = new HashMap<>();
+        tableGenerations.put(testTable, Lists.newArrayList(firstGen, secondGen));
+
+        masterCQL.setTableGenerationMetadatas(tableGenerations);
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames)) {
+            // Verify that the transport received the first generation configuration
+            masterTransportTracker.awaitConfigureWorkers(testTable, firstGen);
+
+            // Set a last consumed timestamp that is after the end of the first generation
+            // Simulates a case where the worker has consumed changes past the generation end time
+            Timestamp firstGenEnd = firstGen.getEnd().get();
+            Timestamp consumedTimestamp = new Timestamp(new Date(firstGenEnd.toDate().getTime() + 5000)); // 5 seconds past end
+            masterTransport.setLastConsumedChangeTimestamp(consumedTimestamp);
+
+            // Mark the first generation as completed
+            masterTransport.setGenerationCompleted(firstGen.getId());
+
+            // First, the master should reread the first generation with end timestamp set to consumed timestamp
+            // Wait for this reconfiguration to happen
+            masterTransportTracker.awaitConfigureWorkers(testTable, firstGen);
+
+            // Verify the first generation was reconfigured with end timestamp equal to consumed timestamp
+            Timestamp rereadEndTimestamp = masterTransport.getGenerationEndReadTimestamp(firstGen.getId());
+            assertEquals(consumedTimestamp, rereadEndTimestamp,
+                    "First generation should be reread with end timestamp equal to consumed timestamp");
+
+            // Mark the reread first generation as completed
+            masterTransport.setGenerationCompleted(firstGen.getId());
+
+            // Now the master should move to the second generation
+            masterTransportTracker.awaitConfigureWorkers(testTable, secondGen);
+
+            // Verify that the second generation's start read timestamp is the same as our consumed timestamp
+            // This ensures we don't reprocess changes from before the last consumed point
+            Timestamp secondGenStartRead = masterTransport.getGenerationStartReadTimestamp(secondGen.getId());
+            assertEquals(consumedTimestamp, secondGenStartRead,
+                    "Second generation should start reading from the last consumed timestamp of first generation");
+
+            // Additional verification that the second generation does NOT start from its generation start
+            Timestamp secondGenDefaultStart = secondGen.getStart();
+            assertEquals(false, secondGenDefaultStart.equals(secondGenStartRead),
+                    "Second generation should not start from its default start timestamp");
+        }
+    }
+
     private static Timestamp mockTimestamp(long minutesAfterEpoch) {
         // Minutes to milliseconds:
         return new Timestamp(new Date(minutesAfterEpoch * 60 * 1000));
