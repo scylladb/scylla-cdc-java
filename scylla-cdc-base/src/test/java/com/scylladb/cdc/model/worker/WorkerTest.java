@@ -855,6 +855,49 @@ public class WorkerTest {
         }
     }
 
+    @Test
+    public void testWorkerDiscoversTransportEndTimestamp() {
+        // Test that the worker correctly discovers an end timestamp through
+        // the transport layer's getTableEndTimestamp method
+
+        GenerationMetadata testGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(),
+                1, TEST_GENERATION_STREAMS_PER_VNODE_COUNT);
+
+        // Define an end timestamp that we'll set later
+        long endTimestampMs = TEST_GENERATION_START_MS + 30;
+        Timestamp endTimestamp = new Timestamp(new Date(endTimestampMs));
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+        Consumer noOpConsumer = Consumer.syncRawChangeConsumer(c -> {});
+
+        // Create the task ID for later verification of task state
+        VNodeId vnodeId = new VNodeId(0);
+        TaskId taskId = new TaskId(testGeneration.getId(), vnodeId, TEST_TABLE_NAME);
+
+        try (WorkerThread workerThread = new WorkerThread(
+                mockWorkerCQL, workerTransport, noOpConsumer,
+                testGeneration, TEST_TABLE_NAME)) {
+
+            // Now set the end timestamp in the transport
+            workerTransport.setTableEndTimestamp(TEST_TABLE_NAME, Optional.of(endTimestamp));
+
+            // Wait until the task state is updated with the end timestamp
+            // This indicates the worker has discovered the end timestamp through the transport
+            DEFAULT_AWAIT.until(() -> {
+                Map<TaskId, TaskState> taskStates = workerTransport.getTaskStates(Collections.singleton(taskId));
+                if (!taskStates.containsKey(taskId)) {
+                    return false;
+                }
+
+                TaskState state = taskStates.get(taskId);
+                return state.getEndTimestamp().isPresent() &&
+                       state.getEndTimestamp().get().equals(endTimestamp);
+            });
+        }
+    }
+
     private Task generateTask(GenerationMetadata generationMetadata, int vnodeIndex, TableName tableName,
                               long windowStartMs, long windowEndMs) {
         VNodeId vnodeId = new VNodeId(vnodeIndex);
