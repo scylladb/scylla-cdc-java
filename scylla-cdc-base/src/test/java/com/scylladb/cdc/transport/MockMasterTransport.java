@@ -13,6 +13,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,6 +43,39 @@ public class MockMasterTransport implements MasterTransport {
 
     // Set to store completed generation ids
     private final Set<GenerationId> completedGenerations = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    // Track the last consumption timestamp for testing generation transition
+    private Optional<Timestamp> lastConsumedChangeTimestamp = Optional.empty();
+
+    /**
+     * Simulates a lastConsumedChangeTimestamp for testing generation transitions.
+     * @param timestamp The timestamp to set as last consumed
+     */
+    public void setLastConsumedChangeTimestamp(Timestamp timestamp) {
+        this.lastConsumedChangeTimestamp = Optional.of(timestamp);
+    }
+
+    // Track the start and end read timestamps when configureWorkers is called for testing
+    private final Map<GenerationId, Timestamp> generationStartReadTimestamps = new HashMap<>();
+    private final Map<GenerationId, Optional<Timestamp>> generationEndReadTimestamps = new HashMap<>();
+
+    /**
+     * Gets the start read timestamp used to configure a specific generation
+     * @param generationId The generation ID
+     * @return The timestamp or null if not found
+     */
+    public Timestamp getGenerationStartReadTimestamp(GenerationId generationId) {
+        return generationStartReadTimestamps.get(generationId);
+    }
+
+    /**
+     * Gets the end read timestamp used to configure a specific generation
+     * @param generationId The generation ID
+     * @return The timestamp or null if not found
+     */
+    public Timestamp getGenerationEndReadTimestamp(GenerationId generationId) {
+        return generationEndReadTimestamps.get(generationId).orElse(null);
+    }
 
     public void setCurrentFullyConsumedTimestamp(Timestamp newTimestamp) {
         currentFullyConsumedTimestamp = Preconditions.checkNotNull(newTimestamp);
@@ -108,6 +142,11 @@ public class MockMasterTransport implements MasterTransport {
     @Override
     public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
         configureWorkersInvocations.add(workerTasks.getTasks());
+
+        // For testing generation transition, capture the startReadTimestamp and endReadTimestamp
+        GenerationId genId = workerTasks.getGenerationId();
+        generationStartReadTimestamps.put(genId, workerTasks.getStartReadTimestamp());
+        generationEndReadTimestamps.put(genId, workerTasks.getEndReadTimestamp());
     }
 
     @Override
@@ -142,6 +181,10 @@ public class MockMasterTransport implements MasterTransport {
 
         // Store the generation metadata (only most recent)
         tableGenerationMetadatas.put(tableName, workerTasks.getGenerationMetadata());
+
+        // For testing generation transition, capture the startReadTimestamp and endReadTimestamp
+        generationStartReadTimestamps.put(genId, workerTasks.getStartReadTimestamp());
+        generationEndReadTimestamps.put(genId, workerTasks.getEndReadTimestamp());
     }
 
     @Override
@@ -195,8 +238,7 @@ public class MockMasterTransport implements MasterTransport {
 
     @Override
     public Optional<Timestamp> getLastConsumedChangeTimestamp(Set<TaskId> tasks) {
-        // TODO Auto-generated method stub
-        return Optional.empty();
+        return lastConsumedChangeTimestamp;
     }
 
 }
