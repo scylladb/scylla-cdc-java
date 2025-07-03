@@ -9,6 +9,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
+import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.Timestamp;
 
 abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -103,6 +105,21 @@ abstract class TaskAction {
         }
 
         private CompletableFuture<TaskAction> onException(Throwable ex) {
+            Throwable cause = ex;
+            if (ex instanceof java.util.concurrent.CompletionException && ex.getCause() != null) {
+                cause = ex.getCause();
+            }
+
+            // Special handling for ClosedTimeFoundException - re-read the window with the updated task.
+            // there is no need for delay in this case.
+            if (cause instanceof ClosedTimeFoundException) {
+                ClosedTimeFoundException ctfe = (ClosedTimeFoundException) cause;
+                Task updatedTask = ctfe.getUpdatedTask();
+
+                return CompletableFuture.completedFuture(
+                        new ReadNewWindowTaskAction(workerConfiguration, updatedTask, 0));
+            }
+
             // Exception occured while reading the window, we will have to restart
             // ReadNewWindowTaskAction - read a window from state defined in task.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
@@ -118,12 +135,56 @@ abstract class TaskAction {
                 workerConfiguration.transport.setState(task.id, newState);
             }
             try {
-                CompletableFuture<TaskAction> taskActionFuture = reader.nextChange().
-                        thenApply(change -> new ConsumeChangeTaskAction(workerConfiguration, task, reader, change, tryAttempt));
+                CompletableFuture<Optional<RawChange>> changeCompletableFuture = reader.nextChange();
+                CompletableFuture<TaskAction> taskActionFuture = changeCompletableFuture.thenCompose(changeOpt -> {
+                    if (changeOpt.isPresent()) {
+                        RawChange change = changeOpt.get();
+
+                        // If we discover a closed_time while reading, we need to abort and retry after
+                        // updating the task's end timestamp. The correctness relies on us not consuming
+                        // changes with a timestamp greater than the closed_time when closed_time is set.
+                        Optional<Date> closedTimeOpt = change.getClosedTime();
+                        if (closedTimeOpt.isPresent() && !task.state.getEndTimestamp().isPresent()) {
+                            // We found a closed_time, let's update the task's end timestamp
+                            Date closedTime = closedTimeOpt.get();
+                            logger.atInfo().log("Found closed_time %s in change from stream %s, updating task %s end timestamp.",
+                                    closedTime, change.getId().getStreamId(), task.id);
+
+                            // Update the task with the new end timestamp
+                            Timestamp endTimestamp = new Timestamp(closedTime);
+                            Task updatedTask = task.updateState(task.state.withEndTimestamp(endTimestamp));
+
+                            CompletableFuture<TaskAction> result = new CompletableFuture<>();
+                            result.completeExceptionally(new ClosedTimeFoundException(updatedTask));
+                            return result;
+                        }
+                    }
+
+                    return CompletableFuture.completedFuture(
+                            new ConsumeChangeTaskAction(workerConfiguration, task, reader, changeOpt, tryAttempt));
+                });
+
                 return FutureUtils.thenComposeExceptionally(taskActionFuture, this::onException);
             } catch (Throwable ex) {
                 return onException(ex);
             }
+        }
+    }
+
+    /**
+     * A special exception used to signal that we found a closed_time in a change
+     * and need to update the task's end timestamp.
+     */
+    private static class ClosedTimeFoundException extends RuntimeException {
+        private final Task updatedTask;
+
+        public ClosedTimeFoundException(Task updatedTask) {
+            super("Found closed_time in change, updating task end timestamp");
+            this.updatedTask = updatedTask;
+        }
+
+        public Task getUpdatedTask() {
+            return updatedTask;
         }
     }
 
@@ -186,9 +247,34 @@ abstract class TaskAction {
 
         @Override
         public CompletableFuture<TaskAction> run() {
-            TaskState newState = task.state.moveToNextWindow(workerConfiguration.queryTimeWindowSizeMs);
-            workerConfiguration.transport.moveStateToNextWindow(task.id, newState);
-            Task newTask = task.updateState(newState);
+            // Check for end timestamp updates before moving to next window
+            Task taskToUse = task;
+
+            // Use Optional-based method for getting table end timestamp
+            TableName tableName = task.id.getTable();
+            Optional<Timestamp> endTimestampOpt = workerConfiguration.transport.getTableEndTimestamp(tableName);
+
+            if (endTimestampOpt.isPresent() && !task.state.getEndTimestamp().isPresent()) {
+                Timestamp endTimestamp = endTimestampOpt.get();
+
+                logger.atInfo().log("Found end timestamp %s for table %s, updating task %s",
+                        endTimestamp, tableName, task.id);
+
+                TaskState newState = task.state.withEndTimestamp(endTimestamp);
+                taskToUse = task.updateState(newState);
+            }
+
+            TaskState newState = taskToUse.state.moveToNextWindow(workerConfiguration.queryTimeWindowSizeMs);
+            workerConfiguration.transport.moveStateToNextWindow(taskToUse.id, newState);
+            Task newTask = taskToUse.updateState(newState);
+
+            // Check if we've reached the end timestamp - if so, we're done with this task
+            if (newTask.hasReachedEnd()) {
+                logger.atInfo().log("Task %s has reached its end timestamp %s, stopping.",
+                        newTask.id, newTask.state.getEndTimestamp().get());
+                return CompletableFuture.completedFuture(null);
+            }
+
             return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(workerConfiguration, newTask, 0));
         }
     }

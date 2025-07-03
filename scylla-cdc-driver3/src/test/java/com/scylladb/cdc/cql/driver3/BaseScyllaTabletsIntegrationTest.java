@@ -3,6 +3,7 @@ package com.scylladb.cdc.cql.driver3;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.exceptions.InvalidQueryException;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.schemabuilder.SchemaBuilder;
 import com.google.common.base.Preconditions;
@@ -12,13 +13,14 @@ import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.*;
-import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 import com.scylladb.cdc.model.worker.TaskState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
+
+import static org.junit.jupiter.api.Assumptions.abort;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -28,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 @Tag("integration")
-public class BaseScyllaIntegrationTest {
+public class BaseScyllaTabletsIntegrationTest {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
     protected static final long SCYLLA_TIMEOUT_MS = 3000;
 
@@ -39,8 +41,6 @@ public class BaseScyllaIntegrationTest {
     private int port;
     private String scyllaVersion;
     private Driver3Session librarySession;
-
-    private boolean hasWaitedForFirstGeneration = false;
 
     @BeforeEach
     public void beforeEach() throws ExecutionException, InterruptedException, TimeoutException {
@@ -58,63 +58,10 @@ public class BaseScyllaIntegrationTest {
         // Drop the test keyspace in case a prior cleanup was not properly executed.
         driverSession.execute(SchemaBuilder.dropKeyspace("ks").ifExists());
 
-        // Create a test keyspace.
-        driverSession.execute(SchemaBuilder.createKeyspace("ks").with().replication(
-            new HashMap<String, Object>() {{
-                put("class", "SimpleStrategy");
-                put("replication_factor", "1");
-        }}));
-
-        maybeWaitForFirstGeneration();
-    }
-
-    /**
-     * Waits for first CDC generation to start
-     * up. This method is only relevant for
-     * Scylla 4.3, as starting with Scylla 4.4
-     * adding ring delay for the first generation
-     * has been removed: <a href="https://github.com/scylladb/scylla/pull/7654">Pull request #7654</a>,
-     * in which case this method is a no-op. This
-     * method waits for the first generation only
-     * once and the next invocations immediately
-     * return.
-     * <p>
-     * After waiting for first generation to start
-     * it is safe to <code>INSERT</code> rows
-     * into the CDC log table without the
-     * worry of <code>could not find any CDC stream</code>
-     * error.
-     */
-    private void maybeWaitForFirstGeneration() throws ExecutionException, InterruptedException, TimeoutException {
-        if (!scyllaVersion.startsWith("4.3.")) {
-            return;
-        }
-
-        if (hasWaitedForFirstGeneration) {
-            return;
-        }
-
-        // Get the first generation id.
-        MasterCQL masterCQL = new Driver3MasterCQL(buildLibrarySession());
-        GenerationId generationId = masterCQL.fetchFirstGenerationId()
-                .get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS).get();
-
-        // Remove the created librarySession,
-        // so that it does not interfere
-        // with the test code.
-        librarySession.close();
-        librarySession = null;
-
-        // Wait for the generation to start.
-        Date now = new Date();
-        Date generationStart = generationId.getGenerationStart().toDate();
-        long millisecondsToWait = generationStart.getTime() - now.getTime();
-        if (millisecondsToWait > 0) {
-            logger.atInfo().log("Waiting for the first generation for %d ms.", millisecondsToWait);
-            Thread.sleep(millisecondsToWait);
-        }
-
-        hasWaitedForFirstGeneration = true;
+        // Create a test keyspace with tablets enabled
+        driverSession.execute("CREATE KEYSPACE ks " +
+            "WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1} " +
+            "AND tablets={'initial':2};");
     }
 
     /**
@@ -150,9 +97,6 @@ public class BaseScyllaIntegrationTest {
      * (or multiple within a single partition) and then use this method
      * to build a {@link Task}, which will allow you to read all those
      * inserted changes.
-     * <p>
-     * Warning: this method will not work properly if the first
-     * row in the CDC log was inserted in a non-first CDC generation.
      *
      * @param table the table name for which to create the task.
      * @return the task containing the first row in the CDC log.
@@ -163,9 +107,10 @@ public class BaseScyllaIntegrationTest {
                 .from(table.keyspace, table.name + "_scylla_cdc_log")).one();
         ByteBuffer streamIdBytes = cdcRow.getBytes("cdc$stream_id");
 
-        // Get the first generation id.
+        // Get the first generation id for this table
         MasterCQL masterCQL = new Driver3MasterCQL(buildLibrarySession());
-        GenerationId generationId = masterCQL.fetchFirstGenerationId().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS).get();
+        GenerationId generationId = masterCQL.fetchFirstTableGenerationId(table)
+                .get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
         StreamId streamId = new StreamId(streamIdBytes);
         VNodeId vnode = streamId.getVNodeId();
@@ -180,9 +125,6 @@ public class BaseScyllaIntegrationTest {
      * <p>
      * A common scenario is to insert a single row to a base table
      * and then use this method to read it back from the CDC log.
-     * <p>
-     * Warning: this method will not work properly if the first
-     * row in the CDC log was inserted in a non-first CDC generation.
      *
      * @param table the table name for which to read the first change.
      * @return the first change in the CDC log for the given table.
@@ -213,6 +155,37 @@ public class BaseScyllaIntegrationTest {
         if (librarySession != null) {
             librarySession.close();
             librarySession = null;
+        }
+    }
+
+    /**
+     * Attempts to create a table with CDC enabled in a tablets-mode keyspace.
+     *
+     * This method handles the specific case where a Scylla version doesn't support
+     * CDC with tablets mode by detecting the specific error message and aborting the test
+     * rather than letting it fail. This approach allows the test suite to run on both
+     * Scylla versions that support CDC with tablets and those that don't.
+     *
+     * If the table creation fails for any other reason, the original exception is rethrown
+     * so that the test fails normally, indicating a real issue rather than a feature limitation.
+     *
+     * @param query The CREATE TABLE query to execute
+     * @throws InvalidQueryException if the table cannot be created for reasons other than
+     *         CDC with tablets compatibility
+     */
+    public void tryCreateTable(String query) throws InvalidQueryException {
+        try {
+            driverSession.execute(query);
+        } catch (InvalidQueryException e) {
+            // Check if this is the specific exception about CDC logs in tablet mode
+            if (e.getMessage().contains("Cannot create CDC log for a table") &&
+                e.getMessage().contains("because keyspace uses tablets")) {
+                abort(
+                    "Test aborted: This version of Scylla doesn't support CDC with tablets. " +
+                    "Error message: " + e.getMessage()
+                );
+            }
+            throw e;
         }
     }
 }
