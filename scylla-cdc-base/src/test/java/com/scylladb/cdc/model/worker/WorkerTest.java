@@ -8,6 +8,8 @@ import com.scylladb.cdc.model.*;
 import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.master.MockGenerationMetadata;
 import com.scylladb.cdc.transport.MockWorkerTransport;
+import com.scylladb.cdc.transport.GroupedTasks;
+
 import org.awaitility.core.ConditionFactory;
 import org.junit.jupiter.api.Test;
 
@@ -52,9 +54,10 @@ public class WorkerTest {
             new ChangeSchema.ColumnDefinition("cdc$end_of_batch", 4, new ChangeSchema.DataType(ChangeSchema.CqlType.BOOLEAN), null, null),
             new ChangeSchema.ColumnDefinition("cdc$operation", 5, new ChangeSchema.DataType(ChangeSchema.CqlType.TINYINT), null, null),
             new ChangeSchema.ColumnDefinition("cdc$ttl", 6, new ChangeSchema.DataType(ChangeSchema.CqlType.BIGINT), null, null),
-            new ChangeSchema.ColumnDefinition("ck", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.CLUSTERING_KEY),
-            new ChangeSchema.ColumnDefinition("pk", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.PARTITION_KEY),
-            new ChangeSchema.ColumnDefinition("v", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.REGULAR)
+            new ChangeSchema.ColumnDefinition("cdc$closed_time", 7, new ChangeSchema.DataType(ChangeSchema.CqlType.TIMESTAMP), null, null),
+            new ChangeSchema.ColumnDefinition("ck", 8, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.CLUSTERING_KEY),
+            new ChangeSchema.ColumnDefinition("pk", 9, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.PARTITION_KEY),
+            new ChangeSchema.ColumnDefinition("v", 10, new ChangeSchema.DataType(ChangeSchema.CqlType.INT), new ChangeSchema.DataType(ChangeSchema.CqlType.INT), ChangeSchema.ColumnKind.REGULAR)
     ));
 
     @Test
@@ -109,8 +112,8 @@ public class WorkerTest {
             .withClock(Clock.systemDefaultZone())
             .withMinimalWaitForWindowMs(TEST_MINIMAL_WAIT_FOR_WINDOW_MS)
             .build();
-        Map<TaskId, SortedSet<StreamId>> groupedStreams =
-            MockGenerationMetadata.generationMetadataToTaskMap(TEST_GENERATION, Collections.singleton(TEST_TABLE_NAME));
+        GroupedTasks groupedStreams =
+            MockGenerationMetadata.generationMetadataToWorkerTasks(TEST_GENERATION, Collections.singleton(TEST_TABLE_NAME));
 
         ConditionFactory customAwait =
             with().pollInterval(1, TimeUnit.MILLISECONDS).await()
@@ -692,6 +695,222 @@ public class WorkerTest {
         }
     }
 
+    @Test
+    public void testWorkerConsumesChangesWithinExplicitTimeRange() {
+        // Worker should only consume changes that fall within
+        // explicitly provided start and end timestamps
+
+        // Create multiple changes at various timestamps
+        MockRawChange beforeRangeChange = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 0)
+                .withTimeMs(TEST_GENERATION_START_MS + 10) // Early timestamp
+                .addPrimaryKey("pk", 1)
+                .addPrimaryKey("ck", 2)
+                .addAtomicRegularColumn("v", 3)
+                .build();
+
+        MockRawChange inRangeChange1 = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 1)
+                .withTimeMs(TEST_GENERATION_START_MS + 50) // Within range
+                .addPrimaryKey("pk", 4)
+                .addPrimaryKey("ck", 5)
+                .addAtomicRegularColumn("v", 6)
+                .build();
+
+        MockRawChange inRangeChange2 = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 2)
+                .withTimeMs(TEST_GENERATION_START_MS + 75) // Within range
+                .addPrimaryKey("pk", 7)
+                .addPrimaryKey("ck", 8)
+                .addAtomicRegularColumn("v", 9)
+                .build();
+
+        MockRawChange afterRangeChange = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 0)
+                .withTimeMs(TEST_GENERATION_START_MS + 120) // Late timestamp
+                .addPrimaryKey("pk", 10)
+                .addPrimaryKey("ck", 11)
+                .addAtomicRegularColumn("v", 12)
+                .build();
+
+        // Define our explicit time range (50-100 ms from generation start)
+        Timestamp startReadTimestamp = new Timestamp(new Date(TEST_GENERATION_START_MS + 50));
+        Timestamp endReadTimestamp = new Timestamp(new Date(TEST_GENERATION_START_MS + 100));
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+
+        List<MockRawChange> rawChanges = Lists.newArrayList(
+                beforeRangeChange, inRangeChange1, inRangeChange2, afterRangeChange);
+        mockWorkerCQL.setRawChanges(rawChanges);
+
+        List<RawChange> observedChanges = Collections.synchronizedList(new ArrayList<>());
+        Consumer accumulatingConsumer = Consumer.syncRawChangeConsumer(observedChanges::add);
+
+        VNodeId vnodeId = new VNodeId(0);
+        TaskId taskId = new TaskId(TEST_GENERATION.getId(), vnodeId, TEST_TABLE_NAME);
+
+        try (WorkerThread workerThread = new WorkerThread(
+                mockWorkerCQL, workerTransport, accumulatingConsumer,
+                TEST_GENERATION, Clock.systemDefaultZone(), Collections.singleton(TEST_TABLE_NAME),
+                Optional.of(startReadTimestamp), Optional.of(endReadTimestamp))) {
+
+            // Only the changes within our time range should be consumed
+            DEFAULT_AWAIT.until(() -> observedChanges.size() == 2);
+
+            // Verify we got exactly the changes within the time range
+            List<MockRawChange> expectedChanges = Lists.newArrayList(inRangeChange1, inRangeChange2);
+            assertEquals(expectedChanges, observedChanges);
+
+            // Wait until the task is completed, and verify we didn't get any more changes.
+            DEFAULT_AWAIT.until(() -> {
+                Map<TaskId, TaskState> taskStates = workerTransport.getTaskStates(Collections.singleton(taskId));
+                if (!taskStates.containsKey(taskId)) {
+                    return false;
+                }
+
+                TaskState state = taskStates.get(taskId);
+                return state.getEndTimestamp().isPresent() &&
+                       state.getEndTimestamp().get().equals(endReadTimestamp);
+            });
+
+            assertEquals(2, observedChanges.size());
+        }
+    }
+
+    @Test
+    public void testWorkerDiscoversAndRespectsClosedTime() {
+        // This test verifies that the Worker correctly handles CDC closed time,
+        // when it is not set initially but discovered during reading.
+        // Scenario:
+        // 2. Initially we start reading without an end timestamp constraint
+        // 3. The second change has a CDC closed time set
+        // 4. While reading, we discover the closed time and update the task state
+        // 5. The worker should detect this closed time and stop reading at that point
+        // 6. Only changes before the closed time should be processed
+
+        GenerationMetadata testGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(),
+                1, TEST_GENERATION_STREAMS_PER_VNODE_COUNT);
+
+        // Calculate timestamps to ensure both changes are within the same query window
+        long baseTimeMs = TEST_GENERATION_START_MS;
+        long closedTimeMs = baseTimeMs + 10; // Closed time is 10ms after the base time
+
+        // First change - no closed time, before the closed time
+        MockRawChange changeWithoutClosedTime = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(testGeneration, 0, 0)
+                .withTimeMs(baseTimeMs) // Within a single window
+                .addPrimaryKey("pk", 1)
+                .addPrimaryKey("ck", 2)
+                .addAtomicRegularColumn("v", 3)
+                .build();
+
+        // Second change - with closed time set, timestamp is after closed time
+        // When the worker encounters this change, it should detect the closed time
+        // and update the task state to stop at this point
+        MockRawChange changeWithClosedTime = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(testGeneration, 0, 1)
+                .withTimeMs(closedTimeMs + 5) // after the closed time
+                .withClosedTime(new Date(closedTimeMs)) // Setting closed time as Date
+                .addPrimaryKey("pk", 4)
+                .addPrimaryKey("ck", 5)
+                .addAtomicRegularColumn("v", 6)
+                .build();
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+
+        List<MockRawChange> rawChanges = Lists.newArrayList(changeWithoutClosedTime, changeWithClosedTime);
+        mockWorkerCQL.setRawChanges(rawChanges);
+
+        List<RawChange> observedChanges = Collections.synchronizedList(new ArrayList<>());
+        Consumer accumulatingConsumer = Consumer.syncRawChangeConsumer(observedChanges::add);
+
+        // Create the task ID for later verification of task state
+        VNodeId vnodeId = new VNodeId(0);
+        TaskId taskId = new TaskId(testGeneration.getId(), vnodeId, TEST_TABLE_NAME);
+        Timestamp closedTimestamp = new Timestamp(new Date(closedTimeMs));
+
+        try (WorkerThread workerThread = new WorkerThread(
+                mockWorkerCQL, workerTransport, accumulatingConsumer,
+                testGeneration, Clock.systemDefaultZone(), Collections.singleton(TEST_TABLE_NAME))) {
+
+            // Wait until at least one change is processed
+            DEFAULT_AWAIT.until(() -> observedChanges.size() > 0);
+
+            // Wait until the task state is updated with end timestamp equal to the closed time
+            // This indicates the worker has discovered the closed time and updated the state
+            DEFAULT_AWAIT.until(() -> {
+                Map<TaskId, TaskState> taskStates = workerTransport.getTaskStates(Collections.singleton(taskId));
+                if (!taskStates.containsKey(taskId)) {
+                    return false;
+                }
+
+                TaskState state = taskStates.get(taskId);
+                return state.getEndTimestamp().isPresent() &&
+                       state.getEndTimestamp().get().equals(closedTimestamp);
+            });
+
+            // Verify we only processed one change
+            assertEquals(observedChanges.size(), 1);
+
+            // Verify we only got the change without closed time
+            // The change with closed time should be filtered out
+            List<MockRawChange> expectedChanges = Collections.singletonList(changeWithoutClosedTime);
+            assertEquals(expectedChanges, observedChanges);
+        }
+    }
+
+    @Test
+    public void testWorkerDiscoversTransportEndTimestamp() {
+        // Test that the worker correctly discovers an end timestamp through
+        // the transport layer's getTableEndTimestamp method
+
+        GenerationMetadata testGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(),
+                1, TEST_GENERATION_STREAMS_PER_VNODE_COUNT);
+
+        // Define an end timestamp that we'll set later
+        long endTimestampMs = TEST_GENERATION_START_MS + 30;
+        Timestamp endTimestamp = new Timestamp(new Date(endTimestampMs));
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+        Consumer noOpConsumer = Consumer.syncRawChangeConsumer(c -> {});
+
+        // Create the task ID for later verification of task state
+        VNodeId vnodeId = new VNodeId(0);
+        TaskId taskId = new TaskId(testGeneration.getId(), vnodeId, TEST_TABLE_NAME);
+
+        try (WorkerThread workerThread = new WorkerThread(
+                mockWorkerCQL, workerTransport, noOpConsumer,
+                testGeneration, TEST_TABLE_NAME)) {
+
+            // Now set the end timestamp in the transport
+            workerTransport.setTableEndTimestamp(TEST_TABLE_NAME, Optional.of(endTimestamp));
+
+            // Wait until the task state is updated with the end timestamp
+            // This indicates the worker has discovered the end timestamp through the transport
+            DEFAULT_AWAIT.until(() -> {
+                Map<TaskId, TaskState> taskStates = workerTransport.getTaskStates(Collections.singleton(taskId));
+                if (!taskStates.containsKey(taskId)) {
+                    return false;
+                }
+
+                TaskState state = taskStates.get(taskId);
+                return state.getEndTimestamp().isPresent() &&
+                       state.getEndTimestamp().get().equals(endTimestamp);
+            });
+        }
+    }
+
     private Task generateTask(GenerationMetadata generationMetadata, int vnodeIndex, TableName tableName,
                               long windowStartMs, long windowEndMs) {
         VNodeId vnodeId = new VNodeId(vnodeIndex);
@@ -702,7 +921,7 @@ public class WorkerTest {
                 .collect(Collectors.toCollection(TreeSet::new));
 
         TaskState taskState = new TaskState(new Timestamp(new Date(windowStartMs)),
-                new Timestamp(new Date(windowEndMs)), Optional.empty());
+                new Timestamp(new Date(windowEndMs)), Optional.empty(), Optional.empty());
         return new Task(taskId, streamIds, taskState);
     }
 }
