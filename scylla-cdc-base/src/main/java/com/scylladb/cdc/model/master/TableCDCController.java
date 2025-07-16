@@ -1,0 +1,185 @@
+package com.scylladb.cdc.model.master;
+
+import com.google.common.flogger.FluentLogger;
+import com.scylladb.cdc.model.GenerationId;
+import com.scylladb.cdc.model.StreamId;
+import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.TaskId;
+import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.transport.GroupedTasks;
+
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+
+/**
+ * Controller for CDC logic of a single table in tablet-based model.
+ */
+public class TableCDCController {
+
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
+    private final TableName table;
+    private final MasterConfiguration masterConfiguration;
+    private GenerationMetadata currentGeneration;
+    private GroupedTasks tasks;
+
+    public TableCDCController(TableName table, MasterConfiguration masterConfiguration) {
+        this.table = table;
+        this.masterConfiguration = masterConfiguration;
+        this.tasks = null;
+    }
+
+    private static GenerationId getGenerationId(TableName table, MasterConfiguration masterConfiguration) {
+        // If we already have a current generation stored in the transport state, return it, and
+        // otherwise fetch the first generation.
+        Optional<GenerationId> generationId = masterConfiguration.transport.getCurrentGenerationId(table);
+        if (generationId.isPresent()) {
+            return generationId.get();
+        }
+        return masterConfiguration.cql.fetchFirstTableGenerationId(table).join();
+    }
+
+    public void initCurrentGeneration() throws InterruptedException, ExecutionException {
+        // Initialize the current generation metadata for this table.
+        GenerationId generationId = getGenerationId(table, masterConfiguration);
+        this.currentGeneration = masterConfiguration.cql.fetchTableGenerationMetadata(table, generationId).get();
+        this.tasks = createTasks(currentGeneration, table);
+        logger.atInfo().log("Initialized current generation for table: %s with ID: %s and streams: %s", table, generationId, currentGeneration.getStreams());
+
+        while (isGenerationDone()) {
+            advanceToNextGeneration();
+        }
+
+        configureWorkers();
+    }
+
+    public void advanceToNextGeneration() throws InterruptedException, ExecutionException {
+        Optional<GenerationId> nextGenId = currentGeneration.getNextGenerationId();
+        if (!nextGenId.isPresent()) {
+            throw new IllegalStateException("No next generation available for table: " + table);
+        }
+
+        Optional<Timestamp> prevGenEnd = this.tasks.getEndReadTimestamp();
+
+        this.currentGeneration = masterConfiguration.cql.fetchTableGenerationMetadata(table, nextGenId.get()).get();
+        this.tasks = createTasks(currentGeneration, table).withStartReadTimestamp(prevGenEnd);
+        logger.atInfo().log("Advanced to next generation for table: %s with ID: %s and streams: %s", table, nextGenId.get(), currentGeneration.getStreams());
+    }
+
+    public void rereadGenerationWithEndTimestamp(Timestamp maxConsumedTimestamp) throws InterruptedException, ExecutionException {
+        this.tasks = createTasks(currentGeneration, table).withEndReadTimestamp(Optional.of(maxConsumedTimestamp));
+    }
+
+    private static GroupedTasks createTasks(GenerationMetadata generation, TableName table) {
+        SortedSet<StreamId> streams = generation.getStreams();
+        Map<TaskId, SortedSet<StreamId>> taskMap = new HashMap<>();
+        for (StreamId s : streams) {
+            TaskId taskId = new TaskId(generation.getId(), s.getVNodeId(), table);
+            taskMap.computeIfAbsent(taskId, id -> new TreeSet<>()).add(s);
+        }
+        return new GroupedTasks(taskMap, generation, Optional.empty(), generation.getEnd());
+    }
+
+    /**
+     * Checks if the generation TTL has expired for this table.
+     * If TTL has expired, changes from this generation are no longer visible.
+     *
+     * @return true if the TTL has expired, false otherwise
+     * @throws ExecutionException if there's an error fetching TTL value
+     * @throws InterruptedException if the operation is interrupted
+     */
+    private boolean generationTTLExpired() throws ExecutionException, InterruptedException {
+        Date now = Date.from(masterConfiguration.clock.instant());
+
+        // Get the TTL for this table
+        Optional<Long> ttl = masterConfiguration.cql.fetchTableTTL(table).exceptionally(ex -> {
+            logger.atSevere().withCause(ex).log("Error while fetching TTL value for table %s.%s",
+                    table.keyspace, table.name);
+            return Optional.empty();
+        }).get();
+
+        // If no TTL, then changes never expire
+        if (!ttl.isPresent()) {
+            return false;
+        }
+
+        Date lastVisibleChanges = new Date(now.getTime() - 1000L * ttl.get());
+        return lastVisibleChanges.after(currentGeneration.getEnd().get().toDate());
+    }
+
+    /**
+     * Checks if the current generation is done (closed and all tasks are fully consumed).
+     *
+     * @return true if the current generation is done, false otherwise
+     */
+    public boolean isGenerationDone() throws InterruptedException, ExecutionException {
+        if (!currentGeneration.isClosed()) {
+            return false;
+        }
+
+        if (generationTTLExpired()) {
+            return true;
+        }
+
+        // Otherwise check if all tasks are completed
+        Set<TaskId> taskIds = this.tasks.getTasks().keySet();
+        return masterConfiguration.transport.areTasksCompleted(taskIds);
+    }
+
+    /**
+     * Refreshes the end timestamp of the current generation
+     *
+     * @return true if end timestamp was refreshed, false otherwise
+     */
+    public boolean refreshEnd() throws InterruptedException, ExecutionException {
+        if (currentGeneration.isClosed()) {
+            return false;
+        }
+
+        Optional<Timestamp> endTimestamp = masterConfiguration.cql.fetchTableGenerationEnd(this.table, currentGeneration.getId()).get();
+        if (endTimestamp.isPresent()) {
+            Timestamp end = endTimestamp.get();
+            currentGeneration = currentGeneration.withEnd(end);
+
+            // Propagate the end timestamp to transport so tasks can be updated
+            masterConfiguration.transport.updateGenerationMetadata(this.table, currentGeneration);
+
+            logger.atInfo().log("Updated end timestamp for table %s generation %s to %s",
+                    table, currentGeneration.getId(), end);
+
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Configures workers for the current generation tasks.
+     *
+     * @throws InterruptedException
+     */
+    public void configureWorkers() throws InterruptedException {
+        logger.atInfo().log("Configuring workers for table %s: %s with start %s and end %s",
+                table, currentGeneration.getId(), tasks.getStartReadTimestamp(), tasks.getEndReadTimestamp());
+        tasks.getTasks().forEach((task, streams) -> logger.atFine().log("Created Task: %s with streams: %s", task, streams));
+
+        masterConfiguration.transport.configureWorkers(this.table, tasks);
+    }
+
+    public void runMasterStep() throws InterruptedException, ExecutionException {
+        refreshEnd();
+
+        if (isGenerationDone()) {
+            Timestamp expectedEndTimestamp = this.tasks.getEndReadTimestamp().orElse(currentGeneration.getEnd().get());
+            Optional<Timestamp> maxConsumedTimestamp = masterConfiguration.transport.getLastConsumedChangeTimestamp(tasks.getTasks().keySet());
+            if (maxConsumedTimestamp.isPresent() && maxConsumedTimestamp.get().compareTo(expectedEndTimestamp) > 0) {
+                logger.atInfo().log("Max consumed timestamp %s is after the end of current generation %s",
+                        maxConsumedTimestamp, currentGeneration.getEnd().get());
+                rereadGenerationWithEndTimestamp(maxConsumedTimestamp.get());
+            } else {
+                advanceToNextGeneration();
+            }
+
+            configureWorkers();
+        }
+    }
+}
