@@ -6,6 +6,7 @@ import java.util.SortedSet;
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
+import com.scylladb.cdc.model.Timestamp;
 
 public final class Task {
     public final TaskId id;
@@ -26,6 +27,26 @@ public final class Task {
     public Task updateState(ChangeId lastSeenChangeId) {
         Preconditions.checkNotNull(lastSeenChangeId);
         return new Task(id, streams, state.update(lastSeenChangeId));
+    }
+
+    /**
+     * Updates the task with an end timestamp.
+     *
+     * @param endTimestamp The timestamp beyond which this task should not read
+     * @return A new Task with updated state containing the end timestamp
+     */
+    public Task withEndTimestamp(Timestamp endTimestamp) {
+        Preconditions.checkNotNull(endTimestamp);
+        return new Task(id, streams, state.withEndTimestamp(endTimestamp));
+    }
+
+    /**
+     * Checks if the task has reached its defined end timestamp (if any)
+     *
+     * @return true if the task has reached its end timestamp
+     */
+    public boolean hasReachedEnd() {
+        return state.hasReachedEnd();
     }
 
     @Override

@@ -1,7 +1,9 @@
 package com.scylladb.cdc.model.worker;
 
 import java.nio.ByteBuffer;
+import java.util.Date;
 import java.util.Iterator;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -61,6 +63,17 @@ public interface RawChange extends Iterable<Cell> {
 
     default Long getTTL() {
         return getCell("cdc$ttl").getLong();
+    }
+
+    default Optional<Date> getClosedTime() {
+        try {
+            Cell closedTimeCell = getCell("cdc$closed_time");
+            Date timestamp = closedTimeCell.getTimestamp();
+            return Optional.ofNullable(timestamp);
+        } catch (IllegalArgumentException e) {
+            // Column doesn't exist
+            return Optional.empty();
+        }
     }
 
     ChangeSchema getSchema();
