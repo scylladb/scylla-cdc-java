@@ -111,6 +111,12 @@ public final class WorkerConfiguration {
             return withConsumer(Consumer.forRawChangeConsumer(Preconditions.checkNotNull(consumer)));
         }
 
+        /**
+         * Sets the size of the query time window. Smaller size means smaller queries,
+         * but more queries will be sent to cover the same time period.
+         * @param queryTimeWindowSizeMs the size of the query time window in milliseconds
+         * @return this builder
+         */
         public Builder withQueryTimeWindowSizeMs(long queryTimeWindowSizeMs) {
             Preconditions.checkArgument(queryTimeWindowSizeMs > 0);
             this.queryTimeWindowSizeMs = queryTimeWindowSizeMs;
@@ -155,8 +161,8 @@ public final class WorkerConfiguration {
          * Sets the minimal wait time between read windows.
          * <p>
          * Can be used as a simple way to throttle worker.
-         * @param minimalWaitForWindowMs
-         * @return
+         * @param minimalWaitForWindowMs the minimal wait time in milliseconds
+         * @return this builder
          */
         public Builder withMinimalWaitForWindowMs(long minimalWaitForWindowMs) {
             Preconditions.checkArgument(minimalWaitForWindowMs >= 0);

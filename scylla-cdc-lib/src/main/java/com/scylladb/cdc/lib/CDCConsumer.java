@@ -1,6 +1,7 @@
 package com.scylladb.cdc.lib;
 
 import java.net.InetSocketAddress;
+import java.time.Clock;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
@@ -152,6 +153,12 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Sets the size of the query time window. Smaller size means smaller queries,
+         * but more queries will be sent to cover the same time period.
+         * @param queryTimeWindowSizeMs the size of the query time window in milliseconds
+         * @return this builder
+         */
         public Builder withQueryTimeWindowSizeMs(long queryTimeWindowSizeMs) {
             workerConfigurationBuilder.withQueryTimeWindowSizeMs(queryTimeWindowSizeMs);
             return this;
@@ -209,6 +216,34 @@ public final class CDCConsumer implements AutoCloseable {
 
         public Builder withSleepAfterExceptionMs(long sleepAfterExceptionMs) {
             masterConfigurationBuilder.withSleepAfterExceptionMs(sleepAfterExceptionMs);
+            return this;
+        }
+
+        /**
+         * Sets the minimal wait time for a worker to wait for a new window (adds latency to each query).
+         * @param minimalWaitForWindowMs the minimal wait time in milliseconds
+         * @return this builder
+         */
+        public Builder withMinimalWaitForWindowMs(long minimalWaitForWindowMs) {
+            workerConfigurationBuilder.withMinimalWaitForWindowMs(minimalWaitForWindowMs);
+            return this;
+        }
+
+        /**
+         * Sets the <code>Clock</code> in the worker configuration.
+         * <p>
+         * This clock will be used by the worker to get the
+         * current time, for example to determine if it is
+         * safe to read the next window.
+         * <p>
+         * By default a system clock with default time-zone
+         * is used.
+         *
+         * @param clock the clock to set.
+         * @return reference to this builder.
+         */
+        public Builder withClock(Clock clock) {
+            workerConfigurationBuilder.withClock(clock);
             return this;
         }
 
