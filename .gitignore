@@ -5,3 +5,5 @@
 .idea
 **/*.iml
 **/dependency-reduced-pom.xml
+**/*.releaseBackup
+release.properties
