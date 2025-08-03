@@ -1,6 +1,9 @@
 package com.scylladb.cdc.transport;
 
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
+import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.worker.TaskState;
 
 import java.util.*;
@@ -13,6 +16,7 @@ public class MockWorkerTransport implements WorkerTransport {
 
     private List<AbstractMap.SimpleEntry<TaskId, TaskState>> setStatesInvocations = new CopyOnWriteArrayList<>();
     private List<AbstractMap.SimpleEntry<TaskId, TaskState>> moveStateToNextWindowInvocations = new CopyOnWriteArrayList<>();
+    private final Map<TableName, Optional<Timestamp>> tableEndTimestamps = new ConcurrentHashMap<>();
 
     @Override
     public Map<TaskId, TaskState> getTaskStates(Set<TaskId> tasks) {
@@ -39,5 +43,21 @@ public class MockWorkerTransport implements WorkerTransport {
     public List<TaskState> getMoveStateToNextWindowInvocations(TaskId taskId) {
         return moveStateToNextWindowInvocations.stream().filter(t -> t.getKey().equals(taskId))
                 .map(AbstractMap.SimpleEntry::getValue).collect(Collectors.toList());
+    }
+
+    @Override
+    public Optional<Timestamp> getTableEndTimestamp(TableName table) {
+        return tableEndTimestamps.getOrDefault(table, Optional.empty());
+    }
+
+    /**
+     * Sets the end timestamp for a specific table. This simulates the behavior of the
+     * transport layer notifying the worker about a generation end timestamp.
+     *
+     * @param tableName The table name
+     * @param timestamp The end timestamp, or empty to remove the end timestamp
+     */
+    public void setTableEndTimestamp(TableName tableName, Optional<Timestamp> timestamp) {
+        tableEndTimestamps.put(tableName, timestamp);
     }
 }
