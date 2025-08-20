@@ -54,8 +54,16 @@ public final class TaskState {
         return windowEnd;
     }
 
-    public TaskState moveToNextWindow(long nextWindowSizeMs) {
-        return new TaskState(windowEnd, windowEnd.plus(nextWindowSizeMs, ChronoUnit.MILLIS), Optional.empty());
+    public TaskState moveToNextWindow(Timestamp now, long confidenceWindowSizeMs, long newQueryWindowSizeMs) {
+        Timestamp newWindowEnd = now.plus(-confidenceWindowSizeMs, ChronoUnit.MILLIS);
+
+        // Make sure that the window is at least newQueryWindowSizeMs long.
+        long windowLength = ChronoUnit.MILLIS.between(windowEnd.toDate().toInstant(), newWindowEnd.toDate().toInstant());
+        if (windowLength < newQueryWindowSizeMs) {
+            newWindowEnd = windowEnd.plus(newQueryWindowSizeMs, ChronoUnit.MILLIS);
+        }
+
+        return new TaskState(windowEnd, newWindowEnd, Optional.empty());
     }
 
     public TaskState update(ChangeId seen) {
@@ -86,12 +94,24 @@ public final class TaskState {
     /*
      * Creates an initial state for tasks in a given |generation|.
      *
-     * Such initial state starts at the beginning of the generation and spans for
-     * |windowSizeMs| milliseconds.
+     * Such initial state starts at the beginning of the generation and spans
+     * until now minus confidence window size.
      */
-    public static TaskState createInitialFor(GenerationId generation, long windowSizeMs) {
-        Timestamp generationStart = generation.getGenerationStart();
-        return new TaskState(generationStart, generationStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
+    public static TaskState createInitialFor(GenerationId generation, Timestamp now,
+                                             long confidenceWindowSizeMs, long queryTimeWindowSizeMs) {
+        // Start reading at generation start:
+        Timestamp windowStart = generation.getGenerationStart();
+
+        // Create a large window up to (now - confidenceWindowSizeMs), except
+        // when the window gets too small - in that case create a window
+        // queryTimeWindowSizeMs large (the consumer might need to wait a bit
+        // for the window to be ready for reading).
+        Timestamp windowEnd = now.plus(-confidenceWindowSizeMs, ChronoUnit.MILLIS);
+        if (windowEnd.compareTo(windowStart) < 0) {
+            windowEnd = windowStart.plus(queryTimeWindowSizeMs, ChronoUnit.MILLIS);
+        }
+
+        return new TaskState(windowStart, windowEnd, Optional.empty());
     }
 
     /* If the state is before |minimumWindowStart| then this method returns a state
@@ -108,6 +128,12 @@ public final class TaskState {
             return new TaskState(minimumWindowStart, minimumWindowStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
         }
 
-        return this;
+        // Trim the start of the window with minimumWindowStart.
+        Timestamp newWindowStart = windowStart;
+        if (newWindowStart.compareTo(minimumWindowStart) < 0) {
+            newWindowStart = minimumWindowStart;
+        }
+
+        return new TaskState(newWindowStart, windowEnd, lastConsumedChangeId);
     }
 }
