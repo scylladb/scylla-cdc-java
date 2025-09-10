@@ -23,6 +23,7 @@ import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.model.worker.Worker;
 import com.scylladb.cdc.model.worker.WorkerConfiguration;
 import com.scylladb.cdc.transport.MasterTransport;
+import com.scylladb.cdc.transport.TaskAbortedException;
 import com.scylladb.cdc.transport.GroupedTasks;
 import com.scylladb.cdc.transport.WorkerTransport;
 
@@ -164,8 +165,17 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
+    public void updateState(TaskId task, TaskState newState) {
+        if (taskStates.replace(task, newState) == null) {
+            throw new TaskAbortedException("Cannot update state for non-existent task: " + task);
+        }
+    }
+
+    @Override
     public void moveStateToNextWindow(TaskId task, TaskState newState) {
-        taskStates.put(task, newState);
+        if (taskStates.replace(task, newState) == null) {
+            throw new TaskAbortedException("Cannot update state for non-existent task: " + task);
+        }
     }
 
     private void stopWorkerThread() throws InterruptedException {

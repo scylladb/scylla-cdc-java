@@ -79,6 +79,7 @@ public final class Worker {
             TaskId id = taskStreams.getKey();
             SortedSet<StreamId> streams = taskStreams.getValue();
             TaskState state = states.getOrDefault(id, initialState);
+            workerConfiguration.transport.setState(id, state);
             state = state.trimTaskState(minimumWindowStarts.get(id.getTable()), workerConfiguration.queryTimeWindowSizeMs);
             return new Task(id, streams, state);
         });
@@ -108,7 +109,7 @@ public final class Worker {
         return () -> a.run().handle((na, ex) -> {
             if (ex != null) {
                 logger.atSevere().withCause(ex).log("Unhandled exception in Worker.");
-            } else if (!shouldStop()) {
+            } else if (na != null && !shouldStop()) {
                 getExecutorService().submit(makeCallable(na));
             }
             return null;
