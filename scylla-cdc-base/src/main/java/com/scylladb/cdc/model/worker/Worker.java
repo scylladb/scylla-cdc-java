@@ -80,6 +80,13 @@ public final class Worker {
             SortedSet<StreamId> streams = taskStreams.getValue();
             TaskState state = states.getOrDefault(id, initialState);
             state = state.trimTaskState(minimumWindowStarts.get(id.getTable()), workerConfiguration.queryTimeWindowSizeMs);
+
+            // set the task state in the transport before it is queued.
+            // this is necessary because the existence of state in the transport is used to indicate
+            // whether a task is active or should be aborted. if the task is executed and sees there
+            // is no state in transport then it will abort itself.
+            workerConfiguration.transport.setState(id, state);
+
             return new Task(id, streams, state);
         });
     }
@@ -108,7 +115,7 @@ public final class Worker {
         return () -> a.run().handle((na, ex) -> {
             if (ex != null) {
                 logger.atSevere().withCause(ex).log("Unhandled exception in Worker.");
-            } else if (!shouldStop()) {
+            } else if (na != null && !shouldStop()) {
                 getExecutorService().submit(makeCallable(na));
             }
             return null;
