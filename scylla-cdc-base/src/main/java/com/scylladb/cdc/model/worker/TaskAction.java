@@ -2,6 +2,7 @@ package com.scylladb.cdc.model.worker;
 
 import java.util.Date;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -9,6 +10,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
+import com.scylladb.cdc.transport.TaskAbortedException;
 
 abstract class TaskAction {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -115,7 +117,11 @@ abstract class TaskAction {
         @Override
         public CompletableFuture<TaskAction> run() {
             if (newState != null) {
-                workerConfiguration.transport.setState(task.id, newState);
+                try {
+                    workerConfiguration.transport.updateState(task.id, newState);
+                } catch (TaskAbortedException e) {
+                    return CompletableFuture.completedFuture(null);
+                }
             }
             try {
                 CompletableFuture<TaskAction> taskActionFuture = reader.nextChange().
@@ -187,7 +193,11 @@ abstract class TaskAction {
         @Override
         public CompletableFuture<TaskAction> run() {
             TaskState newState = task.state.moveToNextWindow(workerConfiguration.queryTimeWindowSizeMs);
-            workerConfiguration.transport.moveStateToNextWindow(task.id, newState);
+            try {
+                workerConfiguration.transport.moveStateToNextWindow(task.id, newState);
+            } catch (TaskAbortedException e) {
+                return CompletableFuture.completedFuture(null);
+            }
             Task newTask = task.updateState(newState);
             return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(workerConfiguration, newTask, 0));
         }

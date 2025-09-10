@@ -494,7 +494,7 @@ public class WorkerTest {
                 TEST_GENERATION_START_MS + 3 * DEFAULT_QUERY_WINDOW_SIZE_MS);
 
         // Skip a few windows unrelated to windowReadTask:
-        List<TaskState> windows = workerTransport.getSetStateInvocations(windowReadTask.id).subList(2, 5);
+        List<TaskState> windows = workerTransport.getUpdateStateInvocations(windowReadTask.id).subList(2, 5);
 
         TaskState windowBeginningState = windowReadTask.state;
         TaskState afterChange1State = windowReadTask.state.update(change1.getId());
