@@ -29,6 +29,7 @@ import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.RateLimiter;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -37,16 +38,26 @@ import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 
+import javax.annotation.Nullable;
+
 public final class Driver3WorkerCQL implements WorkerCQL {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Session session;
     private final Map<TableName, PreparedStatement> preparedStmts = new HashMap<>();
     private final ConsistencyLevel consistencyLevel;
+    @Nullable private final RateLimiter rateLimiter;
 
     public Driver3WorkerCQL(Driver3Session session) {
         this.session = Preconditions.checkNotNull(session).getDriverSession();
         this.consistencyLevel = session.getConsistencyLevel();
+        this.rateLimiter = null;
+    }
+
+    public Driver3WorkerCQL(Driver3Session session, RateLimiter rateLimiter) {
+        this.session = Preconditions.checkNotNull(session).getDriverSession();
+        this.consistencyLevel = session.getConsistencyLevel();
+        this.rateLimiter = rateLimiter;
     }
 
     private static final class PreparedResult {
@@ -67,6 +78,9 @@ public final class Driver3WorkerCQL implements WorkerCQL {
     }
 
     private CompletableFuture<PreparedResult> prepare(TableName table) {
+        if (rateLimiter != null) {
+            rateLimiter.acquire();
+        }
         CompletableFuture<PreparedResult> result = new CompletableFuture<>();
         Futures.addCallback(session.prepareAsync(getStmt(table)), new FutureCallback<PreparedStatement>() {
 
@@ -226,6 +240,9 @@ public final class Driver3WorkerCQL implements WorkerCQL {
     }
 
     private CompletableFuture<Reader> query(PreparedStatement stmt, Task task) {
+        if (rateLimiter != null) {
+            rateLimiter.acquire();
+        }
         CompletableFuture<Reader> result = new CompletableFuture<>();
         List<ResultSetFuture> futures = task.streams.stream().map(StreamId::getValue)
             .map(streamId ->
