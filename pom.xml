@@ -21,7 +21,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
-        <flogger.version>0.8</flogger.version>
+        <flogger.version>0.9</flogger.version>
         <gpg.passphrase/>
         <release.autopublish>false</release.autopublish>
     </properties>
