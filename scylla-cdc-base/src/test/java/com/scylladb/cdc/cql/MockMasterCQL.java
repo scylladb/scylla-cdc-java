@@ -6,6 +6,7 @@ import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.master.GenerationMetadata;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -17,8 +18,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class MockMasterCQL implements MasterCQL {
     private volatile List<GenerationMetadata> generationMetadatas;
+    private volatile Map<TableName, List<GenerationMetadata>> tableGenerationMetadatas = new HashMap<>();
     private volatile Map<TableName, Optional<Long>> tablesTTL = new HashMap<>();
     private volatile boolean shouldInjectFailure = false;
+    private volatile boolean usesTablets = false;
     private final AtomicInteger failedFetchCount = new AtomicInteger(0);
     private final AtomicInteger successfulFetchCount = new AtomicInteger(0);
 
@@ -40,6 +43,14 @@ public class MockMasterCQL implements MasterCQL {
 
     public void setShouldInjectFailure(boolean injectFailure) {
         this.shouldInjectFailure = injectFailure;
+    }
+
+    public void setTableGenerationMetadatas(Map<TableName, List<GenerationMetadata>> tableGenerationMetadatas) {
+        this.tableGenerationMetadatas = tableGenerationMetadatas;
+    }
+
+    public void setUsesTablets(boolean usesTablets) {
+        this.usesTablets = usesTablets;
     }
 
     public int getFailedFetchCount() {
@@ -126,5 +137,62 @@ public class MockMasterCQL implements MasterCQL {
         CompletableFuture<T> result = new CompletableFuture<>();
         result.completeExceptionally(new IllegalAccessError(String.format("Injected %s() fail.", calleeName)));
         return result;
+    }
+
+    @Override
+    public CompletableFuture<GenerationId> fetchFirstTableGenerationId(TableName table) {
+        if (shouldInjectFailure) {
+            return injectFailure();
+        }
+
+        List<GenerationMetadata> metas = tableGenerationMetadatas.getOrDefault(table, new ArrayList<>());
+        if (metas.isEmpty()) {
+            CompletableFuture<GenerationId> failedFuture = new CompletableFuture<>();
+            failedFuture.completeExceptionally(new IllegalArgumentException("No table generation metadata for table: " + table));
+            return failedFuture;
+        }
+
+        return CompletableFuture.completedFuture(metas.get(0).getId());
+    }
+
+    @Override
+    public CompletableFuture<GenerationMetadata> fetchTableGenerationMetadata(TableName table, GenerationId generationId) {
+        if (shouldInjectFailure) {
+            return injectFailure();
+        }
+
+        List<GenerationMetadata> metas = tableGenerationMetadatas.getOrDefault(table, new ArrayList<>());
+        for (GenerationMetadata meta : metas) {
+            if (meta.getId().equals(generationId)) {
+                return CompletableFuture.completedFuture(meta);
+            }
+        }
+        CompletableFuture<GenerationMetadata> failedFuture = new CompletableFuture<>();
+        failedFuture.completeExceptionally(new IllegalArgumentException(
+            String.format("Could not fetch table generation metadata with id: %s for table: %s", generationId, table)));
+        return failedFuture;
+    }
+
+    @Override
+    public CompletableFuture<Optional<Timestamp>> fetchTableGenerationEnd(TableName table, GenerationId generationId) {
+        if (shouldInjectFailure) {
+            return injectFailure();
+        }
+
+        // Find the metadata for this generation
+        List<GenerationMetadata> metas = tableGenerationMetadatas.getOrDefault(table, new ArrayList<>());
+        for (GenerationMetadata meta : metas) {
+            if (meta.getId().equals(generationId)) {
+                return CompletableFuture.completedFuture(meta.getEnd());
+            }
+        }
+
+        // If generation not found, return empty
+        return CompletableFuture.completedFuture(Optional.empty());
+    }
+
+    @Override
+    public Boolean usesTablets(TableName tableName) {
+        return usesTablets;
     }
 }
