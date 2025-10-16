@@ -15,5 +15,6 @@
     "dockerfile",
     "custom.regex",
     "github-actions"
-  ]
+  ],
+  "prConcurrentLimit": 2
 }
