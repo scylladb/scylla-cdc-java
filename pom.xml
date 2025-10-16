@@ -18,7 +18,7 @@
     </modules>
 
     <properties>
-        <scylla.driver.version>3.11.5.7</scylla.driver.version>
+        <scylla.driver.version>3.11.5.9</scylla.driver.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
