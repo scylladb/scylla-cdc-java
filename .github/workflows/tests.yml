@@ -48,6 +48,7 @@ jobs:
     strategy:
       matrix:
         scylla-docker-version: ['latest', '6.2', '5.2']
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v5
