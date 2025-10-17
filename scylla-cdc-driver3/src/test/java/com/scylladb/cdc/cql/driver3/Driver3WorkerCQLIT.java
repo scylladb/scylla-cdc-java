@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.nio.ByteBuffer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,14 +65,24 @@ public class Driver3WorkerCQLIT extends BaseScyllaIntegrationTest {
         // The column definitions should stay the same within the PreparedStatement.
         resultSet.fetchMoreResults().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         Row row3 = resultSet.one();
-        assertEquals(DataType.Name.VARCHAR, row3.getColumnDefinitions().getType("v").getName());
-        assertTrue(row3.getObject("v") instanceof String);
+        if (isScyllaSupportPreparedMetadataUpdate) {
+            assertEquals(DataType.Name.BLOB, row3.getColumnDefinitions().getType("v").getName());
+            assertTrue(row3.getObject("v") instanceof ByteBuffer);
+        } else {
+            assertEquals(DataType.Name.VARCHAR, row3.getColumnDefinitions().getType("v").getName());
+            assertTrue(row3.getObject("v") instanceof String);
+        }
         assertEquals(0, resultSet.getAvailableWithoutFetching());
         resultSet.fetchMoreResults().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
         Row row4 = resultSet.one();
-        assertEquals(DataType.Name.VARCHAR, row4.getColumnDefinitions().getType("v").getName());
-        assertTrue(row4.getObject("v") instanceof String);
+        if (isScyllaSupportPreparedMetadataUpdate) {
+            assertEquals(DataType.Name.BLOB, row4.getColumnDefinitions().getType("v").getName());
+            assertTrue(row4.getObject("v") instanceof ByteBuffer);
+        } else {
+            assertEquals(DataType.Name.VARCHAR, row4.getColumnDefinitions().getType("v").getName());
+            assertTrue(row4.getObject("v") instanceof String);
+        }
         assertEquals(0, resultSet.getAvailableWithoutFetching());
     }
 
@@ -105,14 +116,24 @@ public class Driver3WorkerCQLIT extends BaseScyllaIntegrationTest {
         // The schema should be the one at a time of preparing
         // the statement, not the one after ALTER TABLE.
         Row row1 = resultSet.one();
-        assertEquals(DataType.Name.VARCHAR, row1.getColumnDefinitions().getType("v").getName());
-        assertTrue(row1.getObject("v") instanceof String);
+        if (isScyllaSupportPreparedMetadataUpdate) {
+            assertEquals(DataType.Name.BLOB, row1.getColumnDefinitions().getType("v").getName());
+            assertTrue(row1.getObject("v") instanceof ByteBuffer);
+        } else {
+            assertEquals(DataType.Name.VARCHAR, row1.getColumnDefinitions().getType("v").getName());
+            assertTrue(row1.getObject("v") instanceof String);
+        }
         assertEquals(0, resultSet.getAvailableWithoutFetching());
         resultSet.fetchMoreResults().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
         Row row2 = resultSet.one();
-        assertEquals(DataType.Name.VARCHAR, row2.getColumnDefinitions().getType("v").getName());
-        assertTrue(row2.getObject("v") instanceof String);
+        if (isScyllaSupportPreparedMetadataUpdate) {
+            assertEquals(DataType.Name.BLOB, row2.getColumnDefinitions().getType("v").getName());
+            assertTrue(row2.getObject("v") instanceof ByteBuffer);
+        } else {
+            assertEquals(DataType.Name.VARCHAR, row2.getColumnDefinitions().getType("v").getName());
+            assertTrue(row2.getObject("v") instanceof String);
+        }
         assertEquals(0, resultSet.getAvailableWithoutFetching());
     }
 }
