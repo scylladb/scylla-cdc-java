@@ -12,7 +12,6 @@ import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.*;
-import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 import com.scylladb.cdc.model.worker.TaskState;
@@ -56,7 +55,7 @@ public class BaseScyllaIntegrationTest {
     private Driver3Session librarySession;
 
     @BeforeEach
-    public void beforeEach() throws ExecutionException, InterruptedException, TimeoutException {
+    public void beforeEach() {
         driverCluster = Cluster.builder()
                 .addContactPointsWithPorts(new InetSocketAddress(hostname, port))
                 .build();
