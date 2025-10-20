@@ -7,6 +7,7 @@ import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.Session;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
@@ -15,6 +16,7 @@ import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -50,25 +52,19 @@ public class AlterTableIT {
               keyspace, table));
 
       AtomicInteger counter = new AtomicInteger(0);
+      AtomicBoolean taskShouldStop = new AtomicBoolean(false);
       // Start continuously populating the base table in the background
       Runnable task =
           () -> {
-            while (!Thread.currentThread().isInterrupted()) {
-              PreparedStatement ps =
-                  session.prepare(
-                      String.format(
-                          "INSERT INTO %s.%s (column1, column2, column3) VALUES (?, ?, ?);",
-                          keyspace, table));
-              while (true) {
-                int current = counter.incrementAndGet();
-                session.execute(ps.bind(current, current, current));
-                try {
-                  // Makeshift rate limiting
-                  Thread.sleep(100);
-                } catch (InterruptedException e) {
-                  throw new RuntimeException(e);
-                }
-              }
+            PreparedStatement ps =
+                session.prepare(
+                    String.format(
+                        "INSERT INTO %s.%s (column1, column2, column3) VALUES (?, ?, ?);",
+                        keyspace, table));
+            while (!taskShouldStop.get()) {
+              int current = counter.incrementAndGet();
+              session.execute(ps.bind(current, current, current));
+              Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
             }
           };
       Thread thread = new Thread(task);
@@ -109,7 +105,12 @@ public class AlterTableIT {
       } catch (InterruptedException e) {
         e.printStackTrace();
       }
-      thread.interrupt();
+      taskShouldStop.set(true);
+      try {
+        thread.join();
+      } catch (InterruptedException e) {
+        throw new RuntimeException("Failed to join the background thread", e);
+      }
 
       // Verify the schema of first and last RawChange
       RawChange sample = firstChange.get();
