@@ -37,7 +37,7 @@ import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 
-public final class Driver3WorkerCQL implements WorkerCQL {
+public class Driver3WorkerCQL implements WorkerCQL {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Session session;
@@ -95,7 +95,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
         }
     }
 
-    private final class Driver3Reader implements Reader {
+    protected class Driver3Reader implements Reader {
 
         private volatile ResultSet rs;
         private volatile ChangeSchema schema;
