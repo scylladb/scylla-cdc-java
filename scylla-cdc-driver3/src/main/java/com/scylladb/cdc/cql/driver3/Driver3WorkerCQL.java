@@ -37,7 +37,7 @@ import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 
-public final class Driver3WorkerCQL implements WorkerCQL {
+public class Driver3WorkerCQL implements WorkerCQL {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Session session;
@@ -95,11 +95,11 @@ public final class Driver3WorkerCQL implements WorkerCQL {
         }
     }
 
-    private final class Driver3Reader implements Reader {
+    protected class Driver3Reader implements Reader {
 
-        private volatile ResultSet rs;
+        protected volatile ResultSet rs;
         private volatile ChangeSchema schema;
-        private final Optional<ChangeId> lastChangeId;
+        protected final Optional<ChangeId> lastChangeId;
         private volatile boolean shouldTryRecreateSchema = true;
         private volatile int lastPageColDefsHashcode = 0;
 
@@ -108,7 +108,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
             this.lastChangeId = Preconditions.checkNotNull(lastChangeId);
         }
 
-        private void findNext(CompletableFuture<Optional<RawChange>> fut) {
+        protected void findNext(CompletableFuture<Optional<RawChange>> fut) {
             if (rs.getAvailableWithoutFetching() == 0) {
                 if (rs.isFullyFetched()) {
                     fut.complete(Optional.empty());
@@ -183,10 +183,10 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
     }
 
-    private final class Driver3MultiReader implements Reader {
+    protected class Driver3MultiReader implements Reader {
 
-        private volatile List<Driver3Reader> readers;
-        private AtomicInteger currentReaderIndex;
+        protected volatile List<Driver3Reader> readers;
+        protected AtomicInteger currentReaderIndex;
 
         public Driver3MultiReader(List<ResultSet> rss, Optional<ChangeId> lastChangeId) {
             this.readers = rss.stream().map(rs -> new Driver3Reader(rs, lastChangeId)).collect(Collectors.toList());
@@ -223,8 +223,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
 
     }
 
-    private CompletableFuture<Reader> query(PreparedStatement stmt, Task task) {
-        CompletableFuture<Reader> result = new CompletableFuture<>();
+    protected List<ResultSetFuture> queryTables(PreparedStatement stmt, Task task) {
         List<ResultSetFuture> futures = task.streams.stream().map(StreamId::getValue)
             .map(streamId ->
                 session.executeAsync(
@@ -235,9 +234,12 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                 )
             ).collect(Collectors.toList());
         logger.atFine().log("Querying window: [%s, %s] for task: %s, task state: %s", task.state.getWindowStart(), task.state.getWindowEnd(), task.id, task.state);
+        return futures;
+    }
 
+    protected CompletableFuture<Reader> wrapResults(Task task, List<ResultSetFuture> futures) {
+        CompletableFuture<Reader> result = new CompletableFuture<>();
         Futures.addCallback(Futures.allAsList(futures), new FutureCallback<List<ResultSet>>() {
-
             @Override
             public void onSuccess(List<ResultSet> rss) {
                 result.complete(new Driver3MultiReader(rss, task.state.getLastConsumedChangeId()));
@@ -249,6 +251,11 @@ public final class Driver3WorkerCQL implements WorkerCQL {
             }
         }, MoreExecutors.directExecutor());
         return result;
+    }
+
+    protected CompletableFuture<Reader> query(PreparedStatement stmt, Task task) {
+        List<ResultSetFuture> futures = queryTables(stmt, task);
+        return wrapResults(task, futures);
     }
 
     @Override

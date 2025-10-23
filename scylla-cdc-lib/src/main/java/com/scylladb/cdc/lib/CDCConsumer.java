@@ -6,11 +6,13 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.MasterCQL;
+import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.cql.driver3.Driver3MasterCQL;
 import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
@@ -31,15 +33,17 @@ public final class CDCConsumer implements AutoCloseable {
     private MasterThread master;
 
     private CDCConsumer(CQLConfiguration cqlConfiguration, MasterConfiguration.Builder masterConfigurationBuilder,
-                       WorkerConfiguration.Builder workerConfigurationBuilder, Supplier<ScheduledExecutorService> executorServiceSupplier) {
+                       WorkerConfiguration.Builder workerConfigurationBuilder, Supplier<ScheduledExecutorService> executorServiceSupplier,
+                       Function<Driver3Session, WorkerCQL> workerCQLProvider) {
         Preconditions.checkNotNull(cqlConfiguration);
         Preconditions.checkNotNull(masterConfigurationBuilder);
         Preconditions.checkNotNull(workerConfigurationBuilder);
+        Preconditions.checkNotNull(workerCQLProvider);
 
         this.cdcThreadGroup = new ThreadGroup("Scylla-CDC-Threads");
 
         this.session = new Driver3Session(cqlConfiguration);
-        workerConfigurationBuilder.withCQL(new Driver3WorkerCQL(session));
+        workerConfigurationBuilder.withCQL(workerCQLProvider.apply(session));
         this.transport = new LocalTransport(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier);
 
         MasterCQL masterCQL = new Driver3MasterCQL(session);
@@ -101,6 +105,7 @@ public final class CDCConsumer implements AutoCloseable {
 
         private int workersCount = getDefaultWorkersCount();
         private Supplier<ScheduledExecutorService> executorServiceSupplier = getDefaultExecutorServiceSupplier(workersCount);
+        private Function<Driver3Session, WorkerCQL> workerCQLProvider = Driver3WorkerCQL::new;
 
         @SuppressWarnings("deprecation")
         public Builder withConsumerProvider(RawChangeConsumerProvider consumerProvider) {
@@ -252,9 +257,14 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        public Builder withWorkerCQLProvider(Function<Driver3Session, WorkerCQL> workerCQLProvider) {
+            this.workerCQLProvider = Preconditions.checkNotNull(workerCQLProvider);
+            return this;
+        }
+
         public CDCConsumer build() {
             return new CDCConsumer(cqlConfigurationBuilder.build(),
-                    masterConfigurationBuilder, workerConfigurationBuilder, executorServiceSupplier);
+                    masterConfigurationBuilder, workerConfigurationBuilder, executorServiceSupplier, workerCQLProvider);
         }
 
         private static int getDefaultWorkersCount() {
