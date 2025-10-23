@@ -83,6 +83,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <shadeTestJar>true</shadeTestJar>
                             <artifactSet>
                                 <excludes>
                                     <exclude>com.google.flogger</exclude>
