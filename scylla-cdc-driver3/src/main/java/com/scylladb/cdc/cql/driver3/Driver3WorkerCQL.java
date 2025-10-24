@@ -100,6 +100,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
         private volatile ResultSet rs;
         private volatile ChangeSchema schema;
         private final Optional<ChangeId> lastChangeId;
+        private volatile boolean shouldRecreateSchema = true;
 
         public Driver3Reader(ResultSet rs, Optional<ChangeId> lastChangeId) {
             this.rs = Preconditions.checkNotNull(rs);
@@ -111,6 +112,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                 if (rs.isFullyFetched()) {
                     fut.complete(Optional.empty());
                 } else {
+                    shouldRecreateSchema = true;
                     Futures.addCallback(rs.fetchMoreResults(), new FutureCallback<ResultSet>() {
 
                         @Override
@@ -151,9 +153,10 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                 // and fetching of the base table schema (now)
                 // there was at most a single schema change.
                 Row row = rs.one();
-                if (schema == null) {
+                if (shouldRecreateSchema || schema == null) {
                     try {
                         schema = Driver3SchemaFactory.getChangeSchema(row, session.getCluster().getMetadata());
+                        shouldRecreateSchema = false;
                     } catch (Driver3SchemaFactory.UnresolvableSchemaInconsistencyException ex) {
                         fut.completeExceptionally(ex);
                         return;
