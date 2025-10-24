@@ -100,6 +100,8 @@ public final class Driver3WorkerCQL implements WorkerCQL {
         private volatile ResultSet rs;
         private volatile ChangeSchema schema;
         private final Optional<ChangeId> lastChangeId;
+        private volatile boolean shouldTryRecreateSchema = true;
+        private volatile int lastPageColDefsHashcode = 0;
 
         public Driver3Reader(ResultSet rs, Optional<ChangeId> lastChangeId) {
             this.rs = Preconditions.checkNotNull(rs);
@@ -111,6 +113,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                 if (rs.isFullyFetched()) {
                     fut.complete(Optional.empty());
                 } else {
+                    shouldTryRecreateSchema = true;
                     Futures.addCallback(rs.fetchMoreResults(), new FutureCallback<ResultSet>() {
 
                         @Override
@@ -127,22 +130,12 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                     }, MoreExecutors.directExecutor());
                 }
             } else {
-                // The first assumption here is that we can
-                // build the schema only once and it won't
-                // change during the lifetime of this
-                // reader (during a single query window):
-                // the underlying PreparedStatement.
-                //
-                // We rely on the implementation of
-                // Java Driver and the implemented
-                // native protocol version (V4) - set in Driver3Session,
-                // that for a single PreparedStatement
-                // each row will have the same
-                // schema.
-                //
-                // This assumption is verified in integration tests:
-                // Driver3WorkerCQLIT#testPreparedStatementSameSchemaBetweenPages
-                // and Driver3WorkerCQLIT#testPreparedStatementOldSchemaAfterAlter.
+                // Since 3.11.5.9 java driver
+                // which has both metadata id extension
+                // and mitigations that prevent setting skipMetadata
+                // for ambiguous queries, the schema of the rows may
+                // change between pages, invalidating the first
+                // assumption that was here previously.
                 //
                 // The second assumption is that
                 // between a time that the CDC log query
@@ -151,9 +144,14 @@ public final class Driver3WorkerCQL implements WorkerCQL {
                 // and fetching of the base table schema (now)
                 // there was at most a single schema change.
                 Row row = rs.one();
-                if (schema == null) {
+                if (shouldTryRecreateSchema) {
                     try {
-                        schema = Driver3SchemaFactory.getChangeSchema(row, session.getCluster().getMetadata());
+                        int newHashcode = row.getColumnDefinitions().hashCode();
+                        if (newHashcode != lastPageColDefsHashcode || schema == null) {
+                            schema = Driver3SchemaFactory.getChangeSchema(row, session.getCluster().getMetadata());
+                            lastPageColDefsHashcode = newHashcode;
+                        }
+                        shouldTryRecreateSchema = false;
                     } catch (Driver3SchemaFactory.UnresolvableSchemaInconsistencyException ex) {
                         fut.completeExceptionally(ex);
                         return;
