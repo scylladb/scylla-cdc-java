@@ -31,7 +31,7 @@ jobs:
         run: mvn -B test -DexcludedGroups=integration
 
       - name: Publish unit test report
-        uses: mikepenz/action-junit-report@v5
+        uses: mikepenz/action-junit-report@v6
         if: always()
         with:
           check_name: Publish unit tests report
@@ -70,7 +70,7 @@ jobs:
         run: mvn -B verify -Dgroups=integration -DfailIfNoTests=false -Dscylla.docker.version=${{ matrix.scylla-docker-version }}
 
       - name: Publish integration test report (${{ matrix.scylla-docker-version }})
-        uses: mikepenz/action-junit-report@v5
+        uses: mikepenz/action-junit-report@v6
         if: always()
         with:
           check_name: Publish integration tests report (${{ matrix.scylla-docker-version }})
