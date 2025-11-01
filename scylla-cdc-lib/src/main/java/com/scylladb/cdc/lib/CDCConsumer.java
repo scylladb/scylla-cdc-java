@@ -204,6 +204,11 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        public Builder withQueryOptionsFetchSize(int fetchSize) {
+            cqlConfigurationBuilder.withQueryOptionsFetchSize(fetchSize);
+            return this;
+        }
+
         public Builder withSleepBeforeFirstGenerationMs(long sleepBeforeFirstGenerationMs) {
             masterConfigurationBuilder.withSleepBeforeFirstGenerationMs(sleepBeforeFirstGenerationMs);
             return this;

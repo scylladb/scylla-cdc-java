@@ -37,7 +37,7 @@ import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.Task;
 
-public final class Driver3WorkerCQL implements WorkerCQL {
+public class Driver3WorkerCQL implements WorkerCQL {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Session session;
@@ -95,11 +95,11 @@ public final class Driver3WorkerCQL implements WorkerCQL {
         }
     }
 
-    private final class Driver3Reader implements Reader {
+    protected class Driver3Reader implements Reader {
 
-        private volatile ResultSet rs;
+        protected volatile ResultSet rs;
         private volatile ChangeSchema schema;
-        private final Optional<ChangeId> lastChangeId;
+        protected final Optional<ChangeId> lastChangeId;
         private volatile boolean shouldTryRecreateSchema = true;
         private volatile int lastPageColDefsHashcode = 0;
 
@@ -108,7 +108,7 @@ public final class Driver3WorkerCQL implements WorkerCQL {
             this.lastChangeId = Preconditions.checkNotNull(lastChangeId);
         }
 
-        private void findNext(CompletableFuture<Optional<RawChange>> fut) {
+        protected void findNext(CompletableFuture<Optional<RawChange>> fut) {
             if (rs.getAvailableWithoutFetching() == 0) {
                 if (rs.isFullyFetched()) {
                     fut.complete(Optional.empty());
