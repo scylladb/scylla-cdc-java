@@ -12,6 +12,7 @@ public class MockWorkerTransport implements WorkerTransport {
     private Map<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
 
     private List<AbstractMap.SimpleEntry<TaskId, TaskState>> setStatesInvocations = new CopyOnWriteArrayList<>();
+    private List<AbstractMap.SimpleEntry<TaskId, TaskState>> updateStatesInvocations = new CopyOnWriteArrayList<>();
     private List<AbstractMap.SimpleEntry<TaskId, TaskState>> moveStateToNextWindowInvocations = new CopyOnWriteArrayList<>();
 
     @Override
@@ -26,6 +27,12 @@ public class MockWorkerTransport implements WorkerTransport {
     }
 
     @Override
+    public void updateState(TaskId task, TaskState newState) {
+        taskStates.put(task, newState);
+        updateStatesInvocations.add(new AbstractMap.SimpleEntry<>(task, newState));
+    }
+
+    @Override
     public void moveStateToNextWindow(TaskId task, TaskState newState) {
         taskStates.put(task, newState);
         moveStateToNextWindowInvocations.add(new AbstractMap.SimpleEntry<>(task, newState));
@@ -33,6 +40,11 @@ public class MockWorkerTransport implements WorkerTransport {
 
     public List<TaskState> getSetStateInvocations(TaskId taskId) {
         return setStatesInvocations.stream().filter(t -> t.getKey().equals(taskId))
+                .map(AbstractMap.SimpleEntry::getValue).collect(Collectors.toList());
+    }
+
+    public List<TaskState> getUpdateStateInvocations(TaskId taskId) {
+        return updateStatesInvocations.stream().filter(t -> t.getKey().equals(taskId))
                 .map(AbstractMap.SimpleEntry::getValue).collect(Collectors.toList());
     }
 
