@@ -6,6 +6,7 @@ import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.util.concurrent.TimeUnit;
 
@@ -17,11 +18,6 @@ public class AlterReAddColIT extends AlterTableBase {
   @Override
   public String testKeyspace() {
     return "AlterReAddColIT".toLowerCase();
-  }
-
-  @Override
-  public String testTable() {
-    return "test";
   }
 
   @Override
@@ -105,7 +101,8 @@ public class AlterReAddColIT extends AlterTableBase {
   }
 
   @Test
-  public void alterBeforeNextPageTestBody() {
+  public void alterBeforeNextPageTestBody(TestInfo testInfo) {
+    setTestTableName(testInfo.getTestMethod().get().getName().toLowerCase());
     super.alterBeforeNextPageTestBody();
   }
 }

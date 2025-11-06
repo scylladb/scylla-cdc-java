@@ -5,6 +5,7 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.scylladb.cdc.model.worker.RawChange;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.util.concurrent.TimeUnit;
 
@@ -15,11 +16,6 @@ public class AlterDropColIT extends AlterTableBase {
   @Override
   public String testKeyspace() {
     return "AlterDropColIT".toLowerCase();
-  }
-
-  @Override
-  public String testTable() {
-    return "test";
   }
 
   @Override
@@ -105,7 +101,8 @@ public class AlterDropColIT extends AlterTableBase {
   }
 
   @Test
-  public void alterBeforeNextPageTestBody() {
+  public void alterBeforeNextPageTestBody(TestInfo testInfo) {
+    setTestTableName(testInfo.getTestMethod().get().getName().toLowerCase());
     super.alterBeforeNextPageTestBody();
   }
 }

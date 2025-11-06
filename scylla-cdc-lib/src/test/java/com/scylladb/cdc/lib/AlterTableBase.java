@@ -36,7 +36,15 @@ public abstract class AlterTableBase {
 
   public abstract String testKeyspace();
 
-  public abstract String testTable();
+  protected String testTableName;
+
+  public String testTable() {
+    return testTableName;
+  }
+
+  public void setTestTableName(String name) {
+    this.testTableName = name;
+  }
 
   public void wipeKeyspace() {
     Session session = getDriverSession();

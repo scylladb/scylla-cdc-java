@@ -19,16 +19,6 @@ public class AlterAddColIT extends AlterTableBase {
     return "AlterAddColIT".toLowerCase();
   }
 
-  protected String testTableName;
-  @Override
-  public String testTable() {
-    return testTableName;
-  }
-
-  public void setTestTableName(String name) {
-    this.testTableName = name;
-  }
-
   @Override
   public String createTableQuery() {
     return String.format(
