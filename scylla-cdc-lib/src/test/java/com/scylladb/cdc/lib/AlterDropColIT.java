@@ -83,7 +83,13 @@ public class AlterDropColIT extends AlterTableBase {
                     "INSERT INTO %s.%s (column1, column2, column3, column4) VALUES (?, ?, ?, ?);",
                     testKeyspace(), testTable()));
           }
-          getDriverSession().execute(psBeforeAlter.bind(1, 1, current, current));
+          try {
+            getDriverSession().execute(psBeforeAlter.bind(1, 1, current, current));
+          } catch (Exception e) {
+            // It is possible to send a query right when column is being dropped.
+            // In such case the exception here should not fail the test.
+            log.atInfo().withCause(e).log("Datagen task exception encountered");
+          }
         } else {
           if (psAfterAlter == null) {
             psAfterAlter = getDriverSession().prepare(
