@@ -138,7 +138,7 @@ public class AlterUpdateUdtIT extends AlterTableBase {
   }
 
   @Test
-  public void alterBeforeNextPageTestPattern() {
-    super.alterBeforeNextPageTestPattern();
+  public void alterBeforeNextPageTestBody() {
+    super.alterBeforeNextPageTestBody();
   }
 }

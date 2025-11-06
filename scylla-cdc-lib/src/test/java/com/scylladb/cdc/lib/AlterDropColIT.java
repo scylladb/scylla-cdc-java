@@ -99,7 +99,7 @@ public class AlterDropColIT extends AlterTableBase {
   }
 
   @Test
-  public void alterBeforeNextPageTestPattern() {
-    super.alterBeforeNextPageTestPattern();
+  public void alterBeforeNextPageTestBody() {
+    super.alterBeforeNextPageTestBody();
   }
 }

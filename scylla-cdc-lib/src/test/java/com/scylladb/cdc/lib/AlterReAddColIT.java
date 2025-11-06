@@ -105,7 +105,7 @@ public class AlterReAddColIT extends AlterTableBase {
   }
 
   @Test
-  public void alterBeforeNextPageTestPattern() {
-    super.alterBeforeNextPageTestPattern();
+  public void alterBeforeNextPageTestBody() {
+    super.alterBeforeNextPageTestBody();
   }
 }

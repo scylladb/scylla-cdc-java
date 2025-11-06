@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.logging.Level;
 
 public abstract class AlterTableBase {
   protected static final FluentLogger log = FluentLogger.forEnclosingClass();
@@ -125,7 +124,7 @@ public abstract class AlterTableBase {
     getDriverSession().execute(createTableQuery());
   }
 
-  public void alterBeforeNextPageTestPattern() {
+  public void alterBeforeNextPageTestBody() {
     clearSharedVariables();
     createKeyspaceAndTable();
     Thread datagenThread = new Thread(createDatagenTask());
@@ -163,7 +162,7 @@ public abstract class AlterTableBase {
     verifyAllRawChanges();
   }
 
-  public void alterBeforeNextRowTestPattern() {
+  public void alterBeforeNextRowTestBody() {
     clearSharedVariables();
     createKeyspaceAndTable();
     Thread datagenThread = new Thread(createDatagenTask());

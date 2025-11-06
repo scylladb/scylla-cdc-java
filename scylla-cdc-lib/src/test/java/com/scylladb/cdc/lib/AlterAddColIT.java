@@ -95,14 +95,14 @@ public class AlterAddColIT extends AlterTableBase {
   @Test
   public void alterBeforeNextPageTest(TestInfo testInfo) {
     setTestTableName(testInfo.getTestMethod().get().getName().toLowerCase());
-    super.alterBeforeNextPageTestPattern();
+    super.alterBeforeNextPageTestBody();
   }
 
   @Test
   public void alterBeforeNextRowTest(TestInfo testInfo) {
     setTestTableName(testInfo.getTestMethod().get().getName().toLowerCase());
     try {
-      super.alterBeforeNextRowTestPattern();
+      super.alterBeforeNextRowTestBody();
     } catch (AssertionFailedError e) {
       // Ignoring. It is bound to appear, because the alter cannot modify already fetched rows.
       // CDCConsumer has no knowledge about from which page the RawChange comes.
