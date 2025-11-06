@@ -7,6 +7,7 @@ import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.Session;
 import com.google.common.base.Preconditions;
+import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.ChangeSchema;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Test;
 
 @Tag("integration")
 public class AlterTableIT {
+  private static final FluentLogger log = FluentLogger.forEnclosingClass();
   Properties systemProperties = System.getProperties();
   String hostname =
       Preconditions.checkNotNull(systemProperties.getProperty("scylla.docker.hostname"));
@@ -102,8 +104,9 @@ public class AlterTableIT {
         Thread.sleep(35 * 1000);
         session.execute(String.format("ALTER TABLE %s.%s " + "ADD column4 int;", keyspace, table));
         Thread.sleep(20 * 1000);
+        consumer.stop();
       } catch (InterruptedException e) {
-        e.printStackTrace();
+        log.atInfo().withCause(e).log("Caught InterruptedException");
       }
       taskShouldStop.set(true);
       try {
