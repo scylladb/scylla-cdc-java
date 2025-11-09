@@ -13,12 +13,17 @@ import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.master.GenerationMetadata;
+import com.scylladb.cdc.model.TableName;
 
 public abstract class BaseMasterCQL implements MasterCQL {
 
     protected abstract CompletableFuture<Optional<Date>> fetchSmallestGenerationAfter(Date after);
 
     protected abstract CompletableFuture<Set<ByteBuffer>> fetchStreamsForGeneration(Date generationStart);
+
+    protected abstract CompletableFuture<Optional<Date>> fetchSmallestTableGenerationAfter(TableName table, Date after);
+
+    protected abstract CompletableFuture<Set<ByteBuffer>> fetchStreamsForTableGeneration(TableName table, Date generationStart);
 
     @Override
     public CompletableFuture<Optional<GenerationId>> fetchFirstGenerationId() {
@@ -41,6 +46,29 @@ public abstract class BaseMasterCQL implements MasterCQL {
     @Override
     public CompletableFuture<Optional<Timestamp>> fetchGenerationEnd(GenerationId id) {
         return fetchSmallestGenerationAfter(id.getGenerationStart().toDate()).thenApply(opt -> opt.map(Timestamp::new));
+    }
+
+    @Override
+    public CompletableFuture<GenerationId> fetchFirstTableGenerationId(TableName table) {
+        return fetchSmallestTableGenerationAfter(table, new Date(0))
+                .thenApply(opt -> opt.map(t -> new GenerationId(new Timestamp(t)))
+                .orElseThrow(() -> new IllegalStateException("No generation found for table: " + table)));
+    }
+
+    @Override
+    public CompletableFuture<GenerationMetadata> fetchTableGenerationMetadata(TableName table, GenerationId generationId) {
+        CompletableFuture<Optional<Timestamp>> endFut = fetchTableGenerationEnd(table, generationId);
+        CompletableFuture<Set<ByteBuffer>> streamsFut = fetchStreamsForTableGeneration(table, generationId.getGenerationStart().toDate());
+
+        return endFut.thenCombine(streamsFut, (end, streams) -> {
+            return new GenerationMetadata(generationId.getGenerationStart(), end, convertStreams(streams));
+        });
+    }
+
+    @Override
+    public CompletableFuture<Optional<Timestamp>> fetchTableGenerationEnd(TableName table, GenerationId generationId) {
+        return fetchSmallestTableGenerationAfter(table, generationId.getGenerationStart().toDate())
+                .thenApply(opt -> opt.map(t -> new Timestamp(t)));
     }
 
 }
