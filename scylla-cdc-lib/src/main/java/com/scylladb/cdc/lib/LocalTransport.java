@@ -66,9 +66,6 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public boolean areTasksFullyConsumedUntil(Set<TaskId> tasks, Timestamp until) {
-        if (taskStates.isEmpty()) {
-            return false;
-        }
         for (TaskId id : tasks) {
             TaskState state = taskStates.get(id);
             if (state == null || !state.hasPassed(until)) {
