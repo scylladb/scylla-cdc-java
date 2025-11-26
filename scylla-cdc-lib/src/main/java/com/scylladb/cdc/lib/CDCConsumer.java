@@ -104,7 +104,7 @@ public final class CDCConsumer implements AutoCloseable {
                 = WorkerConfiguration.builder();
 
         private int workersCount = getDefaultWorkersCount();
-        private Supplier<ScheduledExecutorService> executorServiceSupplier = getDefaultExecutorServiceSupplier(workersCount);
+        private Supplier<ScheduledExecutorService> executorServiceSupplier = getDefaultExecutorServiceSupplier();
         private Function<Driver3Session, WorkerCQL> workerCQLProvider = Driver3WorkerCQL::new;
 
         @SuppressWarnings("deprecation")
@@ -272,7 +272,7 @@ public final class CDCConsumer implements AutoCloseable {
             return result > 0 ? result : 1;
         }
 
-        private static Supplier<ScheduledExecutorService> getDefaultExecutorServiceSupplier(int workersCount) {
+        private Supplier<ScheduledExecutorService> getDefaultExecutorServiceSupplier() {
             return () -> {
                 final ScheduledThreadPoolExecutor executor =
                         new ScheduledThreadPoolExecutor(workersCount);
