@@ -164,10 +164,19 @@ public final class Worker {
     public void run(GroupedTasks workerTasks) throws InterruptedException, ExecutionException {
         Preconditions.checkNotNull(workerTasks, "Worker tasks cannot be null");
         Map<TaskId, SortedSet<StreamId>> taskMap = workerTasks.getTasks();
-        Preconditions.checkArgument(!taskMap.isEmpty(), "No tasks");
-        Preconditions.checkArgument(taskMap.entrySet().stream().noneMatch(e -> e.getValue().isEmpty()),
-                "Task with no streams");
-
+        if (taskMap.isEmpty()) {
+            logger.atSevere().log(String.format("Worker was given an empty set of tasks to run (Generation %s). " +
+                "Check the integrity of your cluster and system CDC tables. (For vnodes model check " +
+                "cdc_streams_descriptions_v2 and cdc_generation_timestamp within system_distributed " +
+                "keyspace. For tablets check cdc_timestamps and cdc_streams within system keyspace).",
+                workerTasks.getGenerationId()));
+            return;
+        }
+        taskMap.forEach((key, value) -> {
+          if (value.isEmpty()) {
+            logger.atWarning().log("Task %s has no streams assigned to it.", key);
+          }
+        });
         workerConfiguration.cql.prepare(taskMap.keySet().stream().map(TaskId::getTable).collect(Collectors.toSet()));
         Collection<TaskAction> actions = queueFirstActionForEachTask(workerTasks);
         performActionsUntilStopRequested(actions);

@@ -18,7 +18,6 @@ public final class GenerationMetadata {
         this.start = Preconditions.checkNotNull(start);
         this.end = Preconditions.checkNotNull(end);
         this.streams = Preconditions.checkNotNull(streams);
-        Preconditions.checkArgument(!streams.isEmpty());
     }
 
     public GenerationId getId() {

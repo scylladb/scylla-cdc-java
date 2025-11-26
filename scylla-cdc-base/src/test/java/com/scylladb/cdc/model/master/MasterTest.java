@@ -107,6 +107,21 @@ public class MasterTest {
             )
     ));
 
+    // Add test data for generations without streams
+    private static final Map<TableName, List<GenerationMetadata>> TEST_TABLE_EMPTY_GENERATIONS = Maps.newHashMap(Map.of(
+        new TableName("ks", "test"), Lists.newArrayList(
+            mockGenerationMetadata(mockTimestamp(5), Optional.of(mockTimestamp(10)), 4, 0),
+            mockGenerationMetadata(mockTimestamp(10), Optional.of(mockTimestamp(15)), 3, 1),
+            mockGenerationMetadata(mockTimestamp(15), Optional.of(mockTimestamp(20)), 2, 0)
+        )
+    ));
+
+    private static final List<GenerationMetadata> TEST_SET_EMPTY_GENERATIONS = Lists.newArrayList(
+        mockGenerationMetadata(mockTimestamp(5), Optional.of(mockTimestamp(10)), 4, 0),
+        mockGenerationMetadata(mockTimestamp(10), Optional.of(mockTimestamp(15)), 3, 1),
+        mockGenerationMetadata(mockTimestamp(15), Optional.of(mockTimestamp(20)), 2, 0)
+    );
+
     @Test
     public void testMasterConfiguresOneGeneration() {
         // MasterTransport without an initial generation
@@ -710,6 +725,74 @@ public class MasterTest {
 
             // ...and observe moving to the next generation.
             masterTransportTracker.awaitConfigureWorkers(testTable, generations.get(1));
+        }
+    }
+
+    @Test
+    public void testMasterHandlesEmptyGenerationsTabletMode() {
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL();
+        masterCQL.setUsesTablets(true);
+
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+        TableName testTable = tableNames.iterator().next();
+
+        masterCQL.setTableGenerationMetadatas(TEST_TABLE_EMPTY_GENERATIONS);
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames)) {
+            // Get the table's generations
+            List<GenerationMetadata> tableGenerations = TEST_TABLE_EMPTY_GENERATIONS.get(testTable);
+
+            // Wait for the first generation to be configured
+            GenerationMetadata firstGeneration = tableGenerations.get(0);
+            masterTransportTracker.awaitConfigureWorkers(testTable, firstGeneration);
+
+            awaitAreTasksFullyConsumedUntilInvocations(masterTransport);
+            masterTransportTracker.checkNoAdditionalConfigureWorkers(testTable);
+
+            masterTransport.setGenerationFullyConsumed(firstGeneration);
+
+            GenerationMetadata secondGeneration = tableGenerations.get(1);
+            masterTransportTracker.awaitConfigureWorkers(testTable, secondGeneration);
+
+            awaitAreTasksFullyConsumedUntilInvocations(masterTransport);
+            masterTransportTracker.checkNoAdditionalConfigureWorkers(testTable);
+
+            masterTransport.setGenerationFullyConsumed(secondGeneration);
+
+            GenerationMetadata thirdGeneration = tableGenerations.get(2);
+            masterTransportTracker.awaitConfigureWorkers(testTable, thirdGeneration);
+        }
+        assertEquals(3, masterTransport.getConfigureWorkersInvocationsCount(testTable));
+    }
+
+    @Test
+    public void testMasterHandlesEmptyGenerationsVnodeMode() {
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL(TEST_SET_EMPTY_GENERATIONS);
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames)) {
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_EMPTY_GENERATIONS.get(0), tableNames);
+
+            awaitAreTasksFullyConsumedUntilInvocations(masterTransport);
+            masterTransportTracker.checkNoAdditionalConfigureWorkers();
+
+            masterTransport.setGenerationFullyConsumed(TEST_SET_EMPTY_GENERATIONS.get(0));
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_EMPTY_GENERATIONS.get(1), tableNames);
+
+            awaitAreTasksFullyConsumedUntilInvocations(masterTransport);
+            masterTransportTracker.checkNoAdditionalConfigureWorkers();
+
+            masterTransport.setGenerationFullyConsumed(TEST_SET_EMPTY_GENERATIONS.get(1));
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_EMPTY_GENERATIONS.get(2), tableNames);
+
+            awaitAreTasksFullyConsumedUntilInvocations(masterTransport);
+            masterTransportTracker.checkNoAdditionalConfigureWorkers();
         }
     }
 
