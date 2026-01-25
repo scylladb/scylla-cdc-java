@@ -30,7 +30,18 @@ public class PreimagePostimageIT {
     Properties systemProperties = System.getProperties();
     String hostname =
         Preconditions.checkNotNull(systemProperties.getProperty("scylla.docker.hostname"));
-    int port = Integer.parseInt(systemProperties.getProperty("scylla.docker.port"));
+    int port = parsePort(systemProperties);
+
+    private static int parsePort(Properties systemProperties) {
+        String portValue = systemProperties.getProperty("scylla.docker.port");
+        Preconditions.checkNotNull(portValue, "System property 'scylla.docker.port' must be set");
+        try {
+            return Integer.parseInt(portValue);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                "Invalid integer value for system property 'scylla.docker.port': " + portValue, e);
+        }
+    }
 
     @Test
     public void testPreimageAndPostimageOnUpdate() throws InterruptedException {
