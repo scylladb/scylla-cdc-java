@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
+import com.scylladb.cdc.cql.NoisyCQLExceptionWrapper;
 import com.scylladb.cdc.cql.WorkerCQL.Reader;
 import com.scylladb.cdc.model.FutureUtils;
 import com.scylladb.cdc.transport.TaskAbortedException;
@@ -49,8 +50,23 @@ abstract class TaskAction {
             // Exception occured while starting up the reader. Retry by starting
             // this TaskAction once again.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
-            logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
+            boolean suppressLogging = false;
+            if (ex instanceof NoisyCQLExceptionWrapper) {
+                ex = ex.getCause();
+                if (workerConfiguration.isNoisyExceptionSuppressionEnabled()) {
+                    if (workerConfiguration.areNoisyExceptionsCurrentlySuppressed()) {
+                        // Currently suppressed
+                        suppressLogging = true;
+                    } else {
+                        // Suppress future calls but not this one
+                        workerConfiguration.suppressNoisyExceptions(workerConfiguration.noisyExceptionsSuppressionWindowMs);
+                    }
+                }
+            }
+            if (!suppressLogging) {
+                logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
                     "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+            }
             return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }
@@ -108,8 +124,23 @@ abstract class TaskAction {
             // Exception occured while reading the window, we will have to restart
             // ReadNewWindowTaskAction - read a window from state defined in task.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
-            logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
+            boolean suppressLogging = false;
+            if (ex instanceof NoisyCQLExceptionWrapper) {
+                ex = ex.getCause();
+                if (workerConfiguration.isNoisyExceptionSuppressionEnabled()) {
+                    if (workerConfiguration.areNoisyExceptionsCurrentlySuppressed()) {
+                        // Currently suppressed
+                        suppressLogging = true;
+                    } else {
+                        // Suppress future calls but not this one
+                        workerConfiguration.suppressNoisyExceptions(workerConfiguration.noisyExceptionsSuppressionWindowMs);
+                    }
+                }
+            }
+            if (!suppressLogging) {
+                logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
                     "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+            }
             return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }
