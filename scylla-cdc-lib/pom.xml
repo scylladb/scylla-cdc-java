@@ -33,6 +33,11 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.scylladb</groupId>
+            <artifactId>scylla-driver-core</artifactId>
+            <scope>test</scope>
+        </dependency>
      </dependencies>
     <build>
         <plugins>

@@ -31,6 +31,7 @@ public class AlterReAddColIT extends AlterTableBase {
   @Override
   public void applyAlteration() {
     getDriverSession().execute(String.format("ALTER TABLE %s.%s " + "DROP column4;", testKeyspace(), testTable()));
+    Uninterruptibles.sleepUninterruptibly(6, TimeUnit.SECONDS);
     getDriverSession().execute(String.format("ALTER TABLE %s.%s " + "ADD column4 text;", testKeyspace(), testTable()));
   }
 
