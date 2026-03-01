@@ -9,6 +9,7 @@ import com.scylladb.cdc.model.master.GenerationMetadata;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,7 @@ public class MockMasterCQL implements MasterCQL {
     private volatile Map<TableName, List<GenerationMetadata>> tableGenerationMetadatas = new HashMap<>();
     private volatile Map<TableName, Optional<Long>> tablesTTL = new HashMap<>();
     private volatile boolean shouldInjectFailure = false;
+    private volatile boolean shouldInjectCatchUpFailure = false;
     private volatile boolean usesTablets = false;
     private final AtomicInteger failedFetchCount = new AtomicInteger(0);
     private final AtomicInteger successfulFetchCount = new AtomicInteger(0);
@@ -49,6 +51,10 @@ public class MockMasterCQL implements MasterCQL {
         this.tableGenerationMetadatas = tableGenerationMetadatas;
     }
 
+    public void setShouldInjectCatchUpFailure(boolean injectCatchUpFailure) {
+        this.shouldInjectCatchUpFailure = injectCatchUpFailure;
+    }
+
     public void setUsesTablets(boolean usesTablets) {
         this.usesTablets = usesTablets;
     }
@@ -75,6 +81,74 @@ public class MockMasterCQL implements MasterCQL {
 
         Optional<GenerationId> result = generationMetadatas.stream().map(GenerationMetadata::getId).min(Comparator.naturalOrder());
         return CompletableFuture.completedFuture(result);
+    }
+
+    @Override
+    public CompletableFuture<Optional<GenerationId>> fetchFirstGenerationIdAfter(Date after) {
+        if (shouldInjectFailure) {
+            return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
+        }
+
+        Optional<GenerationId> result = generationMetadatas.stream()
+                .map(GenerationMetadata::getId)
+                .filter(id -> id.getGenerationStart().toDate().after(after))
+                .min(Comparator.naturalOrder());
+        return CompletableFuture.completedFuture(result);
+    }
+
+    @Override
+    public CompletableFuture<Optional<GenerationId>> fetchLastGenerationBeforeOrAt(Date cutoff) {
+        if (shouldInjectFailure || shouldInjectCatchUpFailure) {
+            return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
+        }
+
+        Optional<GenerationId> result = generationMetadatas.stream()
+                .map(GenerationMetadata::getId)
+                .filter(id -> !id.getGenerationStart().toDate().after(cutoff))
+                .max(Comparator.naturalOrder());
+        return CompletableFuture.completedFuture(result);
+    }
+
+    @Override
+    public CompletableFuture<Optional<GenerationId>> fetchLastTableGenerationBeforeOrAt(TableName table, Date cutoff) {
+        if (shouldInjectFailure || shouldInjectCatchUpFailure) {
+            return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
+        }
+
+        List<GenerationMetadata> metas = tableGenerationMetadatas.getOrDefault(table, new ArrayList<>());
+        Optional<GenerationId> result = metas.stream()
+                .map(GenerationMetadata::getId)
+                .filter(id -> !id.getGenerationStart().toDate().after(cutoff))
+                .max(Comparator.naturalOrder());
+        return CompletableFuture.completedFuture(result);
+    }
+
+    @Override
+    public CompletableFuture<GenerationId> fetchFirstTableGenerationIdAfter(TableName table, Date after) {
+        if (shouldInjectFailure) {
+            return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
+        }
+
+        List<GenerationMetadata> metas = tableGenerationMetadatas.getOrDefault(table, new ArrayList<>());
+        Optional<GenerationId> result = metas.stream()
+                .map(GenerationMetadata::getId)
+                .filter(id -> id.getGenerationStart().toDate().after(after))
+                .min(Comparator.naturalOrder());
+        if (!result.isPresent()) {
+            CompletableFuture<GenerationId> failedFuture = new CompletableFuture<>();
+            failedFuture.completeExceptionally(new IllegalArgumentException(
+                    "No table generation metadata for table: " + table + " after: " + after));
+            return failedFuture;
+        }
+        return CompletableFuture.completedFuture(result.get());
     }
 
     @Override
@@ -143,6 +217,8 @@ public class MockMasterCQL implements MasterCQL {
     public CompletableFuture<GenerationId> fetchFirstTableGenerationId(TableName table) {
         if (shouldInjectFailure) {
             return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
         }
 
         List<GenerationMetadata> metas = tableGenerationMetadatas.getOrDefault(table, new ArrayList<>());
@@ -159,6 +235,8 @@ public class MockMasterCQL implements MasterCQL {
     public CompletableFuture<GenerationMetadata> fetchTableGenerationMetadata(TableName table, GenerationId generationId) {
         if (shouldInjectFailure) {
             return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
         }
 
         List<GenerationMetadata> metas = tableGenerationMetadatas.getOrDefault(table, new ArrayList<>());
@@ -177,6 +255,8 @@ public class MockMasterCQL implements MasterCQL {
     public CompletableFuture<Optional<Timestamp>> fetchTableGenerationEnd(TableName table, GenerationId generationId) {
         if (shouldInjectFailure) {
             return injectFailure();
+        } else {
+            successfulFetchCount.incrementAndGet();
         }
 
         // Find the metadata for this generation

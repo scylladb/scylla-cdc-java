@@ -1,6 +1,7 @@
 package com.scylladb.cdc.model.master;
 
 import com.google.common.flogger.FluentLogger;
+import com.scylladb.cdc.model.CatchUpUtils;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -29,14 +30,24 @@ public class TableCDCController {
         this.tasks = null;
     }
 
-    private static GenerationId getGenerationId(TableName table, MasterConfiguration masterConfiguration) {
+    private static GenerationId getGenerationId(TableName table, MasterConfiguration masterConfiguration) throws ExecutionException, InterruptedException {
         // If we already have a current generation stored in the transport state, return it, and
         // otherwise fetch the first generation.
         Optional<GenerationId> generationId = masterConfiguration.transport.getCurrentGenerationId(table);
         if (generationId.isPresent()) {
             return generationId.get();
         }
-        return masterConfiguration.cql.fetchFirstTableGenerationId(table).join();
+
+        // If catch-up is enabled, try to jump directly to a recent generation.
+        Optional<GenerationId> jumpTarget = CatchUpUtils.tryJumpToRecentGeneration(
+                masterConfiguration.computeCatchUpCutoff(),
+                cutoff -> masterConfiguration.cql.fetchLastTableGenerationBeforeOrAt(table, cutoff),
+                Optional.of(table));
+        if (jumpTarget.isPresent()) {
+            return jumpTarget.get();
+        }
+
+        return masterConfiguration.cql.fetchFirstTableGenerationId(table).get();
     }
 
     public void initCurrentGeneration() throws InterruptedException, ExecutionException {
@@ -98,7 +109,9 @@ public class TableCDCController {
         }
 
         Date lastVisibleChanges = new Date(now.getTime() - 1000L * ttl.get());
-        return lastVisibleChanges.after(currentGeneration.getEnd().get().toDate());
+        return lastVisibleChanges.after(currentGeneration.getEnd()
+                .orElseThrow(() -> new IllegalStateException("Expected closed generation to have an end timestamp"))
+                .toDate());
     }
 
     /**
@@ -116,7 +129,9 @@ public class TableCDCController {
         }
 
         // Otherwise check if all tasks are completed
-        return masterConfiguration.transport.areTasksFullyConsumedUntil(tasks.getTasks().keySet(), currentGeneration.getEnd().get());
+        return masterConfiguration.transport.areTasksFullyConsumedUntil(tasks.getTasks().keySet(),
+                currentGeneration.getEnd()
+                        .orElseThrow(() -> new IllegalStateException("Expected closed generation to have an end timestamp")));
     }
 
     /**

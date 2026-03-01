@@ -2,6 +2,7 @@ package com.scylladb.cdc.lib;
 
 import java.net.InetSocketAddress;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
@@ -16,6 +17,7 @@ import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.cql.driver3.Driver3MasterCQL;
 import com.scylladb.cdc.cql.driver3.Driver3Session;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
+import com.scylladb.cdc.model.CatchUpConfiguration;
 import com.scylladb.cdc.model.RetryBackoff;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.master.MasterConfiguration;
@@ -102,8 +104,11 @@ public final class CDCConsumer implements AutoCloseable {
                 = MasterConfiguration.builder();
         private final WorkerConfiguration.Builder workerConfigurationBuilder
                 = WorkerConfiguration.builder();
+        private final CatchUpConfiguration.Builder catchUpHelper
+                = new CatchUpConfiguration.Builder();
 
         private int workersCount = getDefaultWorkersCount();
+        private Clock clock = Clock.systemDefaultZone();
         private Function<Driver3Session, WorkerCQL> workerCQLProvider = Driver3WorkerCQL::new;
 
         @SuppressWarnings("deprecation")
@@ -223,6 +228,84 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Sets the catch-up window size in seconds. When greater than zero,
+         * enables catch-up optimization for first-time startup:
+         * <ul>
+         *   <li>Master jumps directly to a recent generation instead of iterating all old ones</li>
+         *   <li>Worker skips empty windows in closed generations when the window is older than the threshold</li>
+         * </ul>
+         * Default is 0 (disabled, backward compatible).
+         *
+         * @param catchUpWindowSizeSeconds the catch-up window size in seconds (0 = disabled)
+         * @return this builder
+         */
+        public Builder withCatchUpWindowSizeSeconds(long catchUpWindowSizeSeconds) {
+            catchUpHelper.setCatchUpWindowSizeSeconds(catchUpWindowSizeSeconds);
+            return this;
+        }
+
+        /**
+         * Sets the catch-up window size using a {@link Duration}. This is
+         * equivalent to {@link #withCatchUpWindowSizeSeconds(long)} but more
+         * idiomatic for Java 8+ callers.
+         *
+         * @param catchUpWindow the catch-up window duration (0 = disabled)
+         * @return this builder
+         */
+        public Builder withCatchUpWindow(Duration catchUpWindow) {
+            catchUpHelper.setCatchUpWindow(catchUpWindow);
+            return this;
+        }
+
+        /**
+         * Disables catch-up optimization. Equivalent to
+         * {@code withCatchUpWindowSizeSeconds(0)}.
+         *
+         * @return this builder
+         */
+        public Builder withCatchUpDisabled() {
+            return withCatchUpWindowSizeSeconds(0);
+        }
+
+        /**
+         * Sets the timeout in seconds for catch-up probe operations. The timeout
+         * applies per candidate task (not per individual stream probe). For each
+         * candidate, all stream probes are dispatched concurrently and collected
+         * via {@code CompletableFuture.allOf()}; the timeout is applied when
+         * waiting for the aggregate result.
+         * On slow clusters with many tombstones, probes may take longer than
+         * the default 30 seconds.
+         *
+         * @param probeTimeoutSeconds the probe timeout in seconds (must be positive)
+         * @return this builder
+         */
+        public Builder withProbeTimeoutSeconds(long probeTimeoutSeconds) {
+            catchUpHelper.setProbeTimeoutSeconds(probeTimeoutSeconds);
+            return this;
+        }
+
+        /**
+         * Sets the timeout for catch-up probe operations using a
+         * {@link Duration}. Equivalent to {@link #withProbeTimeoutSeconds(long)}.
+         * The timeout applies per candidate task, not per individual stream probe.
+         *
+         * @param probeTimeout the probe timeout duration (must be positive)
+         * @return this builder
+         */
+        public Builder withProbeTimeout(Duration probeTimeout) {
+            Preconditions.checkNotNull(probeTimeout);
+            Preconditions.checkArgument(!probeTimeout.isNegative() && !probeTimeout.isZero(),
+                    "probeTimeout must be positive, got %s", probeTimeout);
+            Preconditions.checkArgument(probeTimeout.getNano() == 0,
+                    "probeTimeout must be an exact number of seconds, but got %s "
+                    + "(nano component: %d); use Duration.ofSeconds(%d) or "
+                    + "withProbeTimeoutSeconds() instead",
+                    probeTimeout, probeTimeout.getNano(), probeTimeout.getSeconds());
+            catchUpHelper.setProbeTimeoutSeconds(probeTimeout.getSeconds());
+            return this;
+        }
+
         public Builder withSleepAfterExceptionMs(long sleepAfterExceptionMs) {
             masterConfigurationBuilder.withSleepAfterExceptionMs(sleepAfterExceptionMs);
             return this;
@@ -252,7 +335,9 @@ public final class CDCConsumer implements AutoCloseable {
          * @return reference to this builder.
          */
         public Builder withClock(Clock clock) {
+            this.clock = Preconditions.checkNotNull(clock);
             workerConfigurationBuilder.withClock(clock);
+            masterConfigurationBuilder.withClock(clock);
             return this;
         }
 
@@ -262,6 +347,12 @@ public final class CDCConsumer implements AutoCloseable {
         }
 
         public CDCConsumer build() {
+            // Build a single CatchUpConfiguration shared by Master and Worker.
+            // The cutoff is auto-frozen on first computation.
+            CatchUpConfiguration catchUpConfig = catchUpHelper.build();
+            masterConfigurationBuilder.withCatchUpConfig(catchUpConfig);
+            workerConfigurationBuilder.withCatchUpConfig(catchUpConfig);
+
             Supplier<ScheduledExecutorService> executorServiceSupplier = getDefaultExecutorServiceSupplier(workersCount);
             return new CDCConsumer(cqlConfigurationBuilder.build(),
                     masterConfigurationBuilder, workerConfigurationBuilder, executorServiceSupplier, workerCQLProvider);

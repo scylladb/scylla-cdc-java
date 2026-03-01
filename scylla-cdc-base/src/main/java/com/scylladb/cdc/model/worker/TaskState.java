@@ -90,8 +90,19 @@ public final class TaskState {
      * |windowSizeMs| milliseconds.
      */
     public static TaskState createInitialFor(GenerationId generation, long windowSizeMs) {
-        Timestamp generationStart = generation.getGenerationStart();
-        return new TaskState(generationStart, generationStart.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
+        return createForWindow(generation.getGenerationStart(), windowSizeMs);
+    }
+
+    /**
+     * Creates a state for a window starting at {@code start} and spanning for
+     * {@code windowSizeMs} milliseconds, with no consumed changes.
+     *
+     * @param start the start timestamp of the window
+     * @param windowSizeMs the window size in milliseconds
+     * @return a new {@code TaskState} for the specified window
+     */
+    public static TaskState createForWindow(Timestamp start, long windowSizeMs) {
+        return new TaskState(start, start.plus(windowSizeMs, ChronoUnit.MILLIS), Optional.empty());
     }
 
     /* If the state is before |minimumWindowStart| then this method returns a state

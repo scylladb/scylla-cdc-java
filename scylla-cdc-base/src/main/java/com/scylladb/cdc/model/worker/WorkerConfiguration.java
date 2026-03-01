@@ -1,22 +1,30 @@
 package com.scylladb.cdc.model.worker;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.util.Date;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 import com.google.common.base.Preconditions;
+import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.cql.WorkerCQL;
+import com.scylladb.cdc.model.CatchUpConfiguration;
 import com.scylladb.cdc.model.ExponentialRetryBackoffWithJitter;
 import com.scylladb.cdc.model.RetryBackoff;
+import com.scylladb.cdc.model.StreamId;
+import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 public final class WorkerConfiguration {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
     public static final long DEFAULT_QUERY_TIME_WINDOW_SIZE_MS = 30000;
     public static final long DEFAULT_CONFIDENCE_WINDOW_SIZE_MS = 30000;
     public static final long DEFAULT_MINIMAL_WAIT_FOR_WINDOW_MS = 0;
     public static final RetryBackoff DEFAULT_WORKER_RETRY_BACKOFF =
             new ExponentialRetryBackoffWithJitter(50, 30000, 0.20);
-
     public final WorkerTransport transport;
     public final WorkerCQL cql;
     public final Consumer consumer;
@@ -27,12 +35,15 @@ public final class WorkerConfiguration {
 
     public final RetryBackoff workerRetryBackoff;
 
+    public final CatchUpConfiguration catchUpConfig;
+
     private final ScheduledExecutorService executorService;
 
     private final Clock clock;
-    
+
     private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer, long queryTimeWindowSizeMs,
-            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs) {
+            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs,
+            CatchUpConfiguration catchUpConfig) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
@@ -44,10 +55,27 @@ public final class WorkerConfiguration {
         this.executorService = executorService;
         this.clock = Preconditions.checkNotNull(clock);
         this.minimalWaitForWindowMs = minimalWaitForWindowMs;
+        this.catchUpConfig = Preconditions.checkNotNull(catchUpConfig);
     }
-    
+
     public ScheduledExecutorService getExecutorService() {
         return executorService;
+    }
+
+    /**
+     * Computes the catch-up cutoff date based on the current time and
+     * the configured catch-up window size. Returns empty if catch-up
+     * is disabled (catchUpWindowSizeSeconds == 0).
+     */
+    public Optional<Date> computeCatchUpCutoff() {
+        return catchUpConfig.computeCatchUpCutoff(clock);
+    }
+
+    /**
+     * Creates a new {@link CatchUpProber} using the current configuration.
+     */
+    CatchUpProber createCatchUpProber() {
+        return new CatchUpProber(cql, queryTimeWindowSizeMs, catchUpConfig.getProbeTimeoutSeconds());
     }
 
     /**
@@ -77,6 +105,8 @@ public final class WorkerConfiguration {
         private long minimalWaitForWindowMs = DEFAULT_MINIMAL_WAIT_FOR_WINDOW_MS;
 
         private RetryBackoff workerRetryBackoff = DEFAULT_WORKER_RETRY_BACKOFF;
+
+        private final CatchUpConfiguration.Builder catchUpHelper = new CatchUpConfiguration.Builder();
 
         private Clock clock = Clock.systemDefaultZone();
 
@@ -170,12 +200,99 @@ public final class WorkerConfiguration {
             return this;
         }
 
+        /**
+         * Sets the catch-up window size in seconds. When greater than zero,
+         * enables catch-up optimization for first-time startup, allowing the
+         * worker to skip empty windows in closed generations when the window
+         * start is older than {@code now - catchUpWindowSizeSeconds}.
+         *
+         * @param catchUpWindowSizeSeconds the catch-up window size in seconds (0 = disabled)
+         * @return this builder
+         */
+        public Builder withCatchUpWindowSizeSeconds(long catchUpWindowSizeSeconds) {
+            catchUpHelper.setCatchUpWindowSizeSeconds(catchUpWindowSizeSeconds);
+            return this;
+        }
+
+        /**
+         * Sets the catch-up window size using a {@link Duration}. This is
+         * equivalent to {@link #withCatchUpWindowSizeSeconds(long)} but more
+         * idiomatic for Java 8+ callers. Sub-second precision is rejected.
+         *
+         * @param catchUpWindow the catch-up window duration (0 = disabled)
+         * @return this builder
+         */
+        public Builder withCatchUpWindow(Duration catchUpWindow) {
+            catchUpHelper.setCatchUpWindow(catchUpWindow);
+            return this;
+        }
+
+        /**
+         * Sets the timeout in seconds for catch-up probe operations. The timeout
+         * applies per candidate task (not per individual stream probe).
+         * Default: {@value com.scylladb.cdc.model.CatchUpConfiguration#DEFAULT_PROBE_TIMEOUT_SECONDS} seconds.
+         * Maximum: ~24 days ({@link CatchUpConfiguration#MAX_PROBE_TIMEOUT_SECONDS}).
+         * On slow clusters with many tombstones, probes may take longer than
+         * the default. If a probe times out, the worker falls back to reading
+         * from the original window start for that task.
+         *
+         * @param probeTimeoutSeconds the probe timeout in seconds (must be positive)
+         * @return this builder
+         */
+        public Builder withProbeTimeoutSeconds(long probeTimeoutSeconds) {
+            catchUpHelper.setProbeTimeoutSeconds(probeTimeoutSeconds);
+            return this;
+        }
+
+        /**
+         * Sets the timeout for individual catch-up probe operations using a
+         * {@link Duration}. Equivalent to {@link #withProbeTimeoutSeconds(long)}
+         * but more idiomatic for Java 8+ callers.
+         *
+         * @param probeTimeout the probe timeout duration (must be positive, sub-second precision is rejected)
+         * @return this builder
+         */
+        public Builder withProbeTimeout(Duration probeTimeout) {
+            Preconditions.checkNotNull(probeTimeout);
+            Preconditions.checkArgument(!probeTimeout.isNegative() && !probeTimeout.isZero(),
+                    "probeTimeout must be positive, got %s", probeTimeout);
+            Preconditions.checkArgument(probeTimeout.getNano() == 0,
+                    "probeTimeout must be an exact number of seconds, but got %s "
+                    + "(nano component: %d); use Duration.ofSeconds(%d) or "
+                    + "withProbeTimeoutSeconds() instead",
+                    probeTimeout, probeTimeout.getNano(), probeTimeout.getSeconds());
+            catchUpHelper.setProbeTimeoutSeconds(probeTimeout.getSeconds());
+            return this;
+        }
+
+        private CatchUpConfiguration sharedCatchUpConfig;
+
+        /**
+         * Sets a pre-built {@link CatchUpConfiguration}, overriding any values
+         * set via {@link #withCatchUpWindowSizeSeconds(long)} or
+         * {@link #withCatchUpWindow(Duration)}. This allows sharing a single
+         * configuration instance between Master and Worker so they use the same
+         * frozen cutoff.
+         */
+        public Builder withCatchUpConfig(CatchUpConfiguration catchUpConfig) {
+            this.sharedCatchUpConfig = Preconditions.checkNotNull(catchUpConfig);
+            return this;
+        }
+
         public WorkerConfiguration build() {
             if (executorService == null) {
                 executorService = Executors.newScheduledThreadPool(1);
             }
+            CatchUpConfiguration config = sharedCatchUpConfig != null ? sharedCatchUpConfig : catchUpHelper.build();
+            long catchUpSeconds = config.getCatchUpWindowSizeSeconds();
+            if (catchUpSeconds > 0 && catchUpSeconds < confidenceWindowSizeMs / 1000) {
+                logger.atWarning().log("catchUpWindowSizeSeconds (%d) is less than confidenceWindowSizeMs / 1000 (%d). "
+                        + "The confidence window may cause the worker to wait before reading the first window, "
+                        + "partially negating the catch-up benefit. Consider increasing the catch-up window.",
+                        catchUpSeconds, confidenceWindowSizeMs / 1000);
+            }
             return new WorkerConfiguration(transport, cql, consumer, queryTimeWindowSizeMs, confidenceWindowSizeMs,
-                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs);
+                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs, config);
         }
     }
 }
