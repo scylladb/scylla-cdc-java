@@ -7,12 +7,13 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.lte;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.select;
 
-import java.util.HashMap;
+import java.util.Date;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -24,6 +25,7 @@ import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.ResultSetFuture;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
@@ -32,6 +34,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.worker.ChangeId;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
@@ -41,7 +44,10 @@ public class Driver3WorkerCQL implements WorkerCQL {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
     private final Session session;
-    private final Map<TableName, PreparedStatement> preparedStmts = new HashMap<>();
+    private final Map<TableName, PreparedStatement> preparedStmts = new ConcurrentHashMap<>();
+    // Lazily populated when fetchFirstChangeTime is called. An empty ConcurrentHashMap
+    // has negligible overhead, so eager allocation is acceptable.
+    private final Map<TableName, PreparedStatement> probeStmts = new ConcurrentHashMap<>();
     private final ConsistencyLevel consistencyLevel;
 
     public Driver3WorkerCQL(Driver3Session session) {
@@ -268,5 +274,81 @@ public class Driver3WorkerCQL implements WorkerCQL {
     @Override
     public CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName) {
         return Driver3CommonCQL.fetchTableTTL(session, tableName);
+    }
+
+    private static RegularStatement getProbeStmt(TableName table) {
+        return select().column(quoteIfNecessary("cdc$time"))
+                .from(quoteIfNecessary(table.keyspace), quoteIfNecessary(table.name + "_scylla_cdc_log"))
+                .where(eq(quoteIfNecessary("cdc$stream_id"), bindMarker()))
+                .and(gt(quoteIfNecessary("cdc$time"), bindMarker()))
+                .orderBy(QueryBuilder.asc(quoteIfNecessary("cdc$time")))
+                .limit(1);
+    }
+
+    private CompletableFuture<PreparedStatement> prepareProbe(TableName table) {
+        PreparedStatement existing = probeStmts.get(table);
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
+        }
+        CompletableFuture<PreparedStatement> result = new CompletableFuture<>();
+        Futures.addCallback(session.prepareAsync(getProbeStmt(table)), new FutureCallback<PreparedStatement>() {
+            @Override
+            public void onSuccess(PreparedStatement r) {
+                probeStmts.putIfAbsent(table, r);
+                result.complete(probeStmts.get(table));
+            }
+            @Override
+            public void onFailure(Throwable t) {
+                result.completeExceptionally(t);
+            }
+        }, MoreExecutors.directExecutor());
+        return result;
+    }
+
+    @Override
+    public CompletableFuture<Optional<Timestamp>> fetchFirstChangeTime(TableName table, StreamId streamId, Timestamp after, long readTimeoutMs) {
+        return prepareProbe(table).thenCompose(stmt -> {
+            CompletableFuture<Optional<Timestamp>> result = new CompletableFuture<>();
+            // UUIDs.startOf() creates the smallest possible timeuuid for the given
+            // millisecond. This is correct for our "cdc$time > ?" query because any
+            // real CDC timeuuid at the same millisecond will have a larger clock_seq/node
+            // component and thus compare greater.
+            //
+            // setFetchSize(1) prevents the driver from fetching more rows than needed.
+            // On streams with only old, TTL-expired data, this query may still scan
+            // tombstones. Ensure gc_grace_seconds is configured appropriately on CDC
+            // log tables to minimize this cost.
+            // Use LOCAL_ONE for probe queries since they are best-effort:
+            // if the probe returns stale data the worker simply reads from
+            // an earlier window, which is safe.
+            // Per-query timeout bounds individual probe latency to prevent
+            // slow scans on streams with many tombstones from blocking other probes.
+            ResultSetFuture future = session.executeAsync(
+                    stmt.bind(streamId.getValue(), com.datastax.driver.core.utils.UUIDs.startOf(after.toDate().getTime()))
+                            .setConsistencyLevel(ConsistencyLevel.LOCAL_ONE)
+                            .setReadTimeoutMillis((int) readTimeoutMs)
+                            .setFetchSize(1));
+            Futures.addCallback(future, new FutureCallback<ResultSet>() {
+                @Override
+                public void onSuccess(ResultSet rs) {
+                    Row row = rs.one();
+                    if (row != null) {
+                        // UUIDs.unixTimestamp() extracts millisecond-precision from the
+                        // 100ns-precision timeuuid. This means the window start after
+                        // catch-up may be up to ~1ms earlier than the actual first change,
+                        // potentially causing a single redundant re-read — acceptable.
+                        result.complete(Optional.of(new Timestamp(new Date(
+                                com.datastax.driver.core.utils.UUIDs.unixTimestamp(row.getUUID(0))))));
+                    } else {
+                        result.complete(Optional.empty());
+                    }
+                }
+                @Override
+                public void onFailure(Throwable t) {
+                    result.completeExceptionally(t);
+                }
+            }, MoreExecutors.directExecutor());
+            return result;
+        });
     }
 }

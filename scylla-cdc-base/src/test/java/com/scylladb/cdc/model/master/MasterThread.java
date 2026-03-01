@@ -31,6 +31,11 @@ public class MasterThread implements AutoCloseable {
     }
 
     public MasterThread(MasterTransport masterTransport, MasterCQL masterCQL, Set<TableName> tableNames, Clock clock) {
+        this(masterTransport, masterCQL, tableNames, clock, 0);
+    }
+
+    public MasterThread(MasterTransport masterTransport, MasterCQL masterCQL, Set<TableName> tableNames, Clock clock,
+                        long catchUpWindowSizeSeconds) {
         this(MasterConfiguration.builder()
                 .withTransport(masterTransport)
                 .withCQL(masterCQL)
@@ -39,6 +44,7 @@ public class MasterThread implements AutoCloseable {
                 .withSleepBeforeGenerationDoneMs(SLEEP_BEFORE_GENERATION_DONE_MS)
                 .withSleepAfterExceptionMs(SLEEP_AFTER_EXCEPTION_MS)
                 .withClock(clock)
+                .withCatchUpWindowSizeSeconds(catchUpWindowSizeSeconds)
                 .build());
     }
 

@@ -4,6 +4,7 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.bindMarker;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.column;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.gt;
+import static com.datastax.driver.core.querybuilder.QueryBuilder.lte;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.select;
 
 import java.nio.ByteBuffer;
@@ -14,6 +15,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import com.datastax.driver.core.BoundStatement;
@@ -68,8 +71,8 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
     // PreparedStatements for querying in clusters with
     // system_distributed.cdc_generation_timestamps
     // and system_distributed.cdc_streams_descriptions_v2 tables.
-    private PreparedStatement fetchSmallestGenerationAfterStmt;
-    private PreparedStatement fetchStreamsStmt;
+    private final AtomicReference<PreparedStatement> fetchSmallestGenerationAfterStmt = new AtomicReference<>();
+    private final AtomicReference<PreparedStatement> fetchStreamsStmt = new AtomicReference<>();
     private boolean foundRewritten = false;
 
     // (Streams description table V1)
@@ -77,10 +80,17 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
     // PreparedStatements for querying in clusters WITHOUT
     // system_distributed.cdc_generation_timestamps
     // and system_distributed.cdc_streams_descriptions_v2 tables.
-    private PreparedStatement legacyFetchSmallestGenerationAfterStmt;
-    private PreparedStatement legacyFetchStreamsStmt;
-    private PreparedStatement fetchSmallestTableGenerationAfterStmt;
-    private PreparedStatement fetchTableStreamsStmt;
+    private final AtomicReference<PreparedStatement> legacyFetchSmallestGenerationAfterStmt = new AtomicReference<>();
+    private final AtomicReference<PreparedStatement> legacyFetchStreamsStmt = new AtomicReference<>();
+    private final AtomicReference<PreparedStatement> fetchSmallestTableGenerationAfterStmt = new AtomicReference<>();
+    private final AtomicReference<PreparedStatement> fetchTableStreamsStmt = new AtomicReference<>();
+
+    private final AtomicBoolean legacyCatchUpWarningLogged = new AtomicBoolean(false);
+
+    // Reverse lookup prepared statements
+    private final AtomicReference<PreparedStatement> fetchLargestGenerationBeforeOrAtStmt = new AtomicReference<>();
+    private final AtomicReference<PreparedStatement> legacyFetchLargestGenerationBeforeOrAtStmt = new AtomicReference<>();
+    private final AtomicReference<PreparedStatement> fetchLargestTableGenerationBeforeOrAtStmt = new AtomicReference<>();
 
     public Driver3MasterCQL(Driver3Session session) {
         this.session = Preconditions.checkNotNull(session).getDriverSession();
@@ -150,100 +160,160 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
     }
 
     private CompletableFuture<PreparedStatement> getLegacyFetchSmallestGenerationAfter() {
-        if (legacyFetchSmallestGenerationAfterStmt != null) {
-            return CompletableFuture.completedFuture(legacyFetchSmallestGenerationAfterStmt);
-        } else {
-            ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
-                    select().min(column("time")).from("system_distributed", "cdc_streams_descriptions")
-                            .where(gt("time", bindMarker())).allowFiltering()
-            );
-            return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
-                legacyFetchSmallestGenerationAfterStmt = preparedStatement;
-                return preparedStatement;
-            });
+        PreparedStatement existing = legacyFetchSmallestGenerationAfterStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
         }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().min(column("time")).from("system_distributed", "cdc_streams_descriptions")
+                        .where(gt("time", bindMarker())).allowFiltering()
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            legacyFetchSmallestGenerationAfterStmt.compareAndSet(null, preparedStatement);
+            return legacyFetchSmallestGenerationAfterStmt.get();
+        });
     }
 
     private CompletableFuture<PreparedStatement> getFetchSmallestGenerationAfter() {
-        if (fetchSmallestGenerationAfterStmt != null) {
-            return CompletableFuture.completedFuture(fetchSmallestGenerationAfterStmt);
-        } else {
-            ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
-                    select().min(column("time")).from("system_distributed", "cdc_generation_timestamps")
-                            .where(eq("key", "timestamps")).and(gt("time", bindMarker()))
-            );
-            return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
-                fetchSmallestGenerationAfterStmt = preparedStatement;
-                return preparedStatement;
-            });
+        PreparedStatement existing = fetchSmallestGenerationAfterStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
         }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().min(column("time")).from("system_distributed", "cdc_generation_timestamps")
+                        .where(eq("key", "timestamps")).and(gt("time", bindMarker()))
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            fetchSmallestGenerationAfterStmt.compareAndSet(null, preparedStatement);
+            return fetchSmallestGenerationAfterStmt.get();
+        });
     }
 
     private CompletableFuture<PreparedStatement> getFetchSmallestTableGenerationAfter() {
-        if (fetchSmallestTableGenerationAfterStmt != null) {
-            return CompletableFuture.completedFuture(fetchSmallestTableGenerationAfterStmt);
-        } else {
-            ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
-                    select().min(column("timestamp")).from("system", "cdc_timestamps")
-                            .where(eq("keyspace_name", bindMarker()))
-                            .and(eq("table_name", bindMarker()))
-                            .and(gt("timestamp", bindMarker()))
-                            .orderBy(QueryBuilder.asc("timestamp"))
-                            .limit(1)
-            );
-            return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
-                fetchSmallestTableGenerationAfterStmt = preparedStatement;
-                return preparedStatement;
-            });
+        PreparedStatement existing = fetchSmallestTableGenerationAfterStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
         }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().min(column("timestamp")).from("system", "cdc_timestamps")
+                        .where(eq("keyspace_name", bindMarker()))
+                        .and(eq("table_name", bindMarker()))
+                        .and(gt("timestamp", bindMarker()))
+                        .orderBy(QueryBuilder.asc("timestamp"))
+                        .limit(1)
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            fetchSmallestTableGenerationAfterStmt.compareAndSet(null, preparedStatement);
+            return fetchSmallestTableGenerationAfterStmt.get();
+        });
+    }
+
+    private CompletableFuture<PreparedStatement> getFetchLargestGenerationBeforeOrAt() {
+        PreparedStatement existing = fetchLargestGenerationBeforeOrAtStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
+        }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().column("time").from("system_distributed", "cdc_generation_timestamps")
+                        .where(eq("key", "timestamps")).and(lte("time", bindMarker()))
+                        .orderBy(QueryBuilder.desc("time")).limit(1)
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            fetchLargestGenerationBeforeOrAtStmt.compareAndSet(null, preparedStatement);
+            return fetchLargestGenerationBeforeOrAtStmt.get();
+        });
+    }
+
+    // ALLOW FILTERING is required here because cdc_streams_descriptions (V1) does not
+    // have a clustering key that supports reverse time lookups efficiently. This query
+    // can be expensive with many generations, but is unavoidable for legacy table support
+    // where the V2 table is not yet available.
+    //
+    // Validated: The V1 table schema (system_distributed.cdc_streams_descriptions) has
+    // `time` as the partition key with `ORDER BY time DESC LIMIT 1 ALLOW FILTERING`.
+    // Scylla accepts this query and pushes the ORDER BY + LIMIT to the coordinator for
+    // filtering. On clusters with many generations this may be slow, hence the warning
+    // logged in fetchLargestGenerationBeforeOrAt().
+    private CompletableFuture<PreparedStatement> getLegacyFetchLargestGenerationBeforeOrAt() {
+        PreparedStatement existing = legacyFetchLargestGenerationBeforeOrAtStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
+        }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().column("time").from("system_distributed", "cdc_streams_descriptions")
+                        .where(lte("time", bindMarker())).orderBy(QueryBuilder.desc("time"))
+                        .limit(1).allowFiltering()
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            legacyFetchLargestGenerationBeforeOrAtStmt.compareAndSet(null, preparedStatement);
+            return legacyFetchLargestGenerationBeforeOrAtStmt.get();
+        });
+    }
+
+    private CompletableFuture<PreparedStatement> getFetchLargestTableGenerationBeforeOrAt() {
+        PreparedStatement existing = fetchLargestTableGenerationBeforeOrAtStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
+        }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().column("timestamp").from("system", "cdc_timestamps")
+                        .where(eq("keyspace_name", bindMarker()))
+                        .and(eq("table_name", bindMarker()))
+                        .and(lte("timestamp", bindMarker()))
+                        .orderBy(QueryBuilder.desc("timestamp")).limit(1)
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            fetchLargestTableGenerationBeforeOrAtStmt.compareAndSet(null, preparedStatement);
+            return fetchLargestTableGenerationBeforeOrAtStmt.get();
+        });
     }
 
     private CompletableFuture<PreparedStatement> getLegacyFetchStreams() {
-        if (legacyFetchStreamsStmt != null) {
-            return CompletableFuture.completedFuture(legacyFetchStreamsStmt);
-        } else {
-            ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
-                    select().column("streams").from("system_distributed", "cdc_streams_descriptions")
-                            .where(eq("time", bindMarker())).allowFiltering()
-            );
-            return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
-                legacyFetchStreamsStmt = preparedStatement;
-                return preparedStatement;
-            });
+        PreparedStatement existing = legacyFetchStreamsStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
         }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().column("streams").from("system_distributed", "cdc_streams_descriptions")
+                        .where(eq("time", bindMarker())).allowFiltering()
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            legacyFetchStreamsStmt.compareAndSet(null, preparedStatement);
+            return legacyFetchStreamsStmt.get();
+        });
     }
 
     private CompletableFuture<PreparedStatement> getFetchStreams() {
-        if (fetchStreamsStmt != null) {
-            return CompletableFuture.completedFuture(fetchStreamsStmt);
-        } else {
-            ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
-                    select().column("streams").from("system_distributed", "cdc_streams_descriptions_v2")
-                            .where(eq("time", bindMarker()))
-            );
-            return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
-                fetchStreamsStmt = preparedStatement;
-                return preparedStatement;
-            });
+        PreparedStatement existing = fetchStreamsStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
         }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().column("streams").from("system_distributed", "cdc_streams_descriptions_v2")
+                        .where(eq("time", bindMarker()))
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            fetchStreamsStmt.compareAndSet(null, preparedStatement);
+            return fetchStreamsStmt.get();
+        });
     }
 
     private CompletableFuture<PreparedStatement> getFetchTableStreams() {
-        if (fetchTableStreamsStmt != null) {
-            return CompletableFuture.completedFuture(fetchTableStreamsStmt);
-        } else {
-            ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
-                    select().column("stream_id").from("system", "cdc_streams")
-                            .where(eq("keyspace_name", bindMarker()))
-                            .and(eq("table_name", bindMarker()))
-                            .and(eq("timestamp", bindMarker()))
-                            .and(eq("stream_state", StreamState.CURRENT.getValue()))
-            );
-            return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
-                fetchTableStreamsStmt = preparedStatement;
-                return preparedStatement;
-            });
+        PreparedStatement existing = fetchTableStreamsStmt.get();
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
         }
+        ListenableFuture<PreparedStatement> prepareStatement = session.prepareAsync(
+                select().column("stream_id").from("system", "cdc_streams")
+                        .where(eq("keyspace_name", bindMarker()))
+                        .and(eq("table_name", bindMarker()))
+                        .and(eq("timestamp", bindMarker()))
+                        .and(eq("stream_state", StreamState.CURRENT.getValue()))
+        );
+        return FutureUtils.convert(prepareStatement).thenApply(preparedStatement -> {
+            fetchTableStreamsStmt.compareAndSet(null, preparedStatement);
+            return fetchTableStreamsStmt.get();
+        });
     }
 
     private Statement getFetchRewritten() {
@@ -386,6 +456,30 @@ public final class Driver3MasterCQL extends BaseMasterCQL {
                         .thenApply(o -> o.stream().flatMap(r -> r.getSet(0, ByteBuffer.class).stream()).collect(Collectors.toSet())));
             }
         });
+    }
+
+    @Override
+    protected CompletableFuture<Optional<Date>> fetchLargestGenerationBeforeOrAt(Date cutoff) {
+        return fetchShouldQueryLegacyTables().thenCompose(shouldQueryLegacyTables -> {
+            if (shouldQueryLegacyTables) {
+                if (legacyCatchUpWarningLogged.compareAndSet(false, true)) {
+                    logger.atWarning().log("Catch-up is using legacy (V1) cdc_streams_descriptions table with " +
+                            "ALLOW FILTERING. This can be slow on clusters with many generations. Consider upgrading " +
+                            "to a Scylla version that supports the V2 streams description table.");
+                }
+                return getLegacyFetchLargestGenerationBeforeOrAt().thenCompose(statement ->
+                        executeOne(statement.bind(cutoff)).thenApply(o -> o.map(r -> r.getTimestamp(0))));
+            } else {
+                return getFetchLargestGenerationBeforeOrAt().thenCompose(statement ->
+                        executeOne(statement.bind(cutoff)).thenApply(o -> o.map(r -> r.getTimestamp(0))));
+            }
+        });
+    }
+
+    @Override
+    protected CompletableFuture<Optional<Date>> fetchLargestTableGenerationBeforeOrAt(TableName tableName, Date cutoff) {
+        return getFetchLargestTableGenerationBeforeOrAt().thenCompose(statement ->
+                executeOne(statement.bind(tableName.keyspace, tableName.name, cutoff)).thenApply(o -> o.map(r -> r.getTimestamp(0))));
     }
 
     @Override

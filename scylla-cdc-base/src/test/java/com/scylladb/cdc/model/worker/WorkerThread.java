@@ -68,19 +68,38 @@ public class WorkerThread implements AutoCloseable {
         this(workerCQL, workerTransport, consumer, generationMetadata, clock, Collections.singleton(tableName));
     }
 
+    public boolean isDone() {
+        return workerRunFuture != null && workerRunFuture.isDone();
+    }
+
+    /**
+     * Closes the worker, optionally expecting an exception.
+     * Use {@link #closeExpectingFailure()} when the test intentionally
+     * causes the worker to fail.
+     */
     @Override
     public void close() {
+        close(false);
+    }
+
+    public void closeExpectingFailure() {
+        close(true);
+    }
+
+    private void close(boolean expectFailure) {
         if (this.worker != null) {
             this.worker.stop();
         }
         if (this.workerRunFuture != null) {
             try {
                 Throwable t = this.workerRunFuture.get(FUTURE_GET_TIMEOUT, TimeUnit.MILLISECONDS);
-                if (t != null) {
+                if (t != null && !expectFailure) {
                     fail("Worker run future threw exception", t);
                 }
             } catch (Exception e) {
-                fail("Could not successfully get() worker future", e);
+                if (!expectFailure) {
+                    fail("Could not successfully get() worker future", e);
+                }
             }
         }
     }

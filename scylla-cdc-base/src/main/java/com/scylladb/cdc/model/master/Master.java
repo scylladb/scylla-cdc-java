@@ -22,6 +22,11 @@ public final class Master {
     }
 
     public void run() {
+        if (masterConfiguration.catchUpConfig.isEnabled()) {
+            logger.atInfo().log("Master starting with catch-up optimization enabled (window: %d seconds)",
+                    masterConfiguration.catchUpConfig.getCatchUpWindowSizeSeconds());
+        }
+
         // Until the master thread is interrupted, continuously run fetching
         // the new generations. In case of exception (for example
         // CQL query error), infinitely retry the master routine from
