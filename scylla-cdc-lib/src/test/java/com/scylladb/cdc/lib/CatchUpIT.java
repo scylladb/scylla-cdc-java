@@ -247,10 +247,10 @@ public class CatchUpIT {
                 // Give the consumer a short window to process any remaining changes.
                 // In a single-node test cluster the generation start is recent, so
                 // catch-up probes may still find old data (the window start is the
-                // generation start, which is within the cutoff). Stronger assertions
-                // would require a multi-generation setup, which is impractical here.
-                // The actual skipping logic is covered by unit tests in WorkerTest
-                // and MasterTest.
+                // generation start, which is within the cutoff). A stronger assertion
+                // (e.g., changeCounter < 10) would require a multi-generation setup,
+                // which is impractical here. The actual skipping logic is thoroughly
+                // covered by unit tests in WorkerTest, CatchUpProberTest, and MasterTest.
                 Thread.sleep(2000);
                 assertTrue(changeCounter.get() <= 10,
                         "Expected at most 10 changes but got " + changeCounter.get());

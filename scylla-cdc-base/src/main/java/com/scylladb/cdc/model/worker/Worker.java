@@ -94,8 +94,7 @@ public final class Worker {
 
         // Catch-up optimization: probe for the first change time in closed
         // generations when the window start is far in the past.
-        tasks = new CatchUpProber(workerConfiguration.cql, workerConfiguration.queryTimeWindowSizeMs,
-                workerConfiguration.catchUpConfig.getProbeTimeoutSeconds())
+        tasks = workerConfiguration.createCatchUpProber()
                 .apply(tasks, states, workerTasks, workerConfiguration.computeCatchUpCutoff());
 
         // Set the task state in the transport before it is queued.

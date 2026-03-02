@@ -1,5 +1,12 @@
 package com.scylladb.cdc.model;
 
+import com.scylladb.cdc.model.master.MasterConfiguration;
+import com.scylladb.cdc.model.worker.WorkerConfiguration;
+import com.scylladb.cdc.cql.MockWorkerCQL;
+import com.scylladb.cdc.model.worker.Consumer;
+import com.scylladb.cdc.transport.MockMasterTransport;
+import com.scylladb.cdc.transport.MockWorkerTransport;
+import com.scylladb.cdc.cql.MockMasterCQL;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -208,14 +215,27 @@ class CatchUpUtilsTest {
 
     @Test
     void testCatchUpConfigurationProbeTimeoutZeroThrows() {
+        CatchUpConfiguration.Builder builder = new CatchUpConfiguration.Builder();
+        builder.setCatchUpWindowSizeSeconds(3600);
         assertThrows(IllegalArgumentException.class, () ->
-                new CatchUpConfiguration(3600, 0));
+                builder.setProbeTimeoutSeconds(0));
     }
 
     @Test
     void testCatchUpConfigurationProbeTimeoutMaxValue() {
-        CatchUpConfiguration config = new CatchUpConfiguration(3600, Long.MAX_VALUE);
-        assertEquals(Long.MAX_VALUE, config.getProbeTimeoutSeconds());
+        CatchUpConfiguration.Builder builder = new CatchUpConfiguration.Builder();
+        builder.setCatchUpWindowSizeSeconds(3600);
+        builder.setProbeTimeoutSeconds(CatchUpConfiguration.MAX_PROBE_TIMEOUT_SECONDS);
+        CatchUpConfiguration config = builder.build();
+        assertEquals(CatchUpConfiguration.MAX_PROBE_TIMEOUT_SECONDS, config.getProbeTimeoutSeconds());
+    }
+
+    @Test
+    void testCatchUpConfigurationProbeTimeoutExceedsMaxThrows() {
+        CatchUpConfiguration.Builder builder = new CatchUpConfiguration.Builder();
+        builder.setCatchUpWindowSizeSeconds(3600);
+        assertThrows(IllegalArgumentException.class, () ->
+                builder.setProbeTimeoutSeconds(CatchUpConfiguration.MAX_PROBE_TIMEOUT_SECONDS + 1));
     }
 
     @Test
@@ -229,5 +249,41 @@ class CatchUpUtilsTest {
                 Optional.of(table));
         assertTrue(result.isPresent());
         assertEquals(target, result.get());
+    }
+
+    // --- MasterConfiguration.computeCatchUpCutoff delegation test ---
+
+    @Test
+    void testMasterConfigurationComputeCatchUpCutoff() {
+        Instant now = Instant.parse("2025-01-01T00:01:00Z");
+        Clock clock = Clock.fixed(now, ZoneOffset.UTC);
+        TableName table = new TableName("ks", "tbl");
+
+        MasterConfiguration config = MasterConfiguration.builder()
+                .withCQL(new MockMasterCQL())
+                .withTransport(new MockMasterTransport())
+                .addTable(table)
+                .withClock(clock)
+                .withCatchUpWindowSizeSeconds(60)
+                .build();
+
+        Optional<Date> cutoff = config.computeCatchUpCutoff();
+        assertTrue(cutoff.isPresent());
+        assertEquals(Date.from(Instant.parse("2025-01-01T00:00:00Z")), cutoff.get());
+    }
+
+    @Test
+    void testMasterConfigurationComputeCatchUpCutoffDisabled() {
+        Clock clock = Clock.fixed(Instant.parse("2025-01-01T00:00:00Z"), ZoneOffset.UTC);
+        TableName table = new TableName("ks", "tbl");
+
+        MasterConfiguration config = MasterConfiguration.builder()
+                .withCQL(new MockMasterCQL())
+                .withTransport(new MockMasterTransport())
+                .addTable(table)
+                .withClock(clock)
+                .build();
+
+        assertFalse(config.computeCatchUpCutoff().isPresent());
     }
 }

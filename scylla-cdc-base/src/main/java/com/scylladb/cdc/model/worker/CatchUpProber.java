@@ -53,11 +53,17 @@ final class CatchUpProber {
     private final WorkerCQL cql;
     private final long queryTimeWindowSizeMs;
     private final long probeTimeoutSeconds;
+    private final int maxConcurrentProbes;
 
     CatchUpProber(WorkerCQL cql, long queryTimeWindowSizeMs, long probeTimeoutSeconds) {
+        this(cql, queryTimeWindowSizeMs, probeTimeoutSeconds, MAX_CONCURRENT_PROBES);
+    }
+
+    CatchUpProber(WorkerCQL cql, long queryTimeWindowSizeMs, long probeTimeoutSeconds, int maxConcurrentProbes) {
         this.cql = cql;
         this.queryTimeWindowSizeMs = queryTimeWindowSizeMs;
         this.probeTimeoutSeconds = probeTimeoutSeconds;
+        this.maxConcurrentProbes = maxConcurrentProbes;
     }
 
     private static final class ProbeCandidate {
@@ -81,7 +87,12 @@ final class CatchUpProber {
      */
     List<Task> apply(List<Task> tasks, Map<TaskId, TaskState> states,
                GroupedTasks workerTasks, Optional<Date> catchUpCutoffOpt) {
-        if (!catchUpCutoffOpt.isPresent() || !workerTasks.getGenerationMetadata().isClosed()) {
+        if (!catchUpCutoffOpt.isPresent()) {
+            return tasks;
+        }
+        if (!workerTasks.getGenerationMetadata().isClosed()) {
+            logger.atFine().log("Catch-up probing skipped: generation %s is still open",
+                    workerTasks.getGenerationId());
             return tasks;
         }
 
@@ -112,7 +123,7 @@ final class CatchUpProber {
     }
 
     private List<CompletableFuture<Optional<Timestamp>>> dispatchProbes(List<ProbeCandidate> candidates) {
-        Semaphore probeSemaphore = new Semaphore(MAX_CONCURRENT_PROBES);
+        Semaphore probeSemaphore = new Semaphore(maxConcurrentProbes);
         boolean interrupted = false;
         List<CompletableFuture<Optional<Timestamp>>> probeFutures = new ArrayList<>();
         for (ProbeCandidate c : candidates) {
@@ -161,32 +172,9 @@ final class CatchUpProber {
         int advanced = 0;
         for (int j = 0; j < candidates.size(); j++) {
             ProbeCandidate candidate = candidates.get(j);
-            Optional<Timestamp> probeResult;
-            try {
-                probeResult = probeFutures.get(j).get(probeTimeoutSeconds, TimeUnit.SECONDS);
-            } catch (TimeoutException e) {
-                probeFutures.get(j).cancel(true);
-                logger.atWarning().log(
-                        "Catch-up probe timed out for task %s after %d seconds, falling back to original window start",
-                        candidate.task.id, probeTimeoutSeconds);
-                continue;
-            } catch (ExecutionException e) {
-                Throwable cause = e.getCause();
-                if (cause instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
-                    logger.atWarning().log("Catch-up probe interrupted for task %s, aborting remaining probes",
-                            candidate.task.id);
-                    cancelRemainingProbes(probeFutures, j + 1);
-                    break;
-                }
-                logger.atWarning().withCause(cause).log(
-                        "Catch-up probe failed for task %s, falling back to original window start",
-                        candidate.task.id);
-                continue;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                logger.atWarning().log("Catch-up probe interrupted for task %s, falling back to original window start",
-                        candidate.task.id);
+            Optional<Timestamp> probeResult = collectSingleResult(candidate, probeFutures, j);
+            if (probeResult == null) {
+                // Interrupted — cancel remaining and stop.
                 cancelRemainingProbes(probeFutures, j + 1);
                 break;
             }
@@ -195,7 +183,7 @@ final class CatchUpProber {
                 if (clamped.compareTo(candidate.task.state.getWindowStartTimestamp()) > 0) {
                     TaskState newState = TaskState.createForWindow(clamped, queryTimeWindowSizeMs);
                     replacements.put(candidate.index, new Task(candidate.task.id, candidate.task.streams, newState));
-                    logger.atInfo().log("Catch-up probe: advancing task %s from %s to %s",
+                    logger.atFine().log("Catch-up probe: advancing task %s from %s to %s",
                             candidate.task.id, candidate.task.state.getWindowStartTimestamp(), clamped);
                     advanced++;
                 }
@@ -207,6 +195,41 @@ final class CatchUpProber {
                     candidates.size(), advanced);
         }
         return replacements;
+    }
+
+    /**
+     * Collects the probe result for a single candidate. Returns {@code null} if the
+     * thread was interrupted (caller should break). Returns {@code Optional.empty()}
+     * if the probe timed out, failed, or found no data.
+     */
+    private Optional<Timestamp> collectSingleResult(ProbeCandidate candidate,
+            List<CompletableFuture<Optional<Timestamp>>> probeFutures, int index) {
+        try {
+            return probeFutures.get(index).get(probeTimeoutSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            probeFutures.get(index).cancel(true);
+            logger.atWarning().log(
+                    "Catch-up probe timed out for task %s after %d seconds, falling back to original window start",
+                    candidate.task.id, probeTimeoutSeconds);
+            return Optional.empty();
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                logger.atWarning().log("Catch-up probe interrupted for task %s, aborting remaining probes",
+                        candidate.task.id);
+                return null;
+            }
+            logger.atWarning().withCause(cause).log(
+                    "Catch-up probe failed for task %s, falling back to original window start",
+                    candidate.task.id);
+            return Optional.empty();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.atWarning().log("Catch-up probe interrupted for task %s, falling back to original window start",
+                    candidate.task.id);
+            return null;
+        }
     }
 
     /**

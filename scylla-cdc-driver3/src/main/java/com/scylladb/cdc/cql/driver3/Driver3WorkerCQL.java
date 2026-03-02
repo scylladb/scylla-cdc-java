@@ -48,6 +48,7 @@ public class Driver3WorkerCQL implements WorkerCQL {
     // Lazily populated when fetchFirstChangeTime is called. An empty ConcurrentHashMap
     // has negligible overhead, so eager allocation is acceptable.
     private final Map<TableName, PreparedStatement> probeStmts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<TableName, CompletableFuture<PreparedStatement>> probeFutures = new ConcurrentHashMap<>();
     private final ConsistencyLevel consistencyLevel;
 
     public Driver3WorkerCQL(Driver3Session session) {
@@ -290,19 +291,21 @@ public class Driver3WorkerCQL implements WorkerCQL {
         if (existing != null) {
             return CompletableFuture.completedFuture(existing);
         }
-        CompletableFuture<PreparedStatement> result = new CompletableFuture<>();
-        Futures.addCallback(session.prepareAsync(getProbeStmt(table)), new FutureCallback<PreparedStatement>() {
-            @Override
-            public void onSuccess(PreparedStatement r) {
-                probeStmts.putIfAbsent(table, r);
-                result.complete(probeStmts.get(table));
-            }
-            @Override
-            public void onFailure(Throwable t) {
-                result.completeExceptionally(t);
-            }
-        }, MoreExecutors.directExecutor());
-        return result;
+        return probeFutures.computeIfAbsent(table, tbl -> {
+            CompletableFuture<PreparedStatement> result = new CompletableFuture<>();
+            Futures.addCallback(session.prepareAsync(getProbeStmt(tbl)), new FutureCallback<PreparedStatement>() {
+                @Override
+                public void onSuccess(PreparedStatement r) {
+                    probeStmts.putIfAbsent(tbl, r);
+                    result.complete(probeStmts.get(tbl));
+                }
+                @Override
+                public void onFailure(Throwable ex) {
+                    result.completeExceptionally(ex);
+                }
+            }, MoreExecutors.directExecutor());
+            return result;
+        });
     }
 
     @Override
@@ -326,7 +329,7 @@ public class Driver3WorkerCQL implements WorkerCQL {
             ResultSetFuture future = session.executeAsync(
                     stmt.bind(streamId.getValue(), com.datastax.driver.core.utils.UUIDs.startOf(after.toDate().getTime()))
                             .setConsistencyLevel(ConsistencyLevel.LOCAL_ONE)
-                            .setReadTimeoutMillis((int) readTimeoutMs)
+                            .setReadTimeoutMillis((int) Math.min(readTimeoutMs, Integer.MAX_VALUE))
                             .setFetchSize(1));
             Futures.addCallback(future, new FutureCallback<ResultSet>() {
                 @Override

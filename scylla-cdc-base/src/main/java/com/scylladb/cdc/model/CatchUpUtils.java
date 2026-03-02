@@ -32,7 +32,9 @@ public final class CatchUpUtils {
         }
         Date now = Date.from(clock.instant());
         long cutoffMs = now.getTime() - TimeUnit.SECONDS.toMillis(catchUpWindowSizeSeconds);
-        return Optional.of(new Date(Math.max(cutoffMs, 0)));
+        Date cutoff = new Date(Math.max(cutoffMs, 0));
+        logger.atFine().log("Catch-up cutoff computed: %s (now=%s, window=%d seconds)", cutoff, now, catchUpWindowSizeSeconds);
+        return Optional.of(cutoff);
     }
 
     /**

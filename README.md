@@ -126,8 +126,11 @@ CDCConsumer.builder()
         // ...
         .withCatchUpWindow(Duration.ofHours(1))
         .withProbeTimeoutSeconds(60)  // increase timeout for slow clusters
+        // or equivalently: .withProbeTimeout(Duration.ofSeconds(60))
         .build();
 ```
+
+The default probe timeout is **30 seconds**. Increase it for clusters with large CDC partitions and many tombstones. The maximum allowed value is approximately 24 days.
 
 If a probe times out, the worker falls back to reading from the original window start for that task.
 
@@ -143,6 +146,10 @@ Probe queries scan CDC log partitions looking for the first non-expired row. On 
 ### Maximum catch-up window
 
 The catch-up window has a hard upper limit of **90 days** (`Duration.ofDays(90)`). Attempting to set a larger value will throw `IllegalArgumentException`.
+
+### Tablet-based CDC
+
+Catch-up optimization works with both vnode-based and tablet-based CDC. For vnode-based clusters, the master jumps to a recent generation. For tablet-based clusters, the master jumps to a recent per-table generation. In both cases, the worker probes streams to find the first change.
 
 ### Recommended values
 

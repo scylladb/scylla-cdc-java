@@ -1410,6 +1410,54 @@ public class WorkerTest {
         }
     }
 
+    @Test
+    public void testWorkerCatchUpWithSmallTTLStillFunctions() {
+        // When the table TTL is smaller than the catch-up window, the worker should
+        // log a warning but still function correctly.
+        // Generation: 5min - 10min, now: 8min, TTL: 120s (2min), catch-up: 5min
+        // TTL trims window start to max(genStart, now-ttl) = max(5min, 6min) = 6min
+        // Cutoff = now - catchUp = 8min - 5min = 3min. Window start (6min) > cutoff (3min), so no probing.
+        long genStartMs = 5 * 60 * 1000;
+        long genEndMs = 10 * 60 * 1000;
+        GenerationMetadata closedGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(genStartMs)), Optional.of(new Timestamp(new Date(genEndMs))),
+                1, 1);
+
+        long nowMs = 8 * 60 * 1000;    // 8 minutes
+        long catchUpSeconds = 5 * 60;   // 5 minutes
+        long ttlSeconds = 120;           // 2 minutes (smaller than catch-up)
+        Clock clock = Clock.fixed(Instant.ofEpochMilli(nowMs), ZoneOffset.systemDefault());
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+        mockWorkerCQL.setTablesTTL(Collections.singletonMap(TEST_TABLE_NAME, Optional.of(ttlSeconds)));
+        Consumer noOpConsumer = Consumer.syncRawChangeConsumer(c -> {});
+
+        WorkerConfiguration config = WorkerConfiguration.builder()
+                .withCQL(mockWorkerCQL)
+                .withTransport(workerTransport)
+                .withConsumer(noOpConsumer)
+                .withQueryTimeWindowSizeMs(DEFAULT_QUERY_WINDOW_SIZE_MS)
+                .withConfidenceWindowSizeMs(DEFAULT_CONFIDENCE_WINDOW_SIZE_MS)
+                .withClock(clock)
+                .withCatchUpWindowSizeSeconds(catchUpSeconds)
+                .build();
+
+        GroupedTasks groupedTasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                closedGeneration, Collections.singleton(TEST_TABLE_NAME));
+
+        try (WorkerThread workerThread = new WorkerThread(config, groupedTasks)) {
+            // TTL trimming moves window start to 6min. Cutoff is 3min.
+            // Since window start (6min) is after cutoff (3min), no probing needed.
+            // Worker should start reading from the TTL-trimmed position.
+            long ttlTrimmedMs = nowMs - ttlSeconds * 1000; // 6 minutes
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(closedGeneration, 0, TEST_TABLE_NAME,
+                    ttlTrimmedMs, ttlTrimmedMs + DEFAULT_QUERY_WINDOW_SIZE_MS)));
+            // No probes needed since the trimmed window is recent enough
+            assertEquals(0, mockWorkerCQL.getProbeInvocationCount());
+        }
+    }
+
     private Task generateTask(GenerationMetadata generationMetadata, int vnodeIndex, TableName tableName,
                               long windowStartMs, long windowEndMs) {
         VNodeId vnodeId = new VNodeId(vnodeIndex);

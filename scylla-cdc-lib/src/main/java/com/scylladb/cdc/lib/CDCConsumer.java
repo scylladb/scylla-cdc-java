@@ -279,6 +279,18 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Sets the timeout for individual catch-up probe operations using a
+         * {@link Duration}. Equivalent to {@link #withProbeTimeoutSeconds(long)}.
+         *
+         * @param probeTimeout the probe timeout duration (must be positive)
+         * @return this builder
+         */
+        public Builder withProbeTimeout(Duration probeTimeout) {
+            workerConfigurationBuilder.withProbeTimeout(probeTimeout);
+            return this;
+        }
+
         public Builder withSleepAfterExceptionMs(long sleepAfterExceptionMs) {
             masterConfigurationBuilder.withSleepAfterExceptionMs(sleepAfterExceptionMs);
             return this;
