@@ -2,12 +2,16 @@ package com.scylladb.cdc.model.master;
 
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.MasterCQL;
+import com.scylladb.cdc.model.CatchUpConfiguration;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.transport.MasterTransport;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -15,7 +19,6 @@ public class MasterConfiguration {
     public static final long DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS = TimeUnit.SECONDS.toMillis(30);
     public static final long DEFAULT_SLEEP_AFTER_EXCEPTION_MS = TimeUnit.SECONDS.toMillis(10);
-
     public final MasterTransport transport;
     public final MasterCQL cql;
     public final Set<TableName> tables;
@@ -24,9 +27,11 @@ public class MasterConfiguration {
     public final long sleepBeforeFirstGenerationMs;
     public final long sleepBeforeGenerationDoneMs;
     public final long sleepAfterExceptionMs;
+    public final CatchUpConfiguration catchUpConfig;
 
     private MasterConfiguration(MasterTransport transport, MasterCQL cql, Set<TableName> tables, Clock clock,
-                               long sleepBeforeFirstGenerationMs, long sleepBeforeGenerationDoneMs, long sleepAfterExceptionMs) {
+                               long sleepBeforeFirstGenerationMs, long sleepBeforeGenerationDoneMs, long sleepAfterExceptionMs,
+                               CatchUpConfiguration catchUpConfig) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.tables = Preconditions.checkNotNull(tables);
@@ -39,6 +44,16 @@ public class MasterConfiguration {
         Preconditions.checkArgument(sleepBeforeGenerationDoneMs >= 0);
         this.sleepAfterExceptionMs = sleepAfterExceptionMs;
         Preconditions.checkArgument(sleepAfterExceptionMs >= 0);
+        this.catchUpConfig = Preconditions.checkNotNull(catchUpConfig);
+    }
+
+    /**
+     * Computes the catch-up cutoff date based on the current time and
+     * the configured catch-up window size. Returns empty if catch-up
+     * is disabled (catchUpWindowSizeSeconds == 0).
+     */
+    public Optional<Date> computeCatchUpCutoff() {
+        return catchUpConfig.computeCatchUpCutoff(clock);
     }
 
     public static Builder builder() {
@@ -53,6 +68,8 @@ public class MasterConfiguration {
         private long sleepBeforeFirstGenerationMs = DEFAULT_SLEEP_BEFORE_FIRST_GENERATION_MS;
         private long sleepBeforeGenerationDoneMs = DEFAULT_SLEEP_BEFORE_GENERATION_DONE_MS;
         private long sleepAfterExceptionMs = DEFAULT_SLEEP_AFTER_EXCEPTION_MS;
+
+        private final CatchUpConfiguration.Builder catchUpHelper = new CatchUpConfiguration.Builder();
 
         private Clock clock = Clock.systemDefaultZone();
 
@@ -97,6 +114,33 @@ public class MasterConfiguration {
             return this;
         }
 
+        /**
+         * Sets the catch-up window size in seconds. When greater than zero,
+         * enables catch-up optimization for first-time startup, allowing the
+         * master to jump directly to a recent generation instead of iterating
+         * through all old generations.
+         *
+         * @param catchUpWindowSizeSeconds the catch-up window size in seconds (0 = disabled)
+         * @return this builder
+         */
+        public Builder withCatchUpWindowSizeSeconds(long catchUpWindowSizeSeconds) {
+            catchUpHelper.setCatchUpWindowSizeSeconds(catchUpWindowSizeSeconds);
+            return this;
+        }
+
+        /**
+         * Sets the catch-up window size using a {@link Duration}. This is
+         * equivalent to {@link #withCatchUpWindowSizeSeconds(long)} but more
+         * idiomatic for Java 8+ callers. Sub-second precision is truncated.
+         *
+         * @param catchUpWindow the catch-up window duration (0 = disabled)
+         * @return this builder
+         */
+        public Builder withCatchUpWindow(Duration catchUpWindow) {
+            catchUpHelper.setCatchUpWindow(catchUpWindow);
+            return this;
+        }
+
         public Builder withClock(Clock clock) {
             this.clock = Preconditions.checkNotNull(clock);
             return this;
@@ -104,7 +148,8 @@ public class MasterConfiguration {
 
         public MasterConfiguration build() {
             return new MasterConfiguration(transport, cql, tables, clock,
-                    sleepBeforeFirstGenerationMs, sleepBeforeGenerationDoneMs, sleepAfterExceptionMs);
+                    sleepBeforeFirstGenerationMs, sleepBeforeGenerationDoneMs, sleepAfterExceptionMs,
+                    catchUpHelper.build());
         }
     }
 }

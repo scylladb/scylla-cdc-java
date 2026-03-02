@@ -2,6 +2,7 @@ package com.scylladb.cdc.lib;
 
 import java.net.InetSocketAddress;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
@@ -223,6 +224,73 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Sets the catch-up window size in seconds. When greater than zero,
+         * enables catch-up optimization for first-time startup:
+         * <ul>
+         *   <li>Master jumps directly to a recent generation instead of iterating all old ones</li>
+         *   <li>Worker skips empty windows in closed generations when the window is older than the threshold</li>
+         * </ul>
+         * Default is 0 (disabled, backward compatible).
+         *
+         * @param catchUpWindowSizeSeconds the catch-up window size in seconds (0 = disabled)
+         * @return this builder
+         */
+        public Builder withCatchUpWindowSizeSeconds(long catchUpWindowSizeSeconds) {
+            masterConfigurationBuilder.withCatchUpWindowSizeSeconds(catchUpWindowSizeSeconds);
+            workerConfigurationBuilder.withCatchUpWindowSizeSeconds(catchUpWindowSizeSeconds);
+            return this;
+        }
+
+        /**
+         * Sets the catch-up window size using a {@link Duration}. This is
+         * equivalent to {@link #withCatchUpWindowSizeSeconds(long)} but more
+         * idiomatic for Java 8+ callers.
+         *
+         * @param catchUpWindow the catch-up window duration (0 = disabled)
+         * @return this builder
+         */
+        public Builder withCatchUpWindow(Duration catchUpWindow) {
+            masterConfigurationBuilder.withCatchUpWindow(catchUpWindow);
+            workerConfigurationBuilder.withCatchUpWindow(catchUpWindow);
+            return this;
+        }
+
+        /**
+         * Disables catch-up optimization. Equivalent to
+         * {@code withCatchUpWindowSizeSeconds(0)}.
+         *
+         * @return this builder
+         */
+        public Builder withCatchUpDisabled() {
+            return withCatchUpWindowSizeSeconds(0);
+        }
+
+        /**
+         * Sets the timeout in seconds for individual catch-up probe operations.
+         * On slow clusters with many tombstones, probes may take longer than
+         * the default 30 seconds.
+         *
+         * @param probeTimeoutSeconds the probe timeout in seconds (must be positive)
+         * @return this builder
+         */
+        public Builder withProbeTimeoutSeconds(long probeTimeoutSeconds) {
+            workerConfigurationBuilder.withProbeTimeoutSeconds(probeTimeoutSeconds);
+            return this;
+        }
+
+        /**
+         * Sets the timeout for individual catch-up probe operations using a
+         * {@link Duration}. Equivalent to {@link #withProbeTimeoutSeconds(long)}.
+         *
+         * @param probeTimeout the probe timeout duration (must be positive)
+         * @return this builder
+         */
+        public Builder withProbeTimeout(Duration probeTimeout) {
+            workerConfigurationBuilder.withProbeTimeout(probeTimeout);
+            return this;
+        }
+
         public Builder withSleepAfterExceptionMs(long sleepAfterExceptionMs) {
             masterConfigurationBuilder.withSleepAfterExceptionMs(sleepAfterExceptionMs);
             return this;
@@ -253,6 +321,7 @@ public final class CDCConsumer implements AutoCloseable {
          */
         public Builder withClock(Clock clock) {
             workerConfigurationBuilder.withClock(clock);
+            masterConfigurationBuilder.withClock(clock);
             return this;
         }
 

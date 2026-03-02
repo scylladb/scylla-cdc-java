@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutionException;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
+import com.scylladb.cdc.model.CatchUpUtils;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -35,6 +36,17 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
         if (generationId.isPresent()) {
             return generationId.get();
         }
+
+        // If catch-up is enabled, try to jump directly to a recent generation
+        // instead of iterating through all old ones.
+        Optional<GenerationId> jumpTarget = CatchUpUtils.tryJumpToRecentGeneration(
+                masterConfiguration.computeCatchUpCutoff(),
+                cutoff -> masterConfiguration.cql.fetchLastGenerationBeforeOrAt(cutoff),
+                Optional.empty());
+        if (jumpTarget.isPresent()) {
+            return jumpTarget.get();
+        }
+
         while (true) {
             generationId = masterConfiguration.cql.fetchFirstGenerationId().get();
             if (generationId.isPresent()) {
@@ -53,7 +65,8 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
             return true;
         }
 
-        return masterConfiguration.transport.areTasksFullyConsumedUntil(tasks, generation.getEnd().get());
+        return masterConfiguration.transport.areTasksFullyConsumedUntil(tasks,
+                generation.getEnd().orElseThrow(() -> new IllegalStateException("Expected closed generation to have an end timestamp")));
     }
 
     private boolean generationTTLExpired(GenerationMetadata generation) throws ExecutionException, InterruptedException {
@@ -89,7 +102,9 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
                 .min(Comparator.naturalOrder())
                 .orElse(new Date(0));
 
-        return lastVisibleChanges.after(generation.getEnd().get().toDate());
+        return lastVisibleChanges.after(generation.getEnd()
+                .orElseThrow(() -> new IllegalStateException("Expected closed generation to have an end timestamp"))
+                .toDate());
     }
 
     private GenerationMetadata getNextGeneration(GenerationMetadata generation)
