@@ -18,10 +18,11 @@ import java.util.SortedSet;
  */
 public class GroupedTasks {
     private final Map<TaskId, SortedSet<StreamId>> tasks;
-    private final GenerationMetadata generationMetadata;
+    private final GenerationId generationId;
+    private final GenerationMetadata generationMetadata; // nullable
 
     /**
-     * Creates a new WorkerTasks with the given task configurations.
+     * Creates a new GroupedTasks with the given task configurations and full generation metadata.
      *
      * @param tasks a map of task IDs to their sorted stream IDs
      * @param generationMetadata the metadata of the generation these tasks belong to
@@ -32,7 +33,28 @@ public class GroupedTasks {
         Preconditions.checkArgument(tasks.keySet().stream().map(TaskId::getGenerationId)
             .allMatch(genId -> genId.equals(generationMetadata.getId())), "Tasks from different generations");
         this.tasks = new HashMap<>(tasks);
+        this.generationId = generationMetadata.getId();
         this.generationMetadata = generationMetadata;
+    }
+
+    /**
+     * Creates a new GroupedTasks with the given task configurations and generation ID only.
+     * <p>
+     * This constructor is useful for distributed transports where the worker side
+     * reconstructs tasks from serialized data without needing to re-fetch full
+     * generation metadata from the database.
+     *
+     * @param tasks a map of task IDs to their sorted stream IDs
+     * @param generationId the ID of the generation these tasks belong to
+     */
+    public GroupedTasks(Map<TaskId, SortedSet<StreamId>> tasks, GenerationId generationId) {
+        Preconditions.checkNotNull(tasks, "Tasks map cannot be null");
+        Preconditions.checkNotNull(generationId, "Generation ID cannot be null");
+        Preconditions.checkArgument(tasks.keySet().stream().map(TaskId::getGenerationId)
+            .allMatch(genId -> genId.equals(generationId)), "Tasks from different generations");
+        this.tasks = new HashMap<>(tasks);
+        this.generationId = generationId;
+        this.generationMetadata = null;
     }
 
     /**
@@ -73,25 +95,31 @@ public class GroupedTasks {
     }
 
     /**
-     * Returns the generation metadata for this worker tasks.
+     * Returns the generation metadata for this grouped tasks, or {@code null} if not available.
+     * <p>
+     * Generation metadata is present when the GroupedTasks was constructed with
+     * a {@link GenerationMetadata} instance (typically on the master side).
+     * It is {@code null} when reconstructed from serialized data on the worker side
+     * using the {@link #GroupedTasks(Map, GenerationId)} constructor.
      *
-     * @return the generation metadata
+     * @return the generation metadata, or {@code null} if not available
      */
     public GenerationMetadata getGenerationMetadata() {
         return generationMetadata;
     }
 
     /**
-     * Returns the generation ID for this worker tasks.
+     * Returns the generation ID for this grouped tasks. Always available regardless
+     * of which constructor was used.
      *
      * @return the generation ID
      */
     public GenerationId getGenerationId() {
-        return generationMetadata.getId();
+        return generationId;
     }
 
     @Override
     public String toString() {
-        return "WorkerTasks{tasks=" + tasks + ", generationId=" + generationMetadata.getId() + '}';
+        return "GroupedTasks{tasks=" + tasks + ", generationId=" + generationId + '}';
     }
 }
