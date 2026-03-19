@@ -26,6 +26,7 @@ public class GroupedTasksTest {
     private static final TableName TEST_TABLE = new TableName("ks", "t");
 
     @Test
+    @SuppressWarnings("deprecation") // covers the deprecated getGenerationMetadata() until it is removed
     public void testConstructWithGenerationMetadata() {
         GroupedTasks tasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
                 TEST_GENERATION, Collections.singleton(TEST_TABLE));
@@ -36,6 +37,7 @@ public class GroupedTasksTest {
     }
 
     @Test
+    @SuppressWarnings("deprecation") // covers the deprecated getGenerationMetadata() until it is removed
     public void testConstructWithGenerationIdOnly() {
         // Simulate what a distributed transport would do: reconstruct GroupedTasks
         // from serialized TaskId -> StreamId mapping + GenerationId, without
@@ -66,6 +68,7 @@ public class GroupedTasksTest {
     }
 
     @Test
+    @SuppressWarnings("deprecation") // covers the deprecated getGenerationMetadata() until it is removed
     public void testEmptyTasksWithGenerationId() {
         GenerationId generationId = TEST_GENERATION.getId();
         Map<TaskId, SortedSet<StreamId>> emptyTasks = new HashMap<>();

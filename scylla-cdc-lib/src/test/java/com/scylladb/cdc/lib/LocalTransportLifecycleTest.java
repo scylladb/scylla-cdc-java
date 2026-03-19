@@ -117,6 +117,23 @@ class LocalTransportLifecycleTest {
         assertTrue(executors.created.isEmpty());
     }
 
+    @Test
+    void tabletAssignmentWithGenerationIdOnlyRecordsTableGeneration() throws Exception {
+        // Distributed transports rebuild GroupedTasks from a GenerationId alone, so
+        // getGenerationMetadata() is null; the tablet path must rely on getGenerationId().
+        RecordingExecutorSupplier executors = new RecordingExecutorSupplier();
+        LocalTransport transport = transport(new PendingWorkerCQL(), executors);
+        GroupedTasks idOnlyTasks = new GroupedTasks(
+                tabletTasks(FIRST_TABLE).getTasks(), GENERATION);
+
+        transport.configureWorkers(FIRST_TABLE, idOnlyTasks);
+
+        assertEquals(Optional.of(GENERATION), transport.getCurrentGenerationId(FIRST_TABLE));
+        assertFalse(transport.isReadyToStart());
+        transport.stop();
+        assertTrue(executors.created.get(0).isTerminated());
+    }
+
     private static LocalTransport transport(WorkerCQL cql,
                                             Supplier<ScheduledExecutorService> executors) {
         WorkerConfiguration.Builder configuration = WorkerConfiguration.builder()

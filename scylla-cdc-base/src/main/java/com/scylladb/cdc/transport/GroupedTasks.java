@@ -15,7 +15,7 @@ import java.util.SortedSet;
 
 /**
  * Represents a set of tasks that are created together within the same generation and share
- * common generation metadata.
+ * a common generation ID.
  */
 public class GroupedTasks {
     private final Map<TaskId, SortedSet<StreamId>> tasks;
@@ -140,10 +140,18 @@ public class GroupedTasks {
      * Generation metadata is present when the GroupedTasks was constructed with
      * a {@link GenerationMetadata} instance (typically on the master side).
      * It is {@code null} when reconstructed from serialized data on the worker side
-     * using the {@link #GroupedTasks(Map, GenerationId)} constructor.
+     * using a constructor that takes a {@link GenerationId}.
      *
      * @return the generation metadata, or {@code null} if not available
+     * @deprecated The generation metadata is unnecessary coupling between master and worker code.
+     *             Use {@link #getGenerationId()} instead, which is always available regardless
+     *             of which constructor was used. Callers that need more than the ID (streams,
+     *             end timestamp, next generation) should fetch the metadata by ID, for example with
+     *             {@link com.scylladb.cdc.cql.MasterCQL#fetchGenerationMetadata(GenerationId)} or
+     *             {@link com.scylladb.cdc.cql.MasterCQL#fetchTableGenerationMetadata(com.scylladb.cdc.model.TableName, GenerationId)}.
+     *             This method will be removed in a future major release.
      */
+    @Deprecated
     public GenerationMetadata getGenerationMetadata() {
         return generationMetadata;
     }
