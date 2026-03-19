@@ -36,9 +36,6 @@ public class MockMasterTransport implements MasterTransport {
 
     private final AtomicInteger stopWorkersCount = new AtomicInteger(0);
 
-    // Store only the most recent generation metadata per table
-    private final Map<TableName, GenerationMetadata> tableGenerationMetadatas = new ConcurrentHashMap<>();
-
     public void setCurrentFullyConsumedTimestamp(Timestamp newTimestamp) {
         currentFullyConsumedTimestamp = Preconditions.checkNotNull(newTimestamp);
     }
@@ -115,16 +112,6 @@ public class MockMasterTransport implements MasterTransport {
         return tableGenerationIds.getOrDefault(tableName, Optional.empty());
     }
 
-    /**
-     * Gets the current generation metadata for a table
-     *
-     * @param tableName The table name
-     * @return The current generation metadata or null if not found
-     */
-    public GenerationMetadata getCurrentGenerationMetadata(TableName tableName) {
-        return tableGenerationMetadatas.get(tableName);
-    }
-
     @Override
     public void configureWorkers(TableName tableName, GroupedTasks workerTasks)
             throws InterruptedException {
@@ -139,9 +126,6 @@ public class MockMasterTransport implements MasterTransport {
         // Update the current generation ID for this table
         GenerationId genId = workerTasks.getGenerationId();
         tableGenerationIds.put(tableName, Optional.of(genId));
-
-        // Store the generation metadata (only most recent)
-        tableGenerationMetadatas.put(tableName, workerTasks.getGenerationMetadata());
     }
 
     @Override

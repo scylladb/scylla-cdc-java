@@ -14,12 +14,11 @@ import java.util.SortedSet;
 
 /**
  * Represents a set of tasks that are created together within the same generation and share
- * common generation metadata.
+ * a common generation ID.
  */
 public class GroupedTasks {
     private final Map<TaskId, SortedSet<StreamId>> tasks;
     private final GenerationId generationId;
-    private final GenerationMetadata generationMetadata; // nullable
 
     /**
      * Creates a new GroupedTasks with the given task configurations and full generation metadata.
@@ -34,7 +33,6 @@ public class GroupedTasks {
             .allMatch(genId -> genId.equals(generationMetadata.getId())), "Tasks from different generations");
         this.tasks = new HashMap<>(tasks);
         this.generationId = generationMetadata.getId();
-        this.generationMetadata = generationMetadata;
     }
 
     /**
@@ -54,7 +52,6 @@ public class GroupedTasks {
             .allMatch(genId -> genId.equals(generationId)), "Tasks from different generations");
         this.tasks = new HashMap<>(tasks);
         this.generationId = generationId;
-        this.generationMetadata = null;
     }
 
     /**
@@ -92,20 +89,6 @@ public class GroupedTasks {
      */
     public int size() {
         return tasks.size();
-    }
-
-    /**
-     * Returns the generation metadata for this grouped tasks, or {@code null} if not available.
-     * <p>
-     * Generation metadata is present when the GroupedTasks was constructed with
-     * a {@link GenerationMetadata} instance (typically on the master side).
-     * It is {@code null} when reconstructed from serialized data on the worker side
-     * using the {@link #GroupedTasks(Map, GenerationId)} constructor.
-     *
-     * @return the generation metadata, or {@code null} if not available
-     */
-    public GenerationMetadata getGenerationMetadata() {
-        return generationMetadata;
     }
 
     /**
