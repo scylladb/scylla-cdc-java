@@ -1,15 +1,19 @@
 package com.scylladb.cdc.model.worker;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
@@ -17,7 +21,6 @@ import java.util.stream.Stream;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
-import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
@@ -29,6 +32,7 @@ public final class Worker {
 
     private final WorkerConfiguration workerConfiguration;
     private volatile boolean shouldStop = false;
+    private final Set<TableName> catchUpTtlWarningLoggedTables = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     public Worker(WorkerConfiguration workerConfiguration) {
         this.workerConfiguration = Preconditions.checkNotNull(workerConfiguration);
@@ -70,25 +74,41 @@ public final class Worker {
             Optional<Long> ttl = workerConfiguration.cql.fetchTableTTL(tableName).get();
             Date minimumWindowStart = new Date(0);
             if (ttl.isPresent()) {
-                minimumWindowStart = new Date(now.getTime() - 1000L * ttl.get()); // TTL is in seconds, getTime() in milliseconds
+                minimumWindowStart = new Date(now.getTime() - SECONDS.toMillis(ttl.get()));
+                long catchUpSeconds = workerConfiguration.catchUpConfig.getCatchUpWindowSizeSeconds();
+                if (catchUpSeconds > 0 && catchUpSeconds > ttl.get() && catchUpTtlWarningLoggedTables.add(tableName)) {
+                    logger.atWarning().log("Table %s has TTL of %d seconds but catch-up window is %d seconds. "
+                            + "The catch-up window exceeds the table TTL, so some CDC data may have expired "
+                            + "before it can be consumed. Consider setting catchUpWindow <= table TTL.",
+                            tableName, ttl.get(), catchUpSeconds);
+                }
             }
             minimumWindowStarts.put(tableName, new Timestamp(minimumWindowStart));
         }
 
-        return taskMap.entrySet().stream().map(taskStreams -> {
+        // Build the task list first, then optionally probe for catch-up.
+        List<Task> tasks = taskMap.entrySet().stream().map(taskStreams -> {
             TaskId id = taskStreams.getKey();
             SortedSet<StreamId> streams = taskStreams.getValue();
             TaskState state = states.getOrDefault(id, initialState);
             state = state.trimTaskState(minimumWindowStarts.get(id.getTable()), workerConfiguration.queryTimeWindowSizeMs);
-
-            // set the task state in the transport before it is queued.
-            // this is necessary because the existence of state in the transport is used to indicate
-            // whether a task is active or should be aborted. if the task is executed and sees there
-            // is no state in transport then it will abort itself.
-            workerConfiguration.transport.setState(id, state);
-
             return new Task(id, streams, state);
-        });
+        }).collect(Collectors.toList());
+
+        // Catch-up optimization: probe for the first change time in closed
+        // generations when the window start is far in the past.
+        tasks = workerConfiguration.createCatchUpProber()
+                .apply(tasks, states, workerTasks, workerConfiguration.computeCatchUpCutoff());
+
+        // Set the task state in the transport before it is queued.
+        // This is necessary because the existence of state in the transport is used to indicate
+        // whether a task is active or should be aborted. If the task is executed and sees there
+        // is no state in transport then it will abort itself.
+        for (Task task : tasks) {
+            workerConfiguration.transport.setState(task.id, task.state);
+        }
+
+        return tasks.stream();
     }
 
     /*
@@ -163,6 +183,10 @@ public final class Worker {
      */
     public void run(GroupedTasks workerTasks) throws InterruptedException, ExecutionException {
         Preconditions.checkNotNull(workerTasks, "Worker tasks cannot be null");
+        if (workerConfiguration.catchUpConfig.isEnabled()) {
+            logger.atInfo().log("Worker starting with catch-up optimization enabled (window: %d seconds)",
+                    workerConfiguration.catchUpConfig.getCatchUpWindowSizeSeconds());
+        }
         Map<TaskId, SortedSet<StreamId>> taskMap = workerTasks.getTasks();
         if (taskMap.isEmpty()) {
             logger.atSevere().log(String.format("Worker was given an empty set of tasks to run (Generation %s). " +

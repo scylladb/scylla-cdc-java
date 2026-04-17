@@ -822,4 +822,176 @@ public class MasterTest {
     private void awaitAreTasksFullyConsumedUntilInvocations(MockMasterTransport transport, int count) {
         awaitInvocationIncrease(transport::getAreTasksFullyConsumedUntilCount, count);
     }
+
+    @Test
+    public void testMasterJumpsToRecentGenerationOnCatchUp() {
+        // With catchUpWindowSizeSeconds > 0 and many old generations,
+        // master should jump directly to a recent generation.
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL(TEST_SET_THREE_GENERATIONS);
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+
+        // The generations are (in minutes after epoch):
+        //  5 - 10
+        // 10 - 30
+        // 30 - infinity
+        // Clock at minute 32, catchUp = 3 minutes → cutoff at minute 29
+        // Latest generation at or before minute 29 is generation at minute 10
+        Clock simulatedTime = Clock.fixed(mockTimestamp(32).toDate().toInstant(), ZoneOffset.systemDefault());
+        long catchUpSeconds = 3 * 60; // 3 minutes
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames, simulatedTime, catchUpSeconds)) {
+            // Should jump to generation starting at minute 10 (the latest at or before minute 29)
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_THREE_GENERATIONS.get(1), tableNames);
+
+            masterTransport.setGenerationFullyConsumed(TEST_SET_THREE_GENERATIONS.get(1));
+
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_THREE_GENERATIONS.get(2), tableNames);
+        }
+    }
+
+    @Test
+    public void testMasterJumpsToRecentGenerationTabletMode() {
+        // Same as above but for tablet mode.
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL();
+        masterCQL.setUsesTablets(true);
+
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+        TableName testTable = tableNames.iterator().next();
+
+        // Use three generations:
+        //  5 - 10
+        // 10 - 30
+        // 30 - infinity
+        masterCQL.setTableGenerationMetadatas(TEST_TABLE_THREE_GENERATIONS);
+
+        // Clock at minute 32, catchUp = 3 minutes → cutoff at minute 29
+        Clock simulatedTime = Clock.fixed(mockTimestamp(32).toDate().toInstant(), ZoneOffset.systemDefault());
+        long catchUpSeconds = 3 * 60;
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames, simulatedTime, catchUpSeconds)) {
+            List<GenerationMetadata> generations = TEST_TABLE_THREE_GENERATIONS.get(testTable);
+
+            // Should jump to generation at minute 10
+            masterTransportTracker.awaitConfigureWorkers(testTable, generations.get(1));
+
+            masterTransport.setGenerationFullyConsumed(generations.get(1));
+
+            masterTransportTracker.awaitConfigureWorkers(testTable, generations.get(2));
+        }
+    }
+
+    @Test
+    public void testMasterCatchUpDisabledByDefault() {
+        // With catchUpWindowSizeSeconds = 0 (default), master should start from the first generation.
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL(TEST_SET_THREE_GENERATIONS);
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+
+        Clock simulatedTime = Clock.fixed(mockTimestamp(32).toDate().toInstant(), ZoneOffset.systemDefault());
+
+        // Default catchUpWindowSizeSeconds = 0
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames, simulatedTime)) {
+            // Should start from the first generation (minute 5), NOT jump
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_THREE_GENERATIONS.get(0), tableNames);
+        }
+    }
+
+    @Test
+    public void testMasterCatchUpFallsBackOnCQLFailure() {
+        // When catch-up CQL query throws, the master should fall back to
+        // normal generation iteration instead of crashing.
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL(TEST_SET_THREE_GENERATIONS);
+        masterCQL.setShouldInjectCatchUpFailure(true);
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+
+        Clock simulatedTime = Clock.fixed(mockTimestamp(32).toDate().toInstant(), ZoneOffset.systemDefault());
+        long catchUpSeconds = 3 * 60;
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames, simulatedTime, catchUpSeconds)) {
+            // Despite catch-up failure, master should fall back and start from the first generation
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_THREE_GENERATIONS.get(0), tableNames);
+        }
+    }
+
+    @Test
+    public void testMasterCatchUpFallsBackOnCQLFailureTabletMode() {
+        // Same as above but for tablet mode.
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL();
+        masterCQL.setUsesTablets(true);
+        masterCQL.setShouldInjectCatchUpFailure(true);
+
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+        TableName testTable = tableNames.iterator().next();
+
+        masterCQL.setTableGenerationMetadatas(TEST_TABLE_THREE_GENERATIONS);
+
+        Clock simulatedTime = Clock.fixed(mockTimestamp(32).toDate().toInstant(), ZoneOffset.systemDefault());
+        long catchUpSeconds = 3 * 60;
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames, simulatedTime, catchUpSeconds)) {
+            List<GenerationMetadata> generations = TEST_TABLE_THREE_GENERATIONS.get(testTable);
+            // Despite catch-up failure, master should fall back and start from the first generation
+            masterTransportTracker.awaitConfigureWorkers(testTable, generations.get(0));
+        }
+    }
+
+    @Test
+    public void testMasterCatchUpMultiTable() {
+        // Verify catch-up works when multiple tables are configured (vnode mode).
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL(TEST_SET_THREE_GENERATIONS);
+        Set<TableName> tableNames = TEST_SET_TWO_TABLES;
+
+        // Clock at minute 32, catchUp = 3 minutes → cutoff at minute 29
+        // Latest generation at or before minute 29 is generation at minute 10
+        Clock simulatedTime = Clock.fixed(mockTimestamp(32).toDate().toInstant(), ZoneOffset.systemDefault());
+        long catchUpSeconds = 3 * 60;
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames, simulatedTime, catchUpSeconds)) {
+            // Should jump to generation starting at minute 10 for both tables
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_THREE_GENERATIONS.get(1), tableNames);
+
+            masterTransport.setGenerationFullyConsumed(TEST_SET_THREE_GENERATIONS.get(1));
+
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_THREE_GENERATIONS.get(2), tableNames);
+        }
+    }
+
+    @Test
+    public void testMasterCatchUpFallsBackWhenNoGenerationBeforeCutoff() {
+        // When catch-up is enabled but the cutoff is before ALL generations,
+        // fetchLastGenerationBeforeOrAt returns empty and the code falls through
+        // to the normal retry loop, eventually finding the first generation.
+        MockMasterTransport masterTransport = new MockMasterTransport();
+        ConfigureWorkersTracker masterTransportTracker = masterTransport.tracker(DEFAULT_AWAIT);
+
+        MockMasterCQL masterCQL = new MockMasterCQL(TEST_SET_THREE_GENERATIONS);
+        Set<TableName> tableNames = TEST_SET_SINGLE_TABLE;
+
+        // Generations start at minute 5. Set clock at minute 6, catchUp = 3 minutes → cutoff at minute 3
+        // No generation exists at or before minute 3, so fetchLastGenerationBeforeOrAt returns empty.
+        Clock simulatedTime = Clock.fixed(mockTimestamp(6).toDate().toInstant(), ZoneOffset.systemDefault());
+        long catchUpSeconds = 3 * 60; // 3 minutes
+
+        try (MasterThread masterThread = new MasterThread(masterTransport, masterCQL, tableNames, simulatedTime, catchUpSeconds)) {
+            // Should fall back to normal behavior and start from the first generation (minute 5)
+            masterTransportTracker.awaitConfigureWorkers(TEST_SET_THREE_GENERATIONS.get(0), tableNames);
+        }
+    }
 }

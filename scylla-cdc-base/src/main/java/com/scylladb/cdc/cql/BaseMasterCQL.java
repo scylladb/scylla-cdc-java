@@ -25,9 +25,30 @@ public abstract class BaseMasterCQL implements MasterCQL {
 
     protected abstract CompletableFuture<Set<ByteBuffer>> fetchStreamsForTableGeneration(TableName table, Date generationStart);
 
+    protected abstract CompletableFuture<Optional<Date>> fetchLargestGenerationBeforeOrAt(Date cutoff);
+
+    protected abstract CompletableFuture<Optional<Date>> fetchLargestTableGenerationBeforeOrAt(TableName table, Date cutoff);
+
     @Override
     public CompletableFuture<Optional<GenerationId>> fetchFirstGenerationId() {
-        return fetchSmallestGenerationAfter(new Date(0))
+        return fetchFirstGenerationIdAfter(new Date(0));
+    }
+
+    @Override
+    public CompletableFuture<Optional<GenerationId>> fetchLastGenerationBeforeOrAt(Date cutoff) {
+        return fetchLargestGenerationBeforeOrAt(cutoff)
+                .thenApply(opt -> opt.map(t -> new GenerationId(new Timestamp(t))));
+    }
+
+    @Override
+    public CompletableFuture<Optional<GenerationId>> fetchLastTableGenerationBeforeOrAt(TableName table, Date cutoff) {
+        return fetchLargestTableGenerationBeforeOrAt(table, cutoff)
+                .thenApply(opt -> opt.map(t -> new GenerationId(new Timestamp(t))));
+    }
+
+    @Override
+    public CompletableFuture<Optional<GenerationId>> fetchFirstGenerationIdAfter(Date after) {
+        return fetchSmallestGenerationAfter(after)
                 .thenApply(opt -> opt.map(t -> new GenerationId(new Timestamp(t))));
     }
 
@@ -50,9 +71,14 @@ public abstract class BaseMasterCQL implements MasterCQL {
 
     @Override
     public CompletableFuture<GenerationId> fetchFirstTableGenerationId(TableName table) {
-        return fetchSmallestTableGenerationAfter(table, new Date(0))
+        return fetchFirstTableGenerationIdAfter(table, new Date(0));
+    }
+
+    @Override
+    public CompletableFuture<GenerationId> fetchFirstTableGenerationIdAfter(TableName table, Date after) {
+        return fetchSmallestTableGenerationAfter(table, after)
                 .thenApply(opt -> opt.map(t -> new GenerationId(new Timestamp(t)))
-                .orElseThrow(() -> new IllegalStateException("No generation found for table: " + table)));
+                .orElseThrow(() -> new IllegalStateException("No generation found for table: " + table + " after: " + after)));
     }
 
     @Override
