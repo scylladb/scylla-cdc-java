@@ -3,6 +3,7 @@ package com.scylladb.cdc.model.worker;
 import java.time.Clock;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.WorkerCQL;
@@ -30,9 +31,13 @@ public final class WorkerConfiguration {
     private final ScheduledExecutorService executorService;
 
     private final Clock clock;
+
+    public final long noisyExceptionsSuppressionWindowMs;
+
+    private AtomicLong noisyExceptionsSuppressedUntil = new AtomicLong(0);
     
     private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer, long queryTimeWindowSizeMs,
-            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs) {
+            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs, long noisyExceptionsSuppressionWindowMs) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
@@ -44,6 +49,7 @@ public final class WorkerConfiguration {
         this.executorService = executorService;
         this.clock = Preconditions.checkNotNull(clock);
         this.minimalWaitForWindowMs = minimalWaitForWindowMs;
+        this.noisyExceptionsSuppressionWindowMs = noisyExceptionsSuppressionWindowMs;
     }
     
     public ScheduledExecutorService getExecutorService() {
@@ -59,6 +65,32 @@ public final class WorkerConfiguration {
      */
     public Clock getClock() {
         return clock;
+    }
+
+    /**
+     * Whether the feature of noisy exception suppression is enabled.
+     * @return boolean value.
+     */
+    public boolean isNoisyExceptionSuppressionEnabled() {
+        return this.noisyExceptionsSuppressionWindowMs > 0;
+    }
+
+    /**
+     * Checks whether noisy exceptions should be currently suppressed.
+     * @return boolean value.
+     */
+    public boolean areNoisyExceptionsCurrentlySuppressed() {
+        if (!isNoisyExceptionSuppressionEnabled()) return false;
+        return System.currentTimeMillis() < noisyExceptionsSuppressedUntil.get();
+    }
+
+    /**
+     * Suppresses the logging of noisy exceptions for {@code durationMs} from the current
+     * system time. Reapplying with lower duration will not shorten previous applications.
+     * Concurrent calls are equivalent to applying the highest value.
+     */
+    public void suppressNoisyExceptions(long durationMs) {
+        noisyExceptionsSuppressedUntil.getAndUpdate(current -> Math.max(current, System.currentTimeMillis() + durationMs));
     }
 
     public static Builder builder() {
@@ -79,6 +111,8 @@ public final class WorkerConfiguration {
         private RetryBackoff workerRetryBackoff = DEFAULT_WORKER_RETRY_BACKOFF;
 
         private Clock clock = Clock.systemDefaultZone();
+
+        private long noisyExceptionsSuppressionWindowMs = 0;
 
         public Builder withTransport(WorkerTransport transport) {
             this.transport = Preconditions.checkNotNull(transport);
@@ -140,6 +174,18 @@ public final class WorkerConfiguration {
         }
 
         /**
+         * Sets the default time window for suppression of {@link com.scylladb.cdc.cql.NoisyCQLExceptionWrapper}
+         * exceptions. Whenever an exception of this type appears it will be logged then subsequent calls will
+         * be silenced until the window time elapses.
+         * @param noisyExceptionsSuppressionWindowMs default window time in ms.
+         * @return reference to this builder.
+         */
+        public Builder withNoisyExceptionsSuppressionWindowMs(long noisyExceptionsSuppressionWindowMs) {
+            this.noisyExceptionsSuppressionWindowMs = noisyExceptionsSuppressionWindowMs;
+            return this;
+        }
+
+        /**
          * Sets the <code>Clock</code> in the configuration.
          * <p>
          * This clock will be used by the worker to get the
@@ -175,7 +221,7 @@ public final class WorkerConfiguration {
                 executorService = Executors.newScheduledThreadPool(1);
             }
             return new WorkerConfiguration(transport, cql, consumer, queryTimeWindowSizeMs, confidenceWindowSizeMs,
-                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs);
+                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs, noisyExceptionsSuppressionWindowMs);
         }
     }
 }
