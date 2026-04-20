@@ -34,7 +34,7 @@ public final class CDCConsumer implements AutoCloseable {
 
     private CDCConsumer(CQLConfiguration cqlConfiguration, MasterConfiguration.Builder masterConfigurationBuilder,
                        WorkerConfiguration.Builder workerConfigurationBuilder, Supplier<ScheduledExecutorService> executorServiceSupplier,
-                       Function<Driver3Session, WorkerCQL> workerCQLProvider) {
+                       Function<Driver3Session, WorkerCQL> workerCQLProvider, CDCStateStore stateStore) {
         Preconditions.checkNotNull(cqlConfiguration);
         Preconditions.checkNotNull(masterConfigurationBuilder);
         Preconditions.checkNotNull(workerConfigurationBuilder);
@@ -44,7 +44,7 @@ public final class CDCConsumer implements AutoCloseable {
 
         this.session = new Driver3Session(cqlConfiguration);
         workerConfigurationBuilder.withCQL(workerCQLProvider.apply(session));
-        this.transport = new LocalTransport(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier);
+        this.transport = new LocalTransport(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier, stateStore);
 
         MasterCQL masterCQL = new Driver3MasterCQL(session);
         this.masterConfiguration = masterConfigurationBuilder
@@ -105,6 +105,7 @@ public final class CDCConsumer implements AutoCloseable {
 
         private int workersCount = getDefaultWorkersCount();
         private Function<Driver3Session, WorkerCQL> workerCQLProvider = Driver3WorkerCQL::new;
+        private CDCStateStore stateStore = new InMemoryStateStore();
 
         @SuppressWarnings("deprecation")
         public Builder withConsumerProvider(RawChangeConsumerProvider consumerProvider) {
@@ -261,10 +262,33 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Sets a custom {@link CDCStateStore} for persisting CDC consumer checkpoint state.
+         *
+         * <p>By default an {@link InMemoryStateStore} is used, which stores state in memory
+         * and loses all progress on process restart. Provide a persistent implementation
+         * (e.g. {@code RedisStateStore} from {@code scylla-cdc-state-redis}) to allow the
+         * consumer to resume from the last checkpoint after a restart.
+         *
+         * <p><b>Single-instance only:</b> {@link CDCConsumer} runs a single in-process master and
+         * worker. Sharing the same persistent store across multiple {@code CDCConsumer} instances
+         * running concurrently (i.e. horizontal scaling) is not supported and may produce duplicate
+         * deliveries or state corruption. For horizontal scaling, use the Scylla CDC Source
+         * Connector for Kafka Connect, which distributes work across multiple tasks via Kafka's
+         * offset mechanism.
+         *
+         * @param stateStore the state store to use; must not be null
+         * @return this builder
+         */
+        public Builder withStateStore(CDCStateStore stateStore) {
+            this.stateStore = Preconditions.checkNotNull(stateStore);
+            return this;
+        }
+
         public CDCConsumer build() {
             Supplier<ScheduledExecutorService> executorServiceSupplier = getDefaultExecutorServiceSupplier(workersCount);
             return new CDCConsumer(cqlConfigurationBuilder.build(),
-                    masterConfigurationBuilder, workerConfigurationBuilder, executorServiceSupplier, workerCQLProvider);
+                    masterConfigurationBuilder, workerConfigurationBuilder, executorServiceSupplier, workerCQLProvider, stateStore);
         }
 
         private static int getDefaultWorkersCount() {
