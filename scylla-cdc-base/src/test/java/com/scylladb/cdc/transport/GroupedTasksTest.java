@@ -30,7 +30,6 @@ public class GroupedTasksTest {
                 TEST_GENERATION, Collections.singleton(TEST_TABLE));
 
         assertEquals(TEST_GENERATION.getId(), tasks.getGenerationId());
-        assertEquals(TEST_GENERATION, tasks.getGenerationMetadata());
         assertFalse(tasks.getTasks().isEmpty());
     }
 
@@ -49,7 +48,6 @@ public class GroupedTasksTest {
         GroupedTasks reconstructed = new GroupedTasks(taskMap, generationId);
 
         assertEquals(generationId, reconstructed.getGenerationId());
-        assertNull(reconstructed.getGenerationMetadata());
         assertEquals(taskMap, reconstructed.getTasks());
         assertEquals(fullTasks.size(), reconstructed.size());
     }
@@ -73,7 +71,6 @@ public class GroupedTasksTest {
 
         assertEquals(0, tasks.size());
         assertEquals(generationId, tasks.getGenerationId());
-        assertNull(tasks.getGenerationMetadata());
     }
 
     @Test

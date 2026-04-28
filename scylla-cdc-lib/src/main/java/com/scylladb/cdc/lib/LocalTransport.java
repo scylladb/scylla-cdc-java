@@ -17,7 +17,6 @@ import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
-import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.model.worker.Worker;
@@ -41,7 +40,7 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     private Thread workerThread = null;
 
     // Track generation IDs by table for tablet mode
-    protected final Map<TableName, GenerationMetadata> currentGenerationByTable = new ConcurrentHashMap<>();
+    protected final Map<TableName, GenerationId> currentGenerationByTable = new ConcurrentHashMap<>();
 
     public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
                           Supplier<ScheduledExecutorService> executorServiceSupplier) {
@@ -57,11 +56,7 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public Optional<GenerationId> getCurrentGenerationId(TableName tableName) {
-        GenerationMetadata metadata = currentGenerationByTable.get(tableName);
-        if (metadata == null) {
-            return Optional.empty();
-        }
-        return Optional.of(metadata.getId());
+        return Optional.ofNullable(currentGenerationByTable.get(tableName));
     }
 
     @Override
@@ -109,8 +104,8 @@ class LocalTransport implements MasterTransport, WorkerTransport {
             }
         }
 
-        // Update generation metadata for this table
-        currentGenerationByTable.put(tableName, workerTasks.getGenerationMetadata());
+        // Update generation ID for this table
+        currentGenerationByTable.put(tableName, workerTasks.getGenerationId());
 
         if (currentWorker == null) {
             // No worker exists, start a new one
