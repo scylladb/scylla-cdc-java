@@ -15,7 +15,7 @@
         <module>scylla-cdc-replicator</module>
         <module>scylla-cdc-printer</module>
         <module>scylla-cdc-driver3</module>
-        <module>scylla-cdc-state-redis</module>
+        <module>examples/scylla-cdc-state-redis</module>
     </modules>
 
     <properties>
@@ -223,7 +223,7 @@
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>
-                            <excludeArtifacts>scylla-cdc-printer,scylla-cdc-replicator</excludeArtifacts>
+                            <excludeArtifacts>scylla-cdc-printer,scylla-cdc-replicator,scylla-cdc-state-redis</excludeArtifacts>
                             <autoPublish>${release.autopublish}</autoPublish>
                             <waitUntil>validated</waitUntil>
                         </configuration>

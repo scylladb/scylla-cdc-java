@@ -267,7 +267,7 @@ public final class CDCConsumer implements AutoCloseable {
          *
          * <p>By default an {@link InMemoryStateStore} is used, which stores state in memory
          * and loses all progress on process restart. Provide a persistent implementation
-         * (e.g. {@code RedisStateStore} from {@code scylla-cdc-state-redis}) to allow the
+         * (e.g. backed by Redis, a SQL database, or any durable key-value store) to allow the
          * consumer to resume from the last checkpoint after a restart.
          *
          * <p><b>Single-instance only:</b> {@link CDCConsumer} runs a single in-process master and

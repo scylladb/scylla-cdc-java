@@ -79,7 +79,7 @@ to resume from the last consumed change, plug in a persistent `CDCStateStore`:
 
 ```java
 JedisPool pool = new JedisPool("redis-host", 6379);
-CDCStateStore store = new RedisStateStore(pool);   // from scylla-cdc-state-redis
+CDCStateStore store = new RedisStateStore(pool);   // see examples/scylla-cdc-state-redis
 
 try (CDCConsumer consumer = CDCConsumer.builder()
         .addContactPoint("scylla-node")
@@ -97,16 +97,16 @@ try (CDCConsumer consumer = CDCConsumer.builder()
 | Module | Class | Persistence |
 |--------|-------|-------------|
 | `scylla-cdc-lib` | `InMemoryStateStore` (default) | In-process memory, lost on restart |
-| `scylla-cdc-state-redis` | `RedisStateStore` | Redis (Jedis client), survives restart |
+| `examples/scylla-cdc-state-redis` | `RedisStateStore` (example) | Redis (Jedis client), survives restart |
 
-Add the Redis module to your `pom.xml`:
+An example Redis-backed implementation is provided in `examples/scylla-cdc-state-redis/`.
+It is not published to Maven Central — copy and adapt it as a starting point for your own
+persistent `CDCStateStore` implementation:
 
-```xml
-<dependency>
-    <groupId>com.scylladb</groupId>
-    <artifactId>scylla-cdc-state-redis</artifactId>
-    <version>1.3.11-SNAPSHOT</version>
-</dependency>
+```java
+// From examples/scylla-cdc-state-redis — adapt to your own backend
+JedisPool pool = new JedisPool("redis-host", 6379);
+CDCStateStore store = new RedisStateStore(pool);
 ```
 
 ### Custom implementations

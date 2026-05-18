@@ -34,11 +34,12 @@ import java.util.Set;
  *
  * <p><b>Default implementation:</b> {@link InMemoryStateStore} — stores state in memory with no
  * persistence. Suitable for development or stateless pipelines. For production use cases that
- * require resuming after restart, provide a persistent implementation.
+ * require resuming after restart, provide a persistent implementation backed by Redis, a SQL
+ * database, or any other durable store.
  *
  * <p><b>Usage with {@link CDCConsumer}:</b>
  * <pre>{@code
- * CDCStateStore store = new RedisStateStore(jedisPool);  // or your own implementation
+ * CDCStateStore store = new MyPersistentStore(...);  // your own implementation
  *
  * try (CDCConsumer consumer = CDCConsumer.builder()
  *         .addContactPoint("scylla-node1")

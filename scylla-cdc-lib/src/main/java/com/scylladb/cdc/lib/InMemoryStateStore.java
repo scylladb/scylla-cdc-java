@@ -28,8 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  *
  * <p>For production use cases that require resuming from the last checkpoint after a process
- * restart, use a persistent implementation such as {@code RedisStateStore} from the
- * {@code scylla-cdc-state-redis} module, or implement {@link CDCStateStore} with your own backend.
+ * restart, provide a persistent implementation backed by Redis, a SQL database, or any other
+ * durable store, and implement {@link CDCStateStore} accordingly.
  */
 public class InMemoryStateStore implements CDCStateStore {
 
