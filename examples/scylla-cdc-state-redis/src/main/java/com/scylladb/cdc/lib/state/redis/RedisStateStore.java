@@ -6,12 +6,14 @@ import com.scylladb.cdc.lib.TaskStateSerde;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
-import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.worker.TaskState;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.Pipeline;
+import redis.clients.jedis.Response;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -97,14 +99,24 @@ public class RedisStateStore implements CDCStateStore {
 
     @Override
     public Map<TaskId, TaskState> loadTaskStates(Set<TaskId> tasks) {
-        Map<TaskId, TaskState> result = new HashMap<>();
+        if (tasks.isEmpty()) {
+            return new HashMap<>();
+        }
+        // Use a pipeline to batch all HGETALL commands into a single round-trip.
+        List<TaskId> taskList = new ArrayList<>(tasks);
+        List<Response<Map<String, String>>> responses = new ArrayList<>(taskList.size());
         try (var jedis = jedisPool.getResource()) {
-            for (TaskId task : tasks) {
-                String key = taskKey(task);
-                Map<String, String> hash = jedis.hgetAll(key);
-                if (hash != null && !hash.isEmpty()) {
-                    result.put(task, TaskStateSerde.mapToTaskState(hash));
-                }
+            Pipeline pipe = jedis.pipelined();
+            for (TaskId task : taskList) {
+                responses.add(pipe.hgetAll(taskKey(task)));
+            }
+            pipe.sync();
+        }
+        Map<TaskId, TaskState> result = new HashMap<>();
+        for (int i = 0; i < taskList.size(); i++) {
+            Map<String, String> hash = responses.get(i).get();
+            if (hash != null && !hash.isEmpty()) {
+                result.put(taskList.get(i), TaskStateSerde.mapToTaskState(hash));
             }
         }
         return result;

@@ -63,6 +63,10 @@ public final class TaskStateSerde {
      *
      * <p>Format: {@code <keyspace>.<table>:<generationStartMs>:<vnodeIndex>}
      *
+     * <p><b>Note:</b> Scylla/Cassandra keyspace and table names are restricted to alphanumerics
+     * and underscores, so they will never contain {@code .} or {@code :}. This format relies on
+     * that constraint — do not use with custom identifiers that violate it.
+     *
      * @param taskId the task ID to serialize; must not be null
      * @return a stable string key uniquely identifying the task
      */
