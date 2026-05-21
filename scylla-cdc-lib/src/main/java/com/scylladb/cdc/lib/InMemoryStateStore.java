@@ -15,9 +15,13 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * In-memory implementation of {@link CDCStateStore}.
  *
- * <p>This is the default implementation used by {@link CDCConsumer} when no custom store is
- * configured. All state is stored in {@link ConcurrentHashMap} instances and is lost when the
- * process exits.
+ * <p>All state is stored in {@link ConcurrentHashMap} instances and is lost when the
+ * process exits. Suitable for testing or for scenarios where resume-after-restart is
+ * not required. When {@link CDCConsumer} is built without calling
+ * {@link CDCConsumer.Builder#withStateStore}, the consumer uses an internal
+ * {@link java.util.concurrent.ConcurrentHashMap} directly (no store at all). Use
+ * {@code withStateStore(new InMemoryStateStore())} when you need a {@link CDCStateStore}
+ * handle in tests that verify store interactions.
  *
  * <p>This implementation is suitable for:
  * <ul>

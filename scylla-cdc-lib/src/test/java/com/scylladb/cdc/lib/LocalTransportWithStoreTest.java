@@ -68,6 +68,20 @@ class LocalTransportWithStoreTest {
         @Override public void saveGenerationId(TableName table, GenerationId id) {}
     }
 
+    /** Store that pre-seeds a persisted vnode generation ID for restart tests. */
+    static class PreseededStateStore extends RecordingStateStore {
+        private final GenerationId persistedGen;
+
+        PreseededStateStore(GenerationId persistedGen) {
+            this.persistedGen = persistedGen;
+        }
+
+        @Override
+        public Optional<GenerationId> loadGenerationId() {
+            return Optional.of(persistedGen);
+        }
+    }
+
     private RecordingStateStore store;
     private LocalTransport transport;
     private TaskId taskId;
@@ -139,5 +153,39 @@ class LocalTransportWithStoreTest {
     void moveStateToNextWindow_withoutSetState_throwsTaskAbortedException() {
         assertThrows(TaskAbortedException.class,
                 () -> transport.moveStateToNextWindow(taskId, taskState));
+    }
+
+    @Test
+    void constructor_loadsPersistedGenerationId_fromStore() {
+        GenerationId persistedGen = new GenerationId(new Timestamp(new Date(1_600_000_000_000L)));
+        PreseededStateStore seededStore = new PreseededStateStore(persistedGen);
+        Supplier<ScheduledExecutorService> exec = () -> new ScheduledThreadPoolExecutor(1);
+        LocalTransport t = new LocalTransport(
+                new ThreadGroup("test-restart"),
+                com.scylladb.cdc.model.worker.WorkerConfiguration.builder()
+                        .withConsumer(change -> java.util.concurrent.CompletableFuture.completedFuture(null)),
+                exec,
+                seededStore);
+
+        Optional<GenerationId> loaded = t.getCurrentGenerationId();
+        assertTrue(loaded.isPresent(), "Expected persisted generation ID to be loaded on startup");
+        assertEquals(persistedGen, loaded.get());
+    }
+
+    @Test
+    void noStore_stateKeptInProcess() {
+        Supplier<ScheduledExecutorService> exec = () -> new ScheduledThreadPoolExecutor(1);
+        LocalTransport t = new LocalTransport(
+                new ThreadGroup("test-nostore"),
+                com.scylladb.cdc.model.worker.WorkerConfiguration.builder()
+                        .withConsumer(change -> java.util.concurrent.CompletableFuture.completedFuture(null)),
+                exec);
+
+        t.setState(taskId, taskState);
+        Map<TaskId, TaskState> result = t.getTaskStates(Set.of(taskId));
+        assertEquals(1, result.size());
+        assertSame(taskState, result.get(taskId));
+        // getCurrentGenerationId should be empty (no store, no generation set yet)
+        assertFalse(t.getCurrentGenerationId().isPresent());
     }
 }

@@ -105,7 +105,7 @@ public final class CDCConsumer implements AutoCloseable {
 
         private int workersCount = getDefaultWorkersCount();
         private Function<Driver3Session, WorkerCQL> workerCQLProvider = Driver3WorkerCQL::new;
-        private CDCStateStore stateStore = new InMemoryStateStore();
+        private CDCStateStore stateStore = null;
 
         @SuppressWarnings("deprecation")
         public Builder withConsumerProvider(RawChangeConsumerProvider consumerProvider) {

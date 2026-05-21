@@ -35,17 +35,29 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     private final ThreadGroup workersThreadGroup;
     private final WorkerConfiguration.Builder workerConfigurationBuilder;
     private final Supplier<ScheduledExecutorService> executorServiceSupplier;
+
+    /**
+     * Optional persistent state store. {@code null} means in-process ConcurrentHashMap only
+     * (original behaviour, zero added dependencies).
+     */
     private final CDCStateStore stateStore;
+
+    /**
+     * In-process task state map. Always used as the authoritative active-task set
+     * (for TaskAbortedException detection). When {@link #stateStore} is non-null, each
+     * write is also forwarded to the store; reads are served from the store.
+     */
+    private final Map<TaskId, TaskState> inProcessStates = new ConcurrentHashMap<>();
 
     /**
      * Tracks which task IDs are currently active (have been set via {@link #setState}).
      * Used by {@link #updateState} and {@link #moveStateToNextWindow} to detect
-     * {@link TaskAbortedException} without relying on a store read, which would be
+     * {@link TaskAbortedException} without requiring a store read, which would be
      * incompatible with eventually-consistent backends.
      */
     private final Set<TaskId> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-    private Optional<GenerationId> currentGenerationId = Optional.empty();
+    private Optional<GenerationId> currentGenerationId;
 
     // Single worker reference
     private Worker currentWorker = null;
@@ -54,13 +66,31 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     // Track generation IDs by table for tablet mode
     protected final Map<TableName, GenerationMetadata> currentGenerationByTable = new ConcurrentHashMap<>();
 
+    /**
+     * Convenience constructor that uses no persistent store (original behaviour).
+     * State is kept in-process only and lost on restart.
+     */
+    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
+                          Supplier<ScheduledExecutorService> executorServiceSupplier) {
+        this(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier, null);
+    }
+
+    /**
+     * Full constructor.
+     *
+     * @param stateStore optional persistent state store; {@code null} for in-process only
+     */
     public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
                           Supplier<ScheduledExecutorService> executorServiceSupplier,
                           CDCStateStore stateStore) {
         workersThreadGroup = new ThreadGroup(cdcThreadGroup, "Scylla-CDC-Worker-Threads");
         this.workerConfigurationBuilder = Preconditions.checkNotNull(workerConfigurationBuilder);
         this.executorServiceSupplier = Preconditions.checkNotNull(executorServiceSupplier);
-        this.stateStore = Preconditions.checkNotNull(stateStore);
+        this.stateStore = stateStore; // nullable
+        // Load the last persisted generation ID from a previous run (if any).
+        this.currentGenerationId = (stateStore != null)
+                ? stateStore.loadGenerationId()
+                : Optional.empty();
     }
 
     @Override
@@ -71,15 +101,29 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     @Override
     public Optional<GenerationId> getCurrentGenerationId(TableName tableName) {
         GenerationMetadata metadata = currentGenerationByTable.get(tableName);
-        if (metadata == null) {
-            return Optional.empty();
+        if (metadata != null) {
+            return Optional.of(metadata.getId());
         }
-        return Optional.of(metadata.getId());
+        // Fall back to persisted generation ID from a previous run (before configureWorkers
+        // has populated currentGenerationByTable for this table in the current run).
+        if (stateStore != null) {
+            return stateStore.loadGenerationId(tableName);
+        }
+        return Optional.empty();
     }
 
     @Override
     public boolean areTasksFullyConsumedUntil(Set<TaskId> tasks, Timestamp until) {
-        return stateStore.areTasksFullyConsumedUntil(tasks, until);
+        // Always use the in-process map; it is always kept in sync.
+        boolean allConsumed = true;
+        for (TaskId taskId : tasks) {
+            TaskState state = inProcessStates.get(taskId);
+            if (state == null || !state.hasPassed(until)) {
+                allConsumed = false;
+                break;
+            }
+        }
+        return allConsumed;
     }
 
     @Override
@@ -91,11 +135,14 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         toDelete.removeAll(tasks.keySet());
         if (!toDelete.isEmpty()) {
             activeTasks.removeAll(toDelete);
-            stateStore.deleteTaskStates(toDelete);
+            toDelete.forEach(inProcessStates::remove);
+            if (stateStore != null) {
+                stateStore.deleteTaskStates(toDelete);
+            }
         }
 
         currentGenerationId = Optional.ofNullable(workerTasks.getGenerationId());
-        if (workerTasks.getGenerationId() != null) {
+        if (workerTasks.getGenerationId() != null && stateStore != null) {
             stateStore.saveGenerationId(workerTasks.getGenerationId());
         }
 
@@ -119,12 +166,17 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         }
         if (!toDelete.isEmpty()) {
             activeTasks.removeAll(toDelete);
-            stateStore.deleteTaskStates(toDelete);
+            toDelete.forEach(inProcessStates::remove);
+            if (stateStore != null) {
+                stateStore.deleteTaskStates(toDelete);
+            }
         }
 
         // Update generation metadata for this table
         currentGenerationByTable.put(tableName, workerTasks.getGenerationMetadata());
-        stateStore.saveGenerationId(tableName, workerTasks.getGenerationMetadata().getId());
+        if (stateStore != null) {
+            stateStore.saveGenerationId(tableName, workerTasks.getGenerationMetadata().getId());
+        }
 
         if (currentWorker == null) {
             // No worker exists, start a new one
@@ -165,13 +217,24 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public Map<TaskId, TaskState> getTaskStates(Set<TaskId> tasks) {
-        return stateStore.loadTaskStates(tasks);
+        if (stateStore != null) {
+            return stateStore.loadTaskStates(tasks);
+        }
+        Map<TaskId, TaskState> result = new HashMap<>();
+        for (TaskId t : tasks) {
+            TaskState s = inProcessStates.get(t);
+            if (s != null) result.put(t, s);
+        }
+        return result;
     }
 
     @Override
     public void setState(TaskId task, TaskState newState) {
         activeTasks.add(task);
-        stateStore.saveTaskState(task, newState);
+        inProcessStates.put(task, newState);
+        if (stateStore != null) {
+            stateStore.saveTaskState(task, newState);
+        }
     }
 
     @Override
@@ -179,7 +242,10 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         if (!activeTasks.contains(task)) {
             throw new TaskAbortedException("Cannot update state for non-existent task: " + task);
         }
-        stateStore.saveTaskState(task, newState);
+        inProcessStates.put(task, newState);
+        if (stateStore != null) {
+            stateStore.saveTaskState(task, newState);
+        }
     }
 
     @Override
@@ -187,7 +253,10 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         if (!activeTasks.contains(task)) {
             throw new TaskAbortedException("Cannot update state for non-existent task: " + task);
         }
-        stateStore.saveTaskState(task, newState);
+        inProcessStates.put(task, newState);
+        if (stateStore != null) {
+            stateStore.saveTaskState(task, newState);
+        }
     }
 
     private void stopWorkerThread() throws InterruptedException {
