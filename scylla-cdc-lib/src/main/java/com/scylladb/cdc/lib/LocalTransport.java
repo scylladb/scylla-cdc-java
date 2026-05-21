@@ -1,6 +1,5 @@
 package com.scylladb.cdc.lib;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -43,19 +42,13 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     private final CDCStateStore stateStore;
 
     /**
-     * In-process task state map. Always used as the authoritative active-task set
-     * (for TaskAbortedException detection). When {@link #stateStore} is non-null, each
-     * write is also forwarded to the store; reads are served from the store.
+     * In-process task state map. Always kept in sync: written on every setState/updateState/
+     * moveStateToNextWindow, and cleaned up in configureWorkers. Used directly for
+     * areTasksFullyConsumedUntil and for TaskAbortedException detection (via replace()).
+     * When {@link #stateStore} is non-null, each write is also forwarded to the store;
+     * reads (getTaskStates) are served from the store.
      */
-    private final Map<TaskId, TaskState> inProcessStates = new ConcurrentHashMap<>();
-
-    /**
-     * Tracks which task IDs are currently active (have been set via {@link #setState}).
-     * Used by {@link #updateState} and {@link #moveStateToNextWindow} to detect
-     * {@link TaskAbortedException} without requiring a store read, which would be
-     * incompatible with eventually-consistent backends.
-     */
-    private final Set<TaskId> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
 
     private Optional<GenerationId> currentGenerationId;
 
@@ -114,9 +107,8 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public boolean areTasksFullyConsumedUntil(Set<TaskId> tasks, Timestamp until) {
-        // Always use the in-process map; it is always kept in sync.
-        for (TaskId taskId : tasks) {
-            TaskState state = inProcessStates.get(taskId);
+        for (TaskId id : tasks) {
+            TaskState state = taskStates.get(id);
             if (state == null || !state.hasPassed(until)) {
                 return false;
             }
@@ -128,15 +120,18 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
-        // Determine which tasks are being removed and clean them up
-        Set<TaskId> toDelete = new HashSet<>(activeTasks);
-        toDelete.removeAll(tasks.keySet());
-        if (!toDelete.isEmpty()) {
-            activeTasks.removeAll(toDelete);
-            toDelete.forEach(inProcessStates::remove);
-            if (stateStore != null) {
-                stateStore.deleteTaskStates(toDelete);
+        // Remove task states for tasks no longer in the configuration
+        Set<TaskId> toDelete = new HashSet<>();
+        Iterator<TaskId> it = taskStates.keySet().iterator();
+        while (it.hasNext()) {
+            TaskId taskId = it.next();
+            if (!tasks.containsKey(taskId)) {
+                it.remove();
+                toDelete.add(taskId);
             }
+        }
+        if (!toDelete.isEmpty() && stateStore != null) {
+            stateStore.deleteTaskStates(toDelete);
         }
 
         currentGenerationId = Optional.ofNullable(workerTasks.getGenerationId());
@@ -155,19 +150,18 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     public void configureWorkers(TableName tableName, GroupedTasks workerTasks) throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
-        // Determine which tasks for this table are being removed
+        // Remove all existing tasks from taskStates that belong to this table and are no longer in the configuration
         Set<TaskId> toDelete = new HashSet<>();
-        for (TaskId taskId : activeTasks) {
+        Iterator<TaskId> it = taskStates.keySet().iterator();
+        while (it.hasNext()) {
+            TaskId taskId = it.next();
             if (taskId.getTable().equals(tableName) && !tasks.containsKey(taskId)) {
+                it.remove();
                 toDelete.add(taskId);
             }
         }
-        if (!toDelete.isEmpty()) {
-            activeTasks.removeAll(toDelete);
-            toDelete.forEach(inProcessStates::remove);
-            if (stateStore != null) {
-                stateStore.deleteTaskStates(toDelete);
-            }
+        if (!toDelete.isEmpty() && stateStore != null) {
+            stateStore.deleteTaskStates(toDelete);
         }
 
         // Update generation metadata for this table
@@ -219,17 +213,18 @@ class LocalTransport implements MasterTransport, WorkerTransport {
             return stateStore.loadTaskStates(tasks);
         }
         Map<TaskId, TaskState> result = new HashMap<>();
-        for (TaskId t : tasks) {
-            TaskState s = inProcessStates.get(t);
-            if (s != null) result.put(t, s);
-        }
+        tasks.forEach(task -> {
+            TaskState taskState = taskStates.get(task);
+            if (taskState != null) {
+                result.put(task, taskState);
+            }
+        });
         return result;
     }
 
     @Override
     public void setState(TaskId task, TaskState newState) {
-        activeTasks.add(task);
-        inProcessStates.put(task, newState);
+        taskStates.put(task, newState);
         if (stateStore != null) {
             stateStore.saveTaskState(task, newState);
         }
@@ -237,10 +232,9 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public void updateState(TaskId task, TaskState newState) {
-        if (!activeTasks.contains(task)) {
+        if (taskStates.replace(task, newState) == null) {
             throw new TaskAbortedException("Cannot update state for non-existent task: " + task);
         }
-        inProcessStates.put(task, newState);
         if (stateStore != null) {
             stateStore.saveTaskState(task, newState);
         }
@@ -248,10 +242,9 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public void moveStateToNextWindow(TaskId task, TaskState newState) {
-        if (!activeTasks.contains(task)) {
+        if (taskStates.replace(task, newState) == null) {
             throw new TaskAbortedException("Cannot update state for non-existent task: " + task);
         }
-        inProcessStates.put(task, newState);
         if (stateStore != null) {
             stateStore.saveTaskState(task, newState);
         }
