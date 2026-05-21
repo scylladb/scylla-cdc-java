@@ -115,15 +115,13 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     @Override
     public boolean areTasksFullyConsumedUntil(Set<TaskId> tasks, Timestamp until) {
         // Always use the in-process map; it is always kept in sync.
-        boolean allConsumed = true;
         for (TaskId taskId : tasks) {
             TaskState state = inProcessStates.get(taskId);
             if (state == null || !state.hasPassed(until)) {
-                allConsumed = false;
-                break;
+                return false;
             }
         }
-        return allConsumed;
+        return true;
     }
 
     @Override
