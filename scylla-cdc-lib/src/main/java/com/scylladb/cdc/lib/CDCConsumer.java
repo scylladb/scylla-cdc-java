@@ -265,10 +265,10 @@ public final class CDCConsumer implements AutoCloseable {
         /**
          * Sets a custom {@link CDCStateStore} for persisting CDC consumer checkpoint state.
          *
-         * <p>By default an {@link InMemoryStateStore} is used, which stores state in memory
-         * and loses all progress on process restart. Provide a persistent implementation
-         * (e.g. backed by Redis, a SQL database, or any durable key-value store) to allow the
-         * consumer to resume from the last checkpoint after a restart.
+         * <p>By default no store is configured: state is kept in-process only and lost on
+         * process restart. Provide a persistent implementation (e.g. backed by Redis, a SQL
+         * database, or any durable key-value store) to allow the consumer to resume from the
+         * last checkpoint after a restart.
          *
          * <p><b>Single-instance only:</b> {@link CDCConsumer} runs a single in-process master and
          * worker. Sharing the same persistent store across multiple {@code CDCConsumer} instances

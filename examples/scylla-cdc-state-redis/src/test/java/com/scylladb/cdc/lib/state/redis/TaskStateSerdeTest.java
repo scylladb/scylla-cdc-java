@@ -1,4 +1,4 @@
-package com.scylladb.cdc.lib;
+package com.scylladb.cdc.lib.state.redis;
 
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;

@@ -1,6 +1,5 @@
 package com.scylladb.cdc.lib.state.redis;
 
-import com.scylladb.cdc.lib.TaskStateSerde;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;

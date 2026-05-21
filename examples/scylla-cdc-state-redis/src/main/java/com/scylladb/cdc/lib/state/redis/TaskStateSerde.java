@@ -1,4 +1,4 @@
-package com.scylladb.cdc.lib;
+package com.scylladb.cdc.lib.state.redis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
@@ -22,9 +22,9 @@ import java.util.UUID;
 /**
  * Serialization and deserialization helpers for CDC model types.
  *
- * <p>These utilities are intended for use by {@link CDCStateStore} implementations that need to
- * convert {@link TaskId}, {@link TaskState}, and {@link GenerationId} to and from a storable
- * format (strings, maps, byte arrays, etc.).
+ * <p>These utilities are intended for use by {@link com.scylladb.cdc.lib.CDCStateStore}
+ * implementations that need to convert {@link TaskId}, {@link TaskState}, and
+ * {@link GenerationId} to and from a storable format (strings, maps, byte arrays, etc.).
  *
  * <p>All serialization formats are stable across library versions.
  *
@@ -47,10 +47,10 @@ import java.util.UUID;
  */
 public final class TaskStateSerde {
 
-    static final String TASK_STATE_WINDOW_START = "window_start";
-    static final String TASK_STATE_WINDOW_END = "window_end";
-    static final String TASK_STATE_CHANGE_ID_STREAM = "change_id_stream";
-    static final String TASK_STATE_CHANGE_ID_TIME = "change_id_time";
+    public static final String TASK_STATE_WINDOW_START = "window_start";
+    public static final String TASK_STATE_WINDOW_END = "window_end";
+    public static final String TASK_STATE_CHANGE_ID_STREAM = "change_id_stream";
+    public static final String TASK_STATE_CHANGE_ID_TIME = "change_id_time";
 
     private TaskStateSerde() {}
 
@@ -207,14 +207,14 @@ public final class TaskStateSerde {
     // Internal helpers
     // -------------------------------------------------------------------------
 
-    static String streamIdToHex(StreamId streamId) {
+    public static String streamIdToHex(StreamId streamId) {
         ByteBuffer buf = streamId.getValue();
         byte[] bytes = new byte[buf.remaining()];
         buf.get(bytes);
         return BaseEncoding.base16().encode(bytes);
     }
 
-    static StreamId hexToStreamId(String hex) {
+    public static StreamId hexToStreamId(String hex) {
         byte[] bytes = BaseEncoding.base16().decode(hex.toUpperCase());
         return new StreamId(ByteBuffer.wrap(bytes));
     }

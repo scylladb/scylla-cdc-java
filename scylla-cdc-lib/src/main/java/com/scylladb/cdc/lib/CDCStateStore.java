@@ -32,10 +32,10 @@ import java.util.Set;
  * At-least-once delivery is guaranteed — if a state write fails and the process restarts, the
  * last successfully written checkpoint will be used, meaning some changes may be re-delivered.
  *
- * <p><b>Default implementation:</b> {@link InMemoryStateStore} — stores state in memory with no
- * persistence. Suitable for development or stateless pipelines. For production use cases that
- * require resuming after restart, provide a persistent implementation backed by Redis, a SQL
- * database, or any other durable store.
+ * <p><b>Default behaviour:</b> When no store is configured ({@link CDCConsumer.Builder#withStateStore}
+ * is not called), state is kept in-process only and lost on restart. Provide a persistent
+ * implementation backed by Redis, a SQL database, or any other durable store to allow the consumer
+ * to resume from the last checkpoint after a restart.
  *
  * <p><b>Usage with {@link CDCConsumer}:</b>
  * <pre>{@code
@@ -51,8 +51,6 @@ import java.util.Set;
  * }
  * }</pre>
  *
- * @see InMemoryStateStore
- * @see TaskStateSerde
  */
 public interface CDCStateStore {
 

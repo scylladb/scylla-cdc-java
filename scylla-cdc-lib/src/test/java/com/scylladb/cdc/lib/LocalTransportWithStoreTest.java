@@ -91,7 +91,6 @@ class LocalTransportWithStoreTest {
     void setUp() {
         store = new RecordingStateStore();
         Supplier<ScheduledExecutorService> exec = () -> new ScheduledThreadPoolExecutor(1);
-        // WorkerConfiguration.Builder requires a consumer — use a no-op one via InMemoryStateStore
         // We only test WorkerTransport state delegation here, not actual worker lifecycle.
         transport = new LocalTransport(
                 new ThreadGroup("test"),
