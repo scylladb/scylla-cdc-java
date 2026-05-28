@@ -71,6 +71,70 @@ The consumer is started as a single-thread CDC consumer and reads the CDC log fo
 
 **Next steps: read more about how to use the library in the [Printer example application documentation](scylla-cdc-printer).**
 
+## Checkpoint persistence (CDCStateStore)
+
+By default, `CDCConsumer` keeps all read progress in memory. This means that if the process
+restarts, it will re-read from the beginning of the CDC log. For production use cases that need
+to resume from the last consumed change, plug in a persistent `CDCStateStore`:
+
+```java
+JedisPool pool = new JedisPool("redis-host", 6379);
+CDCStateStore store = new RedisStateStore(pool);   // see examples/scylla-cdc-state-redis
+
+try (CDCConsumer consumer = CDCConsumer.builder()
+        .addContactPoint("scylla-node")
+        .addTable("my_keyspace", "my_table")
+        .withConsumer(change -> processChange(change))
+        .withStateStore(store)           // <-- plug in here
+        .build()) {
+    consumer.start();
+    // consumer now resumes from the last checkpoint after restart
+}
+```
+
+### Available implementations
+
+| Module | Class | Persistence |
+|--------|-------|-------------|
+| `scylla-cdc-lib` | *(default — no store)* | In-process `ConcurrentHashMap`, lost on restart |
+| `scylla-cdc-lib` | `InMemoryStateStore` | In-process memory, lost on restart |
+| `examples/scylla-cdc-state-redis` | `RedisStateStore` (example) | Redis (Jedis client), survives restart |
+
+An example Redis-backed implementation is provided in `examples/scylla-cdc-state-redis/`.
+It is not published to Maven Central — copy and adapt it as a starting point for your own
+persistent `CDCStateStore` implementation:
+
+```java
+// From examples/scylla-cdc-state-redis — adapt to your own backend
+JedisPool pool = new JedisPool("redis-host", 6379);
+CDCStateStore store = new RedisStateStore(pool);
+```
+
+### Custom implementations
+
+Implement the `CDCStateStore` interface to use any backend (SQL, etcd, DynamoDB, etc.):
+
+```java
+public class MyStore implements CDCStateStore {
+    @Override public Map<TaskId, TaskState> loadTaskStates(Set<TaskId> tasks) { ... }
+    @Override public void saveTaskState(TaskId task, TaskState state) { ... }
+    @Override public void deleteTaskStates(Set<TaskId> tasks) { ... }
+    @Override public Optional<GenerationId> loadGenerationId() { ... }
+    @Override public void saveGenerationId(GenerationId id) { ... }
+    @Override public Optional<GenerationId> loadGenerationId(TableName table) { ... }
+    @Override public void saveGenerationId(TableName table, GenerationId id) { ... }
+}
+```
+
+### Horizontal scaling
+
+`CDCConsumer` is a single-instance library. Sharing the same persistent store across multiple
+concurrent `CDCConsumer` instances is **not supported** and may produce duplicate deliveries or
+state corruption. For horizontal scaling, use the
+[Scylla CDC Source Connector](https://github.com/scylladb/scylla-cdc-source-connector) for
+Kafka Connect, which distributes work across multiple tasks via Kafka's built-in offset
+mechanism.
+
 ## Useful links
 
 - [Scylla Docs - Change Data Capture (CDC)](https://docs.scylladb.com/using-scylla/cdc/)

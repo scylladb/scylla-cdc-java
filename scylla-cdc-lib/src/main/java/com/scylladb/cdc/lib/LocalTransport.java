@@ -1,7 +1,6 @@
 package com.scylladb.cdc.lib;
 
-import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -15,16 +14,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.master.GenerationMetadata;
-import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.model.worker.Worker;
 import com.scylladb.cdc.model.worker.WorkerConfiguration;
+import com.scylladb.cdc.transport.GroupedTasks;
 import com.scylladb.cdc.transport.MasterTransport;
 import com.scylladb.cdc.transport.TaskAbortedException;
-import com.scylladb.cdc.transport.GroupedTasks;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 class LocalTransport implements MasterTransport, WorkerTransport {
@@ -32,9 +31,10 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     private final ThreadGroup workersThreadGroup;
     private final WorkerConfiguration.Builder workerConfigurationBuilder;
-    private final ConcurrentHashMap<TaskId, TaskState> taskStates = new ConcurrentHashMap<>();
     private final Supplier<ScheduledExecutorService> executorServiceSupplier;
-    private Optional<GenerationId> currentGenerationId = Optional.empty();
+    private final TaskStateBackend backend;
+
+    private Optional<GenerationId> currentGenerationId;
 
     // Single worker reference
     private Worker currentWorker = null;
@@ -45,9 +45,18 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
                           Supplier<ScheduledExecutorService> executorServiceSupplier) {
+        this(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier,
+                new InProcessTaskStateBackend());
+    }
+
+    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
+                          Supplier<ScheduledExecutorService> executorServiceSupplier,
+                          TaskStateBackend backend) {
         workersThreadGroup = new ThreadGroup(cdcThreadGroup, "Scylla-CDC-Worker-Threads");
         this.workerConfigurationBuilder = Preconditions.checkNotNull(workerConfigurationBuilder);
         this.executorServiceSupplier = Preconditions.checkNotNull(executorServiceSupplier);
+        this.backend = Preconditions.checkNotNull(backend);
+        this.currentGenerationId = backend.loadGenerationId();
     }
 
     @Override
@@ -58,36 +67,34 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     @Override
     public Optional<GenerationId> getCurrentGenerationId(TableName tableName) {
         GenerationMetadata metadata = currentGenerationByTable.get(tableName);
-        if (metadata == null) {
-            return Optional.empty();
+        if (metadata != null) {
+            return Optional.of(metadata.getId());
         }
-        return Optional.of(metadata.getId());
+        // Fall back to persisted generation ID from a previous run (before configureWorkers
+        // has populated currentGenerationByTable for this table in the current run).
+        return backend.loadGenerationId(tableName);
     }
 
     @Override
     public boolean areTasksFullyConsumedUntil(Set<TaskId> tasks, Timestamp until) {
-        for (TaskId id : tasks) {
-            TaskState state = taskStates.get(id);
-            if (state == null || !state.hasPassed(until)) {
-                return false;
-            }
-        }
-        return true;
+        return backend.areTasksFullyConsumedUntil(tasks, until);
     }
 
     @Override
     public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
-        // Remove task states for tasks no longer in the configuration
-        Iterator<TaskId> it = taskStates.keySet().iterator();
-        while (it.hasNext()) {
-            if (!tasks.containsKey(it.next())) {
-                it.remove();
-            }
+        // Determine which tasks are being removed and clean them up
+        Set<TaskId> toDelete = new HashSet<>(backend.getActiveTasks());
+        toDelete.removeAll(tasks.keySet());
+        if (!toDelete.isEmpty()) {
+            backend.deleteTasks(toDelete);
         }
 
         currentGenerationId = Optional.ofNullable(workerTasks.getGenerationId());
+        if (workerTasks.getGenerationId() != null) {
+            backend.saveGenerationId(workerTasks.getGenerationId());
+        }
 
         // Stop current worker if exists
         stopWorkerThread();
@@ -100,17 +107,20 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     public void configureWorkers(TableName tableName, GroupedTasks workerTasks) throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
-        // Remove all existing tasks from taskStates that belong to this table and no longer in the configuration
-        Iterator<TaskId> it = taskStates.keySet().iterator();
-        while (it.hasNext()) {
-            TaskId taskId = it.next();
+        // Determine which tasks for this table are being removed
+        Set<TaskId> toDelete = new HashSet<>();
+        for (TaskId taskId : backend.getActiveTasks()) {
             if (taskId.getTable().equals(tableName) && !tasks.containsKey(taskId)) {
-                it.remove();
+                toDelete.add(taskId);
             }
+        }
+        if (!toDelete.isEmpty()) {
+            backend.deleteTasks(toDelete);
         }
 
         // Update generation metadata for this table
         currentGenerationByTable.put(tableName, workerTasks.getGenerationMetadata());
+        backend.saveGenerationId(tableName, workerTasks.getGenerationMetadata().getId());
 
         if (currentWorker == null) {
             // No worker exists, start a new one
@@ -151,31 +161,24 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public Map<TaskId, TaskState> getTaskStates(Set<TaskId> tasks) {
-        Map<TaskId, TaskState> result = new HashMap<>();
-        tasks.forEach(task -> {
-            TaskState taskState = taskStates.get(task);
-            if (taskState != null) {
-                result.put(task, taskState);
-            }
-        });
-        return result;
+        return backend.getTaskStates(tasks);
     }
 
     @Override
     public void setState(TaskId task, TaskState newState) {
-        taskStates.put(task, newState);
+        backend.setState(task, newState);
     }
 
     @Override
     public void updateState(TaskId task, TaskState newState) {
-        if (taskStates.replace(task, newState) == null) {
+        if (!backend.replaceState(task, newState)) {
             throw new TaskAbortedException("Cannot update state for non-existent task: " + task);
         }
     }
 
     @Override
     public void moveStateToNextWindow(TaskId task, TaskState newState) {
-        if (taskStates.replace(task, newState) == null) {
+        if (!backend.replaceState(task, newState)) {
             throw new TaskAbortedException("Cannot update state for non-existent task: " + task);
         }
     }
