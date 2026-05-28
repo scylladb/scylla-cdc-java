@@ -126,12 +126,16 @@ public class RedisStateStore implements CDCStateStore {
         String key = taskKey(task);
         Map<String, String> hash = TaskStateSerde.taskStateToMap(state);
         try (var jedis = jedisPool.getResource()) {
-            // Use a pipeline to atomically replace all fields in one round-trip.
-            // Delete first so stale optional fields (change_id_*) don't linger.
-            Pipeline pipe = jedis.pipelined();
-            pipe.del(key);
-            pipe.hset(key, hash);
-            pipe.sync();
+            // Write all fields. Using HSET (not DEL+HSET) avoids a transient window
+            // where the key is absent between the delete and the write.
+            jedis.hset(key, hash);
+            // Remove stale change_id_* fields when the new state has no lastConsumedChangeId
+            // (i.e. only window boundaries are present, no partially-consumed change yet).
+            if (!hash.containsKey(TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM)) {
+                jedis.hdel(key,
+                        TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM,
+                        TaskStateSerde.TASK_STATE_CHANGE_ID_TIME);
+            }
         }
     }
 

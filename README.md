@@ -96,7 +96,8 @@ try (CDCConsumer consumer = CDCConsumer.builder()
 
 | Module | Class | Persistence |
 |--------|-------|-------------|
-| `scylla-cdc-lib` | `InMemoryStateStore` (default) | In-process memory, lost on restart |
+| `scylla-cdc-lib` | *(default — no store)* | In-process `ConcurrentHashMap`, lost on restart |
+| `scylla-cdc-lib` | `InMemoryStateStore` | In-process memory, lost on restart |
 | `examples/scylla-cdc-state-redis` | `RedisStateStore` (example) | Redis (Jedis client), survives restart |
 
 An example Redis-backed implementation is provided in `examples/scylla-cdc-state-redis/`.
