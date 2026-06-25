@@ -1,6 +1,5 @@
 package com.scylladb.cdc.lib;
 
-import com.datastax.driver.core.PreparedStatement;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.scylladb.cdc.model.worker.RawChange;
 import org.junit.jupiter.api.Tag;
@@ -69,14 +68,12 @@ public class AlterAddColIT extends AlterTableBase {
   @Override
   public Runnable createDatagenTask() {
     return () -> {
-      PreparedStatement ps =
-          getDriverSession().prepare(
-              String.format(
-                  "INSERT INTO %s.%s (column1, column2, column3) VALUES (?, ?, ?);",
-                  testKeyspace(), testTable()));
       while (!datagenShouldStop.get()) {
         int current = datagenCounter.incrementAndGet();
-        getDriverSession().execute(ps.bind(1, 1, current));
+        // ADD never invalidates ongoing INSERTs; no exception handling required.
+        getDriverSession().execute(String.format(
+            "INSERT INTO %s.%s (column1, column2, column3) VALUES (%d, %d, %d);",
+            testKeyspace(), testTable(), 1, 1, current));
         Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
       }
     };

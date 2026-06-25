@@ -1,6 +1,5 @@
 package com.scylladb.cdc.lib;
 
-import com.datastax.driver.core.PreparedStatement;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.scylladb.cdc.model.worker.RawChange;
 import org.junit.jupiter.api.Tag;
@@ -68,32 +67,24 @@ public class AlterDropColIT extends AlterTableBase {
   @Override
   public Runnable createDatagenTask() {
     return () -> {
-      PreparedStatement psBeforeAlter = null;
-      PreparedStatement psAfterAlter = null;
       while (!datagenShouldStop.get()) {
         int current = datagenCounter.incrementAndGet();
         if (!isAfterAlter.get()) {
-          if (psBeforeAlter == null) {
-            psBeforeAlter = getDriverSession().prepare(
-                String.format(
-                    "INSERT INTO %s.%s (column1, column2, column3, column4) VALUES (?, ?, ?, ?);",
-                    testKeyspace(), testTable()));
-          }
           try {
-            getDriverSession().execute(psBeforeAlter.bind(1, 1, current, current));
+            getDriverSession().execute(String.format(
+                "INSERT INTO %s.%s (column1, column2, column3, column4) VALUES (%d, %d, %d, %d);",
+                testKeyspace(), testTable(), 1, 1, current, current));
           } catch (Exception e) {
             // It is possible to send a query right when column is being dropped.
             // In such case the exception here should not fail the test.
-            log.atInfo().withCause(e).log("Datagen task exception encountered");
+            log.atWarning().withCause(e).log("Datagen task exception encountered");
           }
         } else {
-          if (psAfterAlter == null) {
-            psAfterAlter = getDriverSession().prepare(
-                String.format(
-                    "INSERT INTO %s.%s (column1, column2, column3) VALUES (?, ?, ?);",
-                    testKeyspace(), testTable()));
-          }
-          getDriverSession().execute(psAfterAlter.bind(1, 1, current));
+          // After DROP the column no longer exists; the 3-column INSERT is
+          // always safe and does not need exception handling.
+          getDriverSession().execute(String.format(
+              "INSERT INTO %s.%s (column1, column2, column3) VALUES (%d, %d, %d);",
+              testKeyspace(), testTable(), 1, 1, current));
         }
         Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
       }

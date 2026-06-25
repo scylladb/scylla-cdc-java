@@ -1,6 +1,5 @@
 package com.scylladb.cdc.lib;
 
-import com.datastax.driver.core.PreparedStatement;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import com.scylladb.cdc.model.worker.RawChange;
@@ -95,38 +94,18 @@ public class AlterUpdateUdtIT extends AlterTableBase {
   @Override
   public Runnable createDatagenTask() {
     return () -> {
-      // Prepare UDT type and statements for both before and after alter
-      com.datastax.driver.core.UserType udtTypeBefore = getDriverSession().getCluster()
-          .getMetadata().getKeyspace(testKeyspace()).getUserType("simple_udt");
-      PreparedStatement psBefore =
-          getDriverSession().prepare(
-              String.format(
-                  "INSERT INTO %s.%s (column1, column2, column3) VALUES (?, ?, ?);",
-                  testKeyspace(), testTable()));
-      PreparedStatement psAfter = null;
       while (!datagenShouldStop.get()) {
         int current = datagenCounter.incrementAndGet();
         if (!isAfterAlter.get()) {
           // Before alter: UDT has fields a int, b text
-          com.datastax.driver.core.UDTValue udtValue = udtTypeBefore.newValue()
-              .setInt("a", current)
-              .setString("b", "val" + current);
-          getDriverSession().execute(psBefore.bind(1, 1, udtValue));
+          getDriverSession().execute(String.format(
+              "INSERT INTO %s.%s (column1, column2, column3) VALUES (%d, %d, {a: %d, b: 'val%d'});",
+              testKeyspace(), testTable(), 1, 1, current, current));
         } else {
-          if (psAfter == null) {
-            psAfter = getDriverSession().prepare(
-                String.format(
-                    "INSERT INTO %s.%s (column1, column2, column3) VALUES (?, ?, ?); ",
-                    testKeyspace(), testTable()));
-          }
-          // After alter: refresh UDT type to get new field c
-          com.datastax.driver.core.UserType udtTypeAfter = getDriverSession().getCluster()
-              .getMetadata().getKeyspace(testKeyspace()).getUserType("simple_udt");
-          com.datastax.driver.core.UDTValue udtValue = udtTypeAfter.newValue()
-              .setInt("a", current)
-              .setString("b", "val" + current)
-              .setInt("c", current * 10);
-          getDriverSession().execute(psAfter.bind(1, 1, udtValue));
+          // After alter: UDT gains field c int
+          getDriverSession().execute(String.format(
+              "INSERT INTO %s.%s (column1, column2, column3) VALUES (%d, %d, {a: %d, b: 'val%d', c: %d});",
+              testKeyspace(), testTable(), 1, 1, current, current, current * 10));
         }
         Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
       }
