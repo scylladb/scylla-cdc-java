@@ -18,17 +18,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.EndPoint;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.RegularStatement;
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.ResultSetFuture;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.exceptions.BusyPoolException;
+import com.datastax.driver.core.exceptions.NoHostAvailableException;
+import com.datastax.driver.core.exceptions.OverloadedException;
+import com.datastax.driver.core.exceptions.ReadTimeoutException;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.scylladb.cdc.cql.NoisyCQLExceptionWrapper;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -43,6 +50,8 @@ public class Driver3WorkerCQL implements WorkerCQL {
     private final Session session;
     private final Map<TableName, PreparedStatement> preparedStmts = new HashMap<>();
     private final ConsistencyLevel consistencyLevel;
+    private final ImmutableSet<Class<? extends Throwable>> noisyExceptions =
+        ImmutableSet.of(BusyPoolException.class, OverloadedException.class, ReadTimeoutException.class);
 
     public Driver3WorkerCQL(Driver3Session session) {
         this.session = Preconditions.checkNotNull(session).getDriverSession();
@@ -125,7 +134,12 @@ public class Driver3WorkerCQL implements WorkerCQL {
 
                         @Override
                         public void onFailure(Throwable t) {
-                            fut.completeExceptionally(t);
+                            if (isNoisyExceptionInduced(t)) {
+                                fut.completeExceptionally(new NoisyCQLExceptionWrapper(t));
+                            }
+                            else {
+                                fut.completeExceptionally(t);
+                            }
                         }
                     }, MoreExecutors.directExecutor());
                 }
@@ -247,7 +261,12 @@ public class Driver3WorkerCQL implements WorkerCQL {
 
             @Override
             public void onFailure(Throwable t) {
-                result.completeExceptionally(t);
+                if (isNoisyExceptionInduced(t)) {
+                    result.completeExceptionally(new NoisyCQLExceptionWrapper(t));
+                }
+                else {
+                    result.completeExceptionally(t);
+                }
             }
         }, MoreExecutors.directExecutor());
         return result;
@@ -268,5 +287,26 @@ public class Driver3WorkerCQL implements WorkerCQL {
     @Override
     public CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName) {
         return Driver3CommonCQL.fetchTableTTL(session, tableName);
+    }
+
+    private boolean isNoisyException(Throwable ex) {
+        return (noisyExceptions.stream().anyMatch(v -> v.isInstance(ex)));
+    }
+
+    private boolean isNoisyExceptionInduced(Throwable ex) {
+        if (isNoisyException(ex)) {
+            return true;
+        }
+
+        if (ex instanceof NoHostAvailableException) {
+            Map<EndPoint, Throwable> errors = ((NoHostAvailableException) ex).getErrors();
+            if (errors.isEmpty()) {
+                return false;
+            }
+            if(errors.values().stream().allMatch(this::isNoisyException)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
