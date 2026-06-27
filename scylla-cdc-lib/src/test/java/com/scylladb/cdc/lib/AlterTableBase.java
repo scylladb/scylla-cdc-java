@@ -12,6 +12,7 @@ import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -33,6 +34,18 @@ public abstract class AlterTableBase {
 
   private static Session driverSession;
   private static Cluster cluster;
+
+  // JUnit 5 creates a new instance per @Test method, so instance-level
+  // synchronized is insufficient for static fields. SESSION_LOCK is a
+  // static monitor that guards cluster and driverSession across all
+  // concurrent instances and test classes.
+  //
+  // activeClassCount is a reference counter: each concrete subclass
+  // increments it in @BeforeAll and decrements it in @AfterAll. The
+  // cluster is only closed when the last class finishes, preventing
+  // premature closure while sibling test classes are still running.
+  private static final Object SESSION_LOCK = new Object();
+  private static final AtomicInteger activeClassCount = new AtomicInteger(0);
 
   public abstract String testKeyspace();
 
@@ -104,13 +117,16 @@ public abstract class AlterTableBase {
   }
 
   public Session getDriverSession() {
-    if (cluster == null || cluster.isClosed()) {
-      cluster = Cluster.builder().addContactPoint(hostname).withPort(port).build();
+    synchronized (SESSION_LOCK) {
+      if (cluster == null || cluster.isClosed()) {
+        cluster = Cluster.builder().addContactPoint(hostname).withPort(port).build();
+        driverSession = null; // Invalidate session when cluster is recreated
+      }
+      if (driverSession == null || driverSession.isClosed()) {
+        driverSession = cluster.connect();
+      }
+      return driverSession;
     }
-    if (driverSession == null || driverSession.isClosed()) {
-      driverSession = cluster.connect();
-    }
-    return driverSession;
   }
 
   protected void clearSharedVariables() {
@@ -219,13 +235,22 @@ public abstract class AlterTableBase {
     }
   }
 
+  @BeforeAll
+  public static void registerTestClass() {
+    activeClassCount.incrementAndGet();
+  }
+
   @AfterAll
   public static void closeSession() {
-    if (driverSession != null && !driverSession.isClosed()) {
-      driverSession.close();
-    }
-    if (cluster != null && !cluster.isClosed()) {
-      cluster.close();
+    synchronized (SESSION_LOCK) {
+      if (activeClassCount.decrementAndGet() == 0) {
+        if (driverSession != null && !driverSession.isClosed()) {
+          driverSession.close();
+        }
+        if (cluster != null && !cluster.isClosed()) {
+          cluster.close();
+        }
+      }
     }
   }
 
