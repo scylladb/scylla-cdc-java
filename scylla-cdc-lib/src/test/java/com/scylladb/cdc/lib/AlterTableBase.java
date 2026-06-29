@@ -65,11 +65,6 @@ public abstract class AlterTableBase {
     session.execute(dropKeyspaceQuery);
   }
 
-  public String createKeyspaceQuery() {
-    return String.format("CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', " + "'replication_factor" +
-        "': 1};", testKeyspace());
-  }
-
   public abstract String createTableQuery();
 
   public abstract void applyAlteration();
@@ -144,7 +139,7 @@ public abstract class AlterTableBase {
 
   protected void createKeyspaceAndTable() {
     wipeKeyspace();
-    getDriverSession().execute(createKeyspaceQuery());
+    TestKeyspaceUtils.createWithoutTablets(getDriverSession(), testKeyspace());
     getDriverSession().execute(createTableQuery());
   }
 

@@ -22,7 +22,7 @@ public class AlterUpdateUdtIT extends AlterTableBase {
   @Override
   protected void createKeyspaceAndTable() {
     wipeKeyspace();
-    getDriverSession().execute(createKeyspaceQuery());
+    TestKeyspaceUtils.createWithoutTablets(getDriverSession(), testKeyspace());
     getDriverSession().execute(createUdtQuery());
     getDriverSession().execute(createTableQuery());
   }

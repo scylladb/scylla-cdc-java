@@ -2,6 +2,7 @@ package com.scylladb.cdc.replicator;
 
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.exceptions.QueryValidationException;
 import com.datastax.driver.core.schemabuilder.SchemaBuilder;
 import com.scylladb.cdc.cql.MasterCQL;
 import com.scylladb.cdc.cql.CQLConfiguration;
@@ -66,17 +67,25 @@ public class BaseScyllaIntegrationTest {
         driverSessionSrc.execute(SchemaBuilder.dropKeyspace("ks").ifExists());
         driverSessionDst.execute(SchemaBuilder.dropKeyspace("ks").ifExists());
 
-        // Create a test keyspace.
-        driverSessionSrc.execute(SchemaBuilder.createKeyspace("ks").with().replication(
-            new HashMap<String, Object>() {{
-                put("class", "SimpleStrategy");
-                put("replication_factor", "1");
-        }}));
-        driverSessionDst.execute(SchemaBuilder.createKeyspace("ks").with().replication(
-            new HashMap<String, Object>() {{
-                put("class", "SimpleStrategy");
-                put("replication_factor", "1");
-        }}));
+        // Create a test keyspace. Tablets are disabled explicitly: ScyllaDB 6.x enables
+        // them by default for NTS and CDC is incompatible with tablets (issue #16317).
+        // On ScyllaDB < 6.0 the 'tablets' property is unknown; fall back without it.
+        for (Session s : new Session[]{driverSessionSrc, driverSessionDst}) {
+            try {
+                s.execute(
+                    "CREATE KEYSPACE ks WITH replication = " +
+                    "{'class': 'NetworkTopologyStrategy', 'replication_factor': 1} " +
+                    "AND tablets = {'enabled': false}");
+            } catch (QueryValidationException e) {
+                if (e.getMessage() != null && e.getMessage().contains("Unknown property 'tablets'")) {
+                    s.execute(
+                        "CREATE KEYSPACE ks WITH replication = " +
+                        "{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}");
+                } else {
+                    throw e;
+                }
+            }
+        }
 
         maybeWaitForFirstGeneration();
     }
