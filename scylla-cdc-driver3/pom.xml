@@ -43,7 +43,25 @@
                     <groupId>io.netty</groupId>
                     <artifactId>netty-handler</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -128,6 +146,10 @@
                                     <excludes>
                                         <exclude>com.google.common.flogger.*</exclude>
                                     </excludes>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml.jackson.</pattern>
+                                    <shadedPattern>shaded.com.scylladb.cdc.driver3.</shadedPattern>
                                 </relocation>
                             </relocations>
                         </configuration>
