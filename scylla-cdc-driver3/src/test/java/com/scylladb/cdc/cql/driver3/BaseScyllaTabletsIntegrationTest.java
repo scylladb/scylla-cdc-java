@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 @Tag("integration")
+@Tag("tablets")
 public class BaseScyllaTabletsIntegrationTest {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
     protected static final long SCYLLA_TIMEOUT_MS = 3000;
@@ -58,17 +59,30 @@ public class BaseScyllaTabletsIntegrationTest {
         // Drop the test keyspace in case a prior cleanup was not properly executed.
         driverSession.execute(SchemaBuilder.dropKeyspace("ks").ifExists());
 
-        // Create a test keyspace with tablets enabled
+        // Gate 1: skip if this ScyllaDB version doesn't support the 'tablets' property at all.
         try {
             driverSession.execute("CREATE KEYSPACE ks " +
                 "WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1} " +
                 "AND tablets={'initial':2};");
         } catch (Exception e) {
             if (e.getMessage().contains("Unknown property 'tablets'")) {
-                abort(
-                    "Test aborted: This version of Scylla doesn't support CDC with tablets. " +
-                    "Error message: " + e.getMessage()
-                );
+                abort("Test skipped: this ScyllaDB version does not support the tablets property. " +
+                    "Error: " + e.getMessage());
+            }
+            throw e;
+        }
+
+        // Gate 2: skip if this ScyllaDB version doesn't support CDC on tablets keyspaces.
+        try {
+            driverSession.execute(
+                "CREATE TABLE ks.cdc_probe (pk int PRIMARY KEY) WITH cdc = {'enabled': true};");
+            driverSession.execute("DROP TABLE ks.cdc_probe;");
+        } catch (InvalidQueryException e) {
+            if (e.getMessage().contains("Cannot create CDC log for a table") &&
+                    e.getMessage().contains("because keyspace uses tablets")) {
+                driverSession.execute(SchemaBuilder.dropKeyspace("ks").ifExists());
+                abort("Test skipped: this ScyllaDB version does not support CDC with tablets. " +
+                    "Error: " + e.getMessage());
             }
             throw e;
         }
@@ -168,34 +182,4 @@ public class BaseScyllaTabletsIntegrationTest {
         }
     }
 
-    /**
-     * Attempts to create a table with CDC enabled in a tablets-mode keyspace.
-     *
-     * This method handles the specific case where a Scylla version doesn't support
-     * CDC with tablets mode by detecting the specific error message and aborting the test
-     * rather than letting it fail. This approach allows the test suite to run on both
-     * Scylla versions that support CDC with tablets and those that don't.
-     *
-     * If the table creation fails for any other reason, the original exception is rethrown
-     * so that the test fails normally, indicating a real issue rather than a feature limitation.
-     *
-     * @param query The CREATE TABLE query to execute
-     * @throws InvalidQueryException if the table cannot be created for reasons other than
-     *         CDC with tablets compatibility
-     */
-    public void tryCreateTable(String query) throws InvalidQueryException {
-        try {
-            driverSession.execute(query);
-        } catch (InvalidQueryException e) {
-            // Check if this is the specific exception about CDC logs in tablet mode
-            if (e.getMessage().contains("Cannot create CDC log for a table") &&
-                e.getMessage().contains("because keyspace uses tablets")) {
-                abort(
-                    "Test aborted: This version of Scylla doesn't support CDC with tablets. " +
-                    "Error message: " + e.getMessage()
-                );
-            }
-            throw e;
-        }
-    }
 }

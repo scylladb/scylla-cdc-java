@@ -13,11 +13,12 @@ import java.util.concurrent.TimeoutException;
 import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("integration")
+@Tag("tablets")
 public class Driver3TabletsIntegrationIT extends BaseScyllaTabletsIntegrationTest {
 
     @Test
     public void testChangeInTabletsMode() throws ExecutionException, InterruptedException, TimeoutException {
-        tryCreateTable("CREATE TABLE ks.test(pk int, ck int, v text, PRIMARY KEY(pk, ck)) " +
+        driverSession.execute("CREATE TABLE ks.test(pk int, ck int, v text, PRIMARY KEY(pk, ck)) " +
                 "WITH cdc = {'enabled': true}");
 
         // Insert a test row
