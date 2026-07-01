@@ -18,10 +18,12 @@ import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("integration")
+@Tag("tablets")
 public class TabletsIT {
   Properties systemProperties = System.getProperties();
   String hostname =
@@ -29,6 +31,43 @@ public class TabletsIT {
   int port = Integer.parseInt(systemProperties.getProperty("scylla.docker.port"));
   String scyllaVersion =
       Preconditions.checkNotNull(systemProperties.getProperty("scylla.docker.version"));
+
+  @BeforeEach
+  public void checkTabletsCdcSupport() {
+    try (Cluster cluster = Cluster.builder().addContactPoint(hostname).withPort(port).build();
+         Session session = cluster.connect()) {
+      // Drop probe keyspace in case it was left from a prior interrupted run.
+        session.execute("DROP KEYSPACE IF EXISTS cdc_tablets_probe;");
+
+      // Gate 1: skip if this ScyllaDB version doesn't support the 'tablets' property at all.
+      try {
+        session.execute("CREATE KEYSPACE cdc_tablets_probe " +
+            "WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1} " +
+            "AND tablets = {'initial': 2};");
+      } catch (Exception e) {
+        if (e.getMessage().contains("Unknown property 'tablets'")) {
+          abort("Test skipped: this ScyllaDB version does not support the tablets property. " +
+              "Error: " + e.getMessage());
+        }
+        throw e;
+      }
+
+      // Gate 2: skip if this ScyllaDB version doesn't support CDC on tablets keyspaces.
+      try {
+        session.execute(
+            "CREATE TABLE cdc_tablets_probe.t (pk int PRIMARY KEY) WITH cdc = {'enabled': true};");
+      } catch (InvalidQueryException e) {
+        if (e.getMessage().contains("Cannot create CDC log for a table") &&
+            e.getMessage().contains("because keyspace uses tablets")) {
+          abort("Test skipped: this ScyllaDB version does not support CDC with tablets. " +
+              "Error: " + e.getMessage());
+        }
+        throw e;
+      } finally {
+      session.execute("DROP KEYSPACE IF EXISTS cdc_tablets_probe;");
+      }
+    }
+  }
 
   @Test
   public void consumeFromTabletsKeyspace() throws InterruptedException {
@@ -41,13 +80,12 @@ public class TabletsIT {
 
       // Create keyspace with tablets enabled
       session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-      tryCreateKeyspace(session, String.format(
+      session.execute(String.format(
           "CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', "
               + "'replication_factor': 1} AND tablets = {'initial': 8};", keyspace));
 
       session.execute(String.format("DROP TABLE IF EXISTS %s.%s;", keyspace, table));
-      tryCreateTable(session,
-          String.format(
+      session.execute(String.format(
               "CREATE TABLE %s.%s (id int, value text, PRIMARY KEY (id)) "
                   + "WITH cdc = {'enabled': 'true'};",
               keyspace, table));
@@ -111,7 +149,7 @@ public class TabletsIT {
 
       // Create keyspace with tablets enabled
       session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-      tryCreateKeyspace(session, String.format(
+      session.execute(String.format(
           "CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', "
               + "'replication_factor': 1} AND tablets = {'initial': 8};", keyspace));
 
@@ -119,14 +157,12 @@ public class TabletsIT {
       session.execute(String.format("DROP TABLE IF EXISTS %s.%s;", keyspace, table1));
       session.execute(String.format("DROP TABLE IF EXISTS %s.%s;", keyspace, table2));
 
-      tryCreateTable(session,
-          String.format(
+      session.execute(String.format(
               "CREATE TABLE %s.%s (id int, value text, PRIMARY KEY (id)) "
                   + "WITH cdc = {'enabled': 'true'};",
               keyspace, table1));
 
-      tryCreateTable(session,
-          String.format(
+      session.execute(String.format(
               "CREATE TABLE %s.%s (id int, name text, PRIMARY KEY (id)) "
                   + "WITH cdc = {'enabled': 'true'};",
               keyspace, table2));
@@ -195,13 +231,12 @@ public class TabletsIT {
 
       // Create keyspace with tablets enabled
       session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-      tryCreateKeyspace(session, String.format(
+      session.execute(String.format(
           "CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', "
               + "'replication_factor': 1} AND tablets = {'initial': 8};", keyspace));
 
       session.execute(String.format("DROP TABLE IF EXISTS %s.%s;", keyspace, table));
-      tryCreateTable(session,
-          String.format(
+      session.execute(String.format(
               "CREATE TABLE %s.%s (id int, value text, PRIMARY KEY (id)) "
                   + "WITH cdc = {'enabled': 'true'};",
               keyspace, table));
@@ -318,28 +353,4 @@ public class TabletsIT {
     }
   }
 
-  public void tryCreateKeyspace(Session session, String query) {
-      try {
-          session.execute(query);
-      } catch (Exception e) {
-          if (e.getMessage().contains("Unknown property 'tablets'")) {
-              abort("Test aborted: This version of Scylla doesn't support CDC with tablets. " +
-                              "Error message: " + e.getMessage());
-          }
-          throw e;
-      }
-  }
-
-  public void tryCreateTable(Session session, String query) throws InvalidQueryException {
-      try {
-          session.execute(query);
-      } catch (InvalidQueryException e) {
-          if (e.getMessage().contains("Cannot create CDC log for a table") &&
-                  e.getMessage().contains("because keyspace uses tablets")) {
-              abort("Test aborted: This version of Scylla doesn't support CDC with tablets. " +
-                              "Error message: " + e.getMessage());
-          }
-          throw e;
-      }
-  }
 }

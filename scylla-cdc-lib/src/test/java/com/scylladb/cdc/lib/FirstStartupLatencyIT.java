@@ -46,9 +46,7 @@ public class FirstStartupLatencyIT {
             Session session = cluster.connect();
 
             session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-            session.execute(String.format(
-                "CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', "
-                    + "'replication_factor': 1};", keyspace));
+            TestKeyspaceUtils.createWithoutTablets(session, keyspace);
             session.execute(String.format(
                 "CREATE TABLE %s.%s (pk int, ck int, v text, PRIMARY KEY (pk, ck)) "
                     + "WITH cdc = {'enabled': true};",
@@ -127,9 +125,7 @@ public class FirstStartupLatencyIT {
             Session session = cluster.connect();
 
             session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-            session.execute(String.format(
-                "CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', "
-                    + "'replication_factor': 1};", keyspace));
+            TestKeyspaceUtils.createWithoutTablets(session, keyspace);
             session.execute(String.format(
                 "CREATE TABLE %s.%s (pk int, ck int, v text, PRIMARY KEY (pk, ck)) "
                     + "WITH cdc = {'enabled': true};",
@@ -201,9 +197,7 @@ public class FirstStartupLatencyIT {
             Session session = cluster.connect();
 
             session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-            session.execute(String.format(
-                "CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', "
-                    + "'replication_factor': 1};", keyspace));
+            TestKeyspaceUtils.createWithoutTablets(session, keyspace);
             session.execute(String.format(
                 "CREATE TABLE %s.%s (pk int, ck int, v text, PRIMARY KEY (pk, ck)) "
                     + "WITH cdc = {'enabled': true};",

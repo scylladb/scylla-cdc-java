@@ -19,11 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("integration")
+@Tag("tablets")
 public class Driver3MasterCQLTabletsIT extends BaseScyllaTabletsIntegrationTest {
 
     @Test
     public void testTabletsMasterFetchesGenerationIdForTable() throws InterruptedException, ExecutionException, TimeoutException {
-        tryCreateTable("CREATE TABLE ks.test(p int, c int, v int, PRIMARY KEY(p, c)) " +
+        driverSession.execute("CREATE TABLE ks.test(p int, c int, v int, PRIMARY KEY(p, c)) " +
                 "WITH cdc = {'enabled': true}");
 
         // Check that Driver3MasterCQL can fetch the table's generation id in tablet mode

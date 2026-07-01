@@ -42,10 +42,8 @@ public class AlterTableIT {
     try (Cluster cluster = Cluster.builder().addContactPoint(hostname).withPort(port).build()) {
       session = cluster.connect();
       session.execute(
-          String.format(
-              "CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'SimpleStrategy', "
-                  + "'replication_factor': 1};",
-              keyspace));
+          String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
+      TestKeyspaceUtils.createWithoutTablets(session, keyspace);
       session.execute(String.format("DROP TABLE IF EXISTS %s.%s;", keyspace, table));
       session.execute(
           String.format(

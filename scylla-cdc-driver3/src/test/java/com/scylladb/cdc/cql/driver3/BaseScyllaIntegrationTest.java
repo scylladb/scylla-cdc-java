@@ -3,6 +3,7 @@ package com.scylladb.cdc.cql.driver3;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.exceptions.QueryValidationException;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.schemabuilder.SchemaBuilder;
 import com.google.common.base.Preconditions;
@@ -58,12 +59,23 @@ public class BaseScyllaIntegrationTest {
         // Drop the test keyspace in case a prior cleanup was not properly executed.
         driverSession.execute(SchemaBuilder.dropKeyspace("ks").ifExists());
 
-        // Create a test keyspace.
-        driverSession.execute(SchemaBuilder.createKeyspace("ks").with().replication(
-            new HashMap<String, Object>() {{
-                put("class", "SimpleStrategy");
-                put("replication_factor", "1");
-        }}));
+        // Create a test keyspace. Tablets are disabled explicitly: ScyllaDB 6.x enables
+        // them by default for NTS and CDC is incompatible with tablets (issue #16317).
+        // On ScyllaDB < 6.0 the 'tablets' property is unknown; fall back without it.
+        try {
+            driverSession.execute(
+                "CREATE KEYSPACE ks WITH replication = " +
+                "{'class': 'NetworkTopologyStrategy', 'replication_factor': 1} " +
+                "AND tablets = {'enabled': false}");
+        } catch (QueryValidationException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Unknown property 'tablets'")) {
+                driverSession.execute(
+                    "CREATE KEYSPACE ks WITH replication = " +
+                    "{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}");
+            } else {
+                throw e;
+            }
+        }
 
         maybeWaitForFirstGeneration();
     }
