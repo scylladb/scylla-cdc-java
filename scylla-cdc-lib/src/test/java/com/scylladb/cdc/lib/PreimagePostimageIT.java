@@ -42,9 +42,7 @@ public class PreimagePostimageIT {
 
             // Create keyspace
             session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-            session.execute(String.format(
-                "CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', "
-                    + "'replication_factor': 1};", keyspace));
+            TestKeyspaceUtils.createWithoutTablets(session, keyspace);
 
             // Create table with CDC, preimage, and postimage enabled
             session.execute(String.format(
@@ -160,9 +158,7 @@ public class PreimagePostimageIT {
 
             // Create keyspace
             session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-            session.execute(String.format(
-                "CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', "
-                    + "'replication_factor': 1};", keyspace));
+            TestKeyspaceUtils.createWithoutTablets(session, keyspace);
 
             // Create table with CDC and preimage enabled
             session.execute(String.format(
@@ -248,9 +244,7 @@ public class PreimagePostimageIT {
 
             // Create keyspace
             session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-            session.execute(String.format(
-                "CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', "
-                    + "'replication_factor': 1};", keyspace));
+            TestKeyspaceUtils.createWithoutTablets(session, keyspace);
 
             // Create table with CDC and postimage enabled (no preimage)
             session.execute(String.format(

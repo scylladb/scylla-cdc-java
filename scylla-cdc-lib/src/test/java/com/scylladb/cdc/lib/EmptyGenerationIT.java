@@ -41,9 +41,7 @@ public class EmptyGenerationIT {
 
       // Create keyspace without tablets enabled
       session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
-      session.execute(String.format(
-          "CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', "
-              + "'replication_factor': 1}", keyspace));
+      TestKeyspaceUtils.createWithoutTablets(session, keyspace);
 
       session.execute(String.format("DROP TABLE IF EXISTS %s.%s;", keyspace, table));
       session.execute(
