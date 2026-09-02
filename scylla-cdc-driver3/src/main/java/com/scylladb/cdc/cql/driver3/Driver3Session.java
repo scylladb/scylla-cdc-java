@@ -2,6 +2,7 @@ package com.scylladb.cdc.cql.driver3;
 
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.policies.DCAwareRoundRobinPolicy;
+import com.datastax.driver.core.policies.EC2MultiRegionAddressTranslator;
 import com.datastax.driver.core.policies.RackAwareRoundRobinPolicy;
 import com.datastax.driver.core.policies.RoundRobinPolicy;
 import com.datastax.driver.core.policies.TokenAwarePolicy;
@@ -34,6 +35,10 @@ public class Driver3Session implements AutoCloseable {
         clusterBuilder = clusterBuilder
             .withPort(cqlConfiguration.defaultPort)
             .addContactPointsWithPorts(cqlConfiguration.contactPoints);
+
+        if (cqlConfiguration.getAddressTranslator() == CQLConfiguration.AddressTranslatorType.EC2_MULTI_REGION) {
+            clusterBuilder = clusterBuilder.withAddressTranslator(new EC2MultiRegionAddressTranslator());
+        }
 
         PoolingOptions poolingOptions = new PoolingOptions();
         if (cqlConfiguration.poolingMaxQueueSize != null) {

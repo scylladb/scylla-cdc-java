@@ -9,6 +9,7 @@ import java.util.List;
 
 public class CQLConfiguration {
     private static final ConsistencyLevel DEFAULT_CONSISTENCY_LEVEL = ConsistencyLevel.QUORUM;
+    private static final AddressTranslatorType DEFAULT_ADDRESS_TRANSLATOR = AddressTranslatorType.NONE;
 
     /**
      * The consistency level of read queries to Scylla.
@@ -57,6 +58,12 @@ public class CQLConfiguration {
         ALL
     }
 
+    // Address translator applied to the rpc_address each node advertises.
+    public enum AddressTranslatorType {
+        NONE,
+        EC2_MULTI_REGION
+    }
+
     public final List<InetSocketAddress> contactPoints;
     public final String user;
     public final String password;
@@ -64,6 +71,7 @@ public class CQLConfiguration {
     private final String localDCName;
     private final String localRackName;
     private final ReplicaOrdering replicaOrdering;
+    private final AddressTranslatorType addressTranslator;
     public final SslConfig sslConfig;
     public final int queryOptionsFetchSize;
     // Part of driver's pooling options
@@ -77,6 +85,7 @@ public class CQLConfiguration {
     private CQLConfiguration(List<InetSocketAddress> contactPoints,
                              String user, String password, ConsistencyLevel consistencyLevel,
                              String localDCName, String localRackName, ReplicaOrdering replicaOrdering,
+                             AddressTranslatorType addressTranslator,
                              SslConfig sslConfig, int queryOptionsFetchSize, Integer corePoolLocal,
                              Integer maxPoolLocal, Integer poolingMaxQueueSize,
                              Integer poolingMaxRequestsPerConnectionLocal,
@@ -98,6 +107,7 @@ public class CQLConfiguration {
         this.localDCName = localDCName;
         this.localRackName = localRackName;
         this.replicaOrdering = Preconditions.checkNotNull(replicaOrdering);
+        this.addressTranslator = Preconditions.checkNotNull(addressTranslator);
         this.sslConfig = sslConfig;
         this.queryOptionsFetchSize = queryOptionsFetchSize;
         this.corePoolLocal = corePoolLocal;
@@ -175,6 +185,10 @@ public class CQLConfiguration {
         return replicaOrdering;
     }
 
+    public AddressTranslatorType getAddressTranslator() {
+        return addressTranslator;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -188,6 +202,7 @@ public class CQLConfiguration {
         private String localDCName = null;
         private String localRackName = null;
         private ReplicaOrdering replicaOrdering = ReplicaOrdering.RANDOM;
+        private AddressTranslatorType addressTranslator = DEFAULT_ADDRESS_TRANSLATOR;
         private SslConfig sslConfig = null;
         private int queryOptionsFetchSize = 0;
         private Integer corePoolLocal = null;
@@ -297,6 +312,11 @@ public class CQLConfiguration {
             return this;
         }
 
+        public Builder withAddressTranslator(AddressTranslatorType addressTranslator) {
+            this.addressTranslator = Preconditions.checkNotNull(addressTranslator);
+            return this;
+        }
+
         public Builder withSslConfig(SslConfig sslConfig) {
             this.sslConfig = sslConfig;
             return this;
@@ -371,7 +391,7 @@ public class CQLConfiguration {
         }
 
         public CQLConfiguration build() {
-            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, replicaOrdering, sslConfig, queryOptionsFetchSize, corePoolLocal, maxPoolLocal, poolingMaxQueueSize, poolingMaxRequestsPerConnectionLocal, poolTimeoutMillis, defaultPort);
+            return new CQLConfiguration(contactPoints, user, password, consistencyLevel, localDCName, localRackName, replicaOrdering, addressTranslator, sslConfig, queryOptionsFetchSize, corePoolLocal, maxPoolLocal, poolingMaxQueueSize, poolingMaxRequestsPerConnectionLocal, poolTimeoutMillis, defaultPort);
         }
     }
 }
