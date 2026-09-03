@@ -14,7 +14,7 @@ import java.util.SortedSet;
 
 /**
  * Represents a set of tasks that are created together within the same generation and share
- * common generation metadata.
+ * a common generation ID.
  */
 public class GroupedTasks {
     private final Map<TaskId, SortedSet<StreamId>> tasks;
@@ -103,7 +103,11 @@ public class GroupedTasks {
      * using the {@link #GroupedTasks(Map, GenerationId)} constructor.
      *
      * @return the generation metadata, or {@code null} if not available
+     * @deprecated The generation metadata is unnecessary coupling between master and worker code.
+     *             Use {@link #getGenerationId()} instead, which is always available regardless
+     *             of which constructor was used. This method will be removed in a future major release.
      */
+    @Deprecated
     public GenerationMetadata getGenerationMetadata() {
         return generationMetadata;
     }
