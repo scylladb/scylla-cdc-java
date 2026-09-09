@@ -17,7 +17,6 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
-import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.worker.TaskState;
 import com.scylladb.cdc.model.worker.Worker;
 import com.scylladb.cdc.model.worker.WorkerConfiguration;
@@ -41,7 +40,7 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     private Thread workerThread = null;
 
     // Track generation IDs by table for tablet mode
-    protected final Map<TableName, GenerationMetadata> currentGenerationByTable = new ConcurrentHashMap<>();
+    protected final Map<TableName, GenerationId> currentGenerationByTable = new ConcurrentHashMap<>();
 
     public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
                           Supplier<ScheduledExecutorService> executorServiceSupplier) {
@@ -66,9 +65,9 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     @Override
     public Optional<GenerationId> getCurrentGenerationId(TableName tableName) {
-        GenerationMetadata metadata = currentGenerationByTable.get(tableName);
-        if (metadata != null) {
-            return Optional.of(metadata.getId());
+        GenerationId generationId = currentGenerationByTable.get(tableName);
+        if (generationId != null) {
+            return Optional.of(generationId);
         }
         // Fall back to persisted generation ID from a previous run (before configureWorkers
         // has populated currentGenerationByTable for this table in the current run).
@@ -118,9 +117,9 @@ class LocalTransport implements MasterTransport, WorkerTransport {
             backend.deleteTasks(toDelete);
         }
 
-        // Update generation metadata for this table
-        currentGenerationByTable.put(tableName, workerTasks.getGenerationMetadata());
-        backend.saveGenerationId(tableName, workerTasks.getGenerationMetadata().getId());
+        // Update generation ID for this table
+        currentGenerationByTable.put(tableName, workerTasks.getGenerationId());
+        backend.saveGenerationId(tableName, workerTasks.getGenerationId());
 
         if (currentWorker == null) {
             // No worker exists, start a new one
