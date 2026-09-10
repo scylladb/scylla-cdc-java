@@ -76,7 +76,13 @@ public class MockDriver3WorkerCQL extends Driver3WorkerCQL {
         Futures.addCallback(Futures.allAsList(futures), new FutureCallback<List<ResultSet>>() {
             @Override
             public void onSuccess(List<ResultSet> rss) {
-                result.complete(new MockDriver3MultiReader(rss, task.state.getLastConsumedChangeId()));
+                Optional<ChangeId> lastChangeId = task.state.getLastConsumedChangeId();
+                if (task.id.isTabletStreamTask() && rss.size() == 1) {
+                    result.complete(new MockDriver3Reader(
+                            rss.get(0), lastChangeId, nextPageLock, nextRowLock));
+                } else {
+                    result.complete(new MockDriver3MultiReader(rss, lastChangeId));
+                }
             }
 
             @Override

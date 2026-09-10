@@ -64,12 +64,17 @@ public class TableCDCController {
         logger.atInfo().log("Master found a new generation for table %s with ID %s.", table, nextGenId.get());
     }
 
-    private static GroupedTasks createTasks(GenerationMetadata generation, TableName table) {
+    static GroupedTasks createTasks(GenerationMetadata generation, TableName table) {
         SortedSet<StreamId> streams = generation.getStreams();
         Map<TaskId, SortedSet<StreamId>> taskMap = new HashMap<>();
+        int taskIndex = 0;
         for (StreamId s : streams) {
-            TaskId taskId = new TaskId(generation.getId(), s.getVNodeId(), table);
-            taskMap.computeIfAbsent(taskId, id -> new TreeSet<>()).add(s);
+            // Tablet stream IDs always encode vnode index 0 because vnodes do not exist in the
+            // tablet replication model. Scylla treats a generation timestamp's stream set as
+            // immutable; membership changes create a new generation. Use the stream's stable
+            // position in that sorted set so each tablet can be consumed independently.
+            TaskId taskId = TaskId.forTabletStream(generation.getId(), taskIndex++, table);
+            taskMap.put(taskId, new TreeSet<>(Collections.singleton(s)));
         }
         return new GroupedTasks(taskMap, generation);
     }

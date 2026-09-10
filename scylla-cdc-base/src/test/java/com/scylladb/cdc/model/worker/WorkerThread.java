@@ -11,6 +11,7 @@ import com.scylladb.cdc.transport.GroupedTasks;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 import java.time.Clock;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -28,16 +29,23 @@ public class WorkerThread implements AutoCloseable {
     private final Future<Throwable> workerRunFuture;
 
     public WorkerThread(WorkerConfiguration workerConfiguration, GroupedTasks groupedStreams) {
+        this(workerConfiguration, Collections.singleton(groupedStreams));
+    }
+
+    public WorkerThread(WorkerConfiguration workerConfiguration,
+                        Collection<GroupedTasks> groupedStreams) {
         Preconditions.checkNotNull(workerConfiguration);
         this.worker = new Worker(workerConfiguration);
-        this.workerRunFuture = Executors.newSingleThreadExecutor().submit(() -> {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        this.workerRunFuture = executor.submit(() -> {
             try {
-                worker.run(groupedStreams);
+                worker.runTaskGroups(groupedStreams);
                 return null;
             } catch (Throwable t) {
                 return t;
             }
         });
+        executor.shutdown();
     }
 
     public WorkerThread(WorkerCQL workerCQL, WorkerTransport workerTransport, Consumer consumer, Clock clock,

@@ -28,6 +28,8 @@ import static com.scylladb.cdc.model.worker.WorkerThread.DEFAULT_QUERY_WINDOW_SI
 import static org.awaitility.Awaitility.with;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class WorkerTest {
     private static final long DEFAULT_AWAIT_TIMEOUT_MS = 2000;
@@ -43,6 +45,141 @@ public class WorkerTest {
             TEST_GENERATION_VNODE_COUNT, TEST_GENERATION_STREAMS_PER_VNODE_COUNT);
 
     protected static TableName TEST_TABLE_NAME = new TableName("ks", "t");
+
+    @Test
+    public void testWorkerRunsDifferentTablesFromMultipleGenerations() {
+        long firstStartMs = TEST_GENERATION_START_MS;
+        long secondStartMs = TEST_GENERATION_START_MS + 100;
+        TableName secondTable = new TableName("ks", "t2");
+        GenerationMetadata firstGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(firstStartMs)), Optional.empty(), 1, 1);
+        GenerationMetadata secondGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(secondStartMs)), Optional.empty(), 1, 1);
+        GroupedTasks firstTasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                firstGeneration, Collections.singleton(TEST_TABLE_NAME));
+        GroupedTasks secondTasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                secondGeneration, Collections.singleton(secondTable));
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+        WorkerConfiguration configuration = WorkerConfiguration.builder()
+                .withCQL(mockWorkerCQL)
+                .withTransport(workerTransport)
+                .withConsumer(Consumer.syncRawChangeConsumer(change -> {}))
+                .withQueryTimeWindowSizeMs(DEFAULT_QUERY_WINDOW_SIZE_MS)
+                .withConfidenceWindowSizeMs(DEFAULT_CONFIDENCE_WINDOW_SIZE_MS)
+                .withClock(Clock.fixed(Instant.ofEpochMilli(secondStartMs + 1_000), ZoneOffset.UTC))
+                .build();
+
+        try (WorkerThread workerThread = new WorkerThread(
+                configuration, Arrays.asList(firstTasks, secondTasks))) {
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(
+                    firstGeneration, 0, TEST_TABLE_NAME,
+                    firstStartMs, firstStartMs + DEFAULT_QUERY_WINDOW_SIZE_MS)));
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.isReaderFinished(generateTask(
+                    secondGeneration, 0, secondTable,
+                    secondStartMs, secondStartMs + DEFAULT_QUERY_WINDOW_SIZE_MS)));
+        }
+    }
+
+    @Test
+    public void testWorkerRejectsMultipleGenerationsForSameTable() {
+        GenerationMetadata firstGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
+        GenerationMetadata secondGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS + 100)), Optional.empty(), 1, 1);
+        GroupedTasks firstTasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                firstGeneration, Collections.singleton(TEST_TABLE_NAME));
+        GroupedTasks secondTasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                secondGeneration, Collections.singleton(TEST_TABLE_NAME));
+        Worker worker = new Worker(WorkerConfiguration.builder()
+                .withCQL(new MockWorkerCQL())
+                .withTransport(new MockWorkerTransport())
+                .withConsumer(Consumer.syncRawChangeConsumer(change -> {}))
+                .build());
+
+        try {
+            assertThrows(IllegalArgumentException.class,
+                    () -> worker.runTaskGroups(Arrays.asList(firstTasks, secondTasks)));
+        } finally {
+            worker.stop();
+        }
+    }
+
+    @Test
+    public void testWorkerRejectsDuplicateTaskIdsAcrossGroups() {
+        GenerationMetadata generation = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
+        GroupedTasks tasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                generation, Collections.singleton(TEST_TABLE_NAME));
+        Worker worker = new Worker(WorkerConfiguration.builder()
+                .withCQL(new MockWorkerCQL())
+                .withTransport(new MockWorkerTransport())
+                .withConsumer(Consumer.syncRawChangeConsumer(change -> {}))
+                .build());
+
+        try {
+            assertThrows(IllegalArgumentException.class,
+                    () -> worker.runTaskGroups(Arrays.asList(tasks, tasks)));
+        } finally {
+            worker.stop();
+        }
+    }
+
+    @Test
+    public void testWorkerPreparesEveryGroupBeforeRegisteringTaskState() {
+        TableName failingTable = new TableName("ks", "failing_table");
+        GenerationMetadata firstGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
+        GenerationMetadata secondGeneration = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS + 100)), Optional.empty(), 1, 1);
+        GroupedTasks firstTasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                firstGeneration, Collections.singleton(TEST_TABLE_NAME));
+        GroupedTasks secondTasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                secondGeneration, Collections.singleton(failingTable));
+        MockWorkerCQL cql = new MockWorkerCQL() {
+            @Override
+            public CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName) {
+                if (tableName.equals(failingTable)) {
+                    CompletableFuture<Optional<Long>> failure = new CompletableFuture<>();
+                    failure.completeExceptionally(new IllegalStateException("injected failure"));
+                    return failure;
+                }
+                return super.fetchTableTTL(tableName);
+            }
+        };
+        MockWorkerTransport transport = new MockWorkerTransport();
+        Worker worker = new Worker(WorkerConfiguration.builder()
+                .withCQL(cql)
+                .withTransport(transport)
+                .withConsumer(Consumer.syncRawChangeConsumer(change -> { }))
+                .build());
+
+        try {
+            assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> worker.runTaskGroups(Arrays.asList(firstTasks, secondTasks)));
+            firstTasks.getTaskIds().forEach(taskId ->
+                    assertTrue(transport.getSetStateInvocations(taskId).isEmpty()));
+            secondTasks.getTaskIds().forEach(taskId ->
+                    assertTrue(transport.getSetStateInvocations(taskId).isEmpty()));
+        } finally {
+            worker.stop();
+        }
+    }
+
+    @Test
+    public void testSingleGroupRunRejectsNull() {
+        Worker worker = new Worker(WorkerConfiguration.builder()
+                .withCQL(new MockWorkerCQL())
+                .withTransport(new MockWorkerTransport())
+                .withConsumer(Consumer.syncRawChangeConsumer(change -> {}))
+                .build());
+
+        try {
+            assertThrows(NullPointerException.class, () -> worker.run(null));
+        } finally {
+            worker.stop();
+        }
+    }
 
     // ChangeSchema for table:
     // CREATE TABLE ks.t(pk int, ck int, v int, PRIMARY KEY(pk, ck)) WITH cdc = {'enabled': true};
