@@ -6,6 +6,9 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
+import com.scylladb.cdc.model.VNodeId;
+import com.scylladb.cdc.transport.CoordinationGroup;
+import com.scylladb.cdc.transport.CoordinationNamespaces;
 import com.scylladb.cdc.transport.GroupedTasks;
 
 import java.util.*;
@@ -64,14 +67,28 @@ public class TableCDCController {
         logger.atInfo().log("Master found a new generation for table %s with ID %s.", table, nextGenId.get());
     }
 
-    private static GroupedTasks createTasks(GenerationMetadata generation, TableName table) {
+    static GroupedTasks createTasks(GenerationMetadata generation, TableName table) {
         SortedSet<StreamId> streams = generation.getStreams();
         Map<TaskId, SortedSet<StreamId>> taskMap = new HashMap<>();
+        int taskIndex = 0;
         for (StreamId s : streams) {
-            TaskId taskId = new TaskId(generation.getId(), s.getVNodeId(), table);
-            taskMap.computeIfAbsent(taskId, id -> new TreeSet<>()).add(s);
+            // Tablet stream IDs always encode vnode index 0 because vnodes do not exist in the
+            // tablet replication model. Scylla treats a generation timestamp's stream set as
+            // immutable; membership changes create a new generation. Use the stream's stable
+            // position in that sorted set so each tablet can be consumed independently.
+            TaskId taskId = TaskId.forTabletStream(generation.getId(), taskIndex++, table);
+            taskMap.put(taskId, new TreeSet<>(Collections.singleton(s)));
         }
-        return new GroupedTasks(taskMap, generation);
+        if (taskMap.isEmpty()) {
+            return new GroupedTasks(taskMap, generation);
+        }
+
+        TaskId legacyTask = new TaskId(generation.getId(), new VNodeId(0), table);
+        CoordinationGroup<TaskId, TaskId> migration = new CoordinationGroup<>(
+                CoordinationNamespaces.TABLET_TASK_STATE_MIGRATION,
+                legacyTask,
+                taskMap.keySet());
+        return new GroupedTasks(taskMap, generation, Collections.singleton(migration));
     }
 
     /**

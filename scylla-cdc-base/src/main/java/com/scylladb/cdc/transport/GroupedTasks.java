@@ -8,6 +8,7 @@ import com.scylladb.cdc.model.master.GenerationMetadata;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -20,6 +21,7 @@ public class GroupedTasks {
     private final Map<TaskId, SortedSet<StreamId>> tasks;
     private final GenerationId generationId;
     private final GenerationMetadata generationMetadata; // nullable
+    private final Set<CoordinationGroup<TaskId, TaskId>> coordinationGroups;
 
     /**
      * Creates a new GroupedTasks with the given task configurations and full generation metadata.
@@ -28,6 +30,19 @@ public class GroupedTasks {
      * @param generationMetadata the metadata of the generation these tasks belong to
      */
     public GroupedTasks(Map<TaskId, SortedSet<StreamId>> tasks, GenerationMetadata generationMetadata) {
+        this(tasks, generationMetadata, Collections.emptySet());
+    }
+
+    /**
+     * Creates a new GroupedTasks with full generation metadata and coordination manifests.
+     *
+     * <p>A distributed transport which partitions {@code tasks} must copy every applicable
+     * coordination group unchanged to each worker assignment. Group participants describe the
+     * complete operation and therefore may include tasks assigned to other workers.
+     */
+    public GroupedTasks(Map<TaskId, SortedSet<StreamId>> tasks,
+                        GenerationMetadata generationMetadata,
+                        Set<CoordinationGroup<TaskId, TaskId>> coordinationGroups) {
         Preconditions.checkNotNull(tasks, "Tasks map cannot be null");
         Preconditions.checkNotNull(generationMetadata, "Generation metadata cannot be null");
         Preconditions.checkArgument(tasks.keySet().stream().map(TaskId::getGenerationId)
@@ -35,6 +50,7 @@ public class GroupedTasks {
         this.tasks = new HashMap<>(tasks);
         this.generationId = generationMetadata.getId();
         this.generationMetadata = generationMetadata;
+        this.coordinationGroups = copyCoordinationGroups(coordinationGroups);
     }
 
     /**
@@ -48,6 +64,16 @@ public class GroupedTasks {
      * @param generationId the ID of the generation these tasks belong to
      */
     public GroupedTasks(Map<TaskId, SortedSet<StreamId>> tasks, GenerationId generationId) {
+        this(tasks, generationId, Collections.emptySet());
+    }
+
+    /**
+     * Creates a distributed worker assignment with coordination manifests supplied by its master.
+     * Group participants may include tasks assigned to other workers.
+     */
+    public GroupedTasks(Map<TaskId, SortedSet<StreamId>> tasks,
+                        GenerationId generationId,
+                        Set<CoordinationGroup<TaskId, TaskId>> coordinationGroups) {
         Preconditions.checkNotNull(tasks, "Tasks map cannot be null");
         Preconditions.checkNotNull(generationId, "Generation ID cannot be null");
         Preconditions.checkArgument(tasks.keySet().stream().map(TaskId::getGenerationId)
@@ -55,6 +81,15 @@ public class GroupedTasks {
         this.tasks = new HashMap<>(tasks);
         this.generationId = generationId;
         this.generationMetadata = null;
+        this.coordinationGroups = copyCoordinationGroups(coordinationGroups);
+    }
+
+    private static Set<CoordinationGroup<TaskId, TaskId>> copyCoordinationGroups(
+            Set<CoordinationGroup<TaskId, TaskId>> coordinationGroups) {
+        Preconditions.checkNotNull(coordinationGroups, "Coordination groups cannot be null");
+        Preconditions.checkArgument(coordinationGroups.stream().noneMatch(java.util.Objects::isNull),
+                "Coordination groups cannot contain null");
+        return Collections.unmodifiableSet(new HashSet<>(coordinationGroups));
     }
 
     /**
@@ -73,6 +108,11 @@ public class GroupedTasks {
      */
     public Set<TaskId> getTaskIds() {
         return Collections.unmodifiableSet(tasks.keySet());
+    }
+
+    /** Returns immutable coordination manifests applicable to this assignment. */
+    public Set<CoordinationGroup<TaskId, TaskId>> getCoordinationGroups() {
+        return coordinationGroups;
     }
 
     /**
@@ -120,6 +160,7 @@ public class GroupedTasks {
 
     @Override
     public String toString() {
-        return "GroupedTasks{tasks=" + tasks + ", generationId=" + generationId + '}';
+        return "GroupedTasks{tasks=" + tasks + ", generationId=" + generationId
+                + ", coordinationGroups=" + coordinationGroups + '}';
     }
 }

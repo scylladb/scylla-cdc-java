@@ -165,6 +165,20 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
+    public Map<TaskId, TaskState> getTaskStatesForMigration(Set<TaskId> tasks) {
+        return backend.getTaskStates(tasks);
+    }
+
+    @Override
+    public void completeTaskStateMigration(Set<TaskId> legacyTasks) {
+        // LocalTransport receives the complete table assignment from the tablet master. The
+        // default stateless coordinator therefore reaches completion only after this worker has
+        // persisted every replacement in the authoritative coordination group. Worker handles a
+        // deletion failure without interrupting consumption and retries it on the next start.
+        backend.deleteTasks(legacyTasks);
+    }
+
+    @Override
     public void setState(TaskId task, TaskState newState) {
         backend.setState(task, newState);
     }

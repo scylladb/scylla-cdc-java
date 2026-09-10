@@ -242,7 +242,14 @@ public class Driver3WorkerCQL implements WorkerCQL {
         Futures.addCallback(Futures.allAsList(futures), new FutureCallback<List<ResultSet>>() {
             @Override
             public void onSuccess(List<ResultSet> rss) {
-                result.complete(new Driver3MultiReader(rss, task.state.getLastConsumedChangeId()));
+                Optional<ChangeId> lastChangeId = task.state.getLastConsumedChangeId();
+                if (task.id.isTabletStreamTask() && rss.size() == 1) {
+                    // Per-stream tablet tasks have exactly one result set. Avoid routing every row
+                    // through Driver3MultiReader's common-pool continuation in this hot path.
+                    result.complete(new Driver3Reader(rss.get(0), lastChangeId));
+                } else {
+                    result.complete(new Driver3MultiReader(rss, lastChangeId));
+                }
             }
 
             @Override

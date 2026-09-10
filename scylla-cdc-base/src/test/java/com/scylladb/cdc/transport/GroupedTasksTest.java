@@ -14,6 +14,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SortedSet;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -86,5 +87,21 @@ public class GroupedTasksTest {
 
         assertNotNull(streams);
         assertFalse(streams.isEmpty());
+    }
+
+    @Test
+    public void testCoordinationGroupsArePreservedForDistributedReconstruction() {
+        GroupedTasks fullTasks = MockGenerationMetadata.generationMetadataToWorkerTasks(
+                TEST_GENERATION, Collections.singleton(TEST_TABLE));
+        TaskId coordinationKey = fullTasks.getTaskIds().iterator().next();
+        CoordinationGroup<TaskId, TaskId> group = new CoordinationGroup<>(
+                "test", coordinationKey, fullTasks.getTaskIds());
+
+        GroupedTasks reconstructed = new GroupedTasks(
+                fullTasks.getTasks(), fullTasks.getGenerationId(), Collections.singleton(group));
+
+        assertEquals(Set.of(group), reconstructed.getCoordinationGroups());
+        assertThrows(UnsupportedOperationException.class,
+                () -> reconstructed.getCoordinationGroups().clear());
     }
 }
