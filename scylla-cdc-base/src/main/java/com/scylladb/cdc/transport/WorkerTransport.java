@@ -12,6 +12,35 @@ import com.scylladb.cdc.model.worker.Worker;
  */
 public interface WorkerTransport {
     Map<TaskId, TaskState> getTaskStates(Set<TaskId> tasks);
+
+    /**
+     * Loads states for tasks which are not assigned to this worker, solely for migrating their
+     * checkpoints to assigned tasks.
+     *
+     * <p>This separate method prevents migration lookups from violating the assignment assumptions
+     * of {@link #getTaskStates(Set)}. Transports must override it before running tablet task
+     * assignments. Stateless transports which cannot have a legacy checkpoint may return an empty
+     * map; persistent transports must look up the requested unassigned checkpoints. The default
+     * fails fast rather than silently replaying retained CDC history.
+     */
+    default Map<TaskId, TaskState> getTaskStatesForMigration(Set<TaskId> tasks) {
+        throw new UnsupportedOperationException(
+                "WorkerTransport must override getTaskStatesForMigration before running tablet "
+                        + "task assignments");
+    }
+
+    /**
+     * Called after replacement task states have been stored successfully for every task prepared
+     * by the worker. A persistent transport can use this callback to retire the returned legacy
+     * checkpoints. A transport which partitions one legacy task across multiple workers must
+     * coordinate completion across all replacements before deleting it. The default is a no-op for
+     * transports which do not persist task state.
+     *
+     * @param legacyTasks legacy task IDs returned by {@link #getTaskStatesForMigration(Set)}
+     */
+    default void completeTaskStateMigration(Set<TaskId> legacyTasks) {
+    }
+
     void setState(TaskId task, TaskState newState);
 
     /**

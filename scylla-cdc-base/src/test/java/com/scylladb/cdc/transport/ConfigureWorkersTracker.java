@@ -60,8 +60,9 @@ public class ConfigureWorkersTracker {
     }
 
     public void awaitConfigureWorkers(TableName tableName, GenerationMetadata generationMetadata) {
-        Map<TaskId, SortedSet<StreamId>> taskMap = MockGenerationMetadata.generationMetadataToTaskMap(
-                generationMetadata, Set.of(tableName));
+        Map<TaskId, SortedSet<StreamId>> taskMap =
+                MockGenerationMetadata.tabletGenerationMetadataToTaskMap(
+                        generationMetadata, tableName);
         awaitConfigureWorkers(tableName, taskMap);
     }
 

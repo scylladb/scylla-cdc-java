@@ -66,4 +66,16 @@ public class MockGenerationMetadata {
         }
         return generationMetadataMap;
     }
+
+    public static Map<TaskId, SortedSet<StreamId>> tabletGenerationMetadataToTaskMap(
+            GenerationMetadata generationMetadata, TableName tableName) {
+        Map<TaskId, SortedSet<StreamId>> generationMetadataMap = new HashMap<>();
+        int streamIndex = 0;
+        for (StreamId stream : generationMetadata.getStreams()) {
+            generationMetadataMap.put(
+                    TaskId.forTabletStream(generationMetadata.getId(), streamIndex++, tableName),
+                    new TreeSet<>(Collections.singleton(stream)));
+        }
+        return generationMetadataMap;
+    }
 }

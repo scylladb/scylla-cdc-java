@@ -165,6 +165,27 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
+    public Map<TaskId, TaskState> getTaskStatesForMigration(Set<TaskId> tasks) {
+        return backend.getTaskStates(tasks);
+    }
+
+    @Override
+    public void completeTaskStateMigration(Set<TaskId> legacyTasks) {
+        try {
+            backend.deleteTasks(legacyTasks);
+        } catch (RuntimeException e) {
+            // Replacement checkpoints have already been stored, so failing to retire their legacy
+            // source must not prevent the worker from starting. Keeping the legacy checkpoint is
+            // safe: assigned replacement states remain authoritative and a later worker startup
+            // will discover the legacy state and retry this cleanup.
+            logger.atWarning().withCause(e).log(
+                    "Could not retire legacy tablet checkpoints after initializing replacements; "
+                            + "keeping them for a later migration attempt: %s",
+                    legacyTasks);
+        }
+    }
+
+    @Override
     public void setState(TaskId task, TaskState newState) {
         backend.setState(task, newState);
     }

@@ -1,25 +1,38 @@
 package com.scylladb.cdc.lib;
 
+import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.model.GenerationId;
+import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
 import com.scylladb.cdc.model.VNodeId;
+import com.scylladb.cdc.model.worker.Task;
 import com.scylladb.cdc.model.worker.TaskState;
+import com.scylladb.cdc.model.worker.Worker;
+import com.scylladb.cdc.model.worker.WorkerConfiguration;
+import com.scylladb.cdc.transport.GroupedTasks;
 import com.scylladb.cdc.transport.TaskAbortedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -41,6 +54,12 @@ class LocalTransportWithStoreTest {
         final Map<TaskId, TaskState> states = new ConcurrentHashMap<>();
         int saveCount = 0;
         int deleteCount = 0;
+        int deleteAttempts = 0;
+        int deleteFailuresRemaining = 0;
+        Set<TaskId> statesRequiredBeforeDelete = Collections.emptySet();
+        boolean requiredStatesPresentAtDelete = false;
+        boolean failSecondTabletTaskSave = false;
+        int tabletTaskSaveCount = 0;
 
         @Override
         public Map<TaskId, TaskState> loadTaskStates(Set<TaskId> tasks) {
@@ -53,12 +72,22 @@ class LocalTransportWithStoreTest {
 
         @Override
         public void saveTaskState(TaskId task, TaskState state) {
+            if (task.isTabletStreamTask() && failSecondTabletTaskSave
+                    && tabletTaskSaveCount++ == 1) {
+                throw new IllegalStateException("injected replacement checkpoint failure");
+            }
             saveCount++;
             states.put(task, state);
         }
 
         @Override
         public void deleteTaskStates(Set<TaskId> tasks) {
+            deleteAttempts++;
+            requiredStatesPresentAtDelete = states.keySet().containsAll(statesRequiredBeforeDelete);
+            if (deleteFailuresRemaining > 0) {
+                deleteFailuresRemaining--;
+                throw new IllegalStateException("injected legacy checkpoint cleanup failure");
+            }
             deleteCount += tasks.size();
             tasks.forEach(states::remove);
         }
@@ -130,6 +159,112 @@ class LocalTransportWithStoreTest {
         Map<TaskId, TaskState> result = transport.getTaskStates(Set.of(taskId));
         assertEquals(1, result.size());
         assertSame(taskState, result.get(taskId));
+    }
+
+    @Test
+    void tabletMigration_persistsReplacementCheckpointsBeforeDeletingLegacyCheckpoint()
+            throws Exception {
+        GenerationId generation = taskId.getGenerationId();
+        TaskId legacyTask = new TaskId(generation, new VNodeId(0), taskId.getTable());
+        Map<TaskId, SortedSet<StreamId>> taskMap = tabletTasks(generation, taskId.getTable());
+        store.states.put(legacyTask, taskState);
+        store.statesRequiredBeforeDelete = taskMap.keySet();
+
+        Worker worker = migrationWorker(transport, generation);
+        try {
+            worker.addTasks(new GroupedTasks(taskMap, generation));
+
+            assertTrue(store.requiredStatesPresentAtDelete);
+            assertTrue(store.states.keySet().containsAll(taskMap.keySet()));
+            assertFalse(store.states.containsKey(legacyTask));
+            assertEquals(1, store.deleteCount);
+        } finally {
+            worker.stop();
+        }
+    }
+
+    @Test
+    void tabletMigration_retiresLegacyCheckpointAfterRestartWithAllReplacements()
+            throws Exception {
+        GenerationId generation = taskId.getGenerationId();
+        TaskId legacyTask = new TaskId(generation, new VNodeId(0), taskId.getTable());
+        Map<TaskId, SortedSet<StreamId>> taskMap = tabletTasks(generation, taskId.getTable());
+        store.states.put(legacyTask, taskState);
+        taskMap.keySet().forEach(replacement -> store.states.put(replacement, taskState));
+        store.statesRequiredBeforeDelete = taskMap.keySet();
+
+        Worker worker = migrationWorker(transport, generation);
+        try {
+            worker.addTasks(new GroupedTasks(taskMap, generation));
+
+            assertTrue(store.requiredStatesPresentAtDelete);
+            assertFalse(store.states.containsKey(legacyTask));
+            assertTrue(store.states.keySet().containsAll(taskMap.keySet()));
+            assertEquals(1, store.deleteCount);
+        } finally {
+            worker.stop();
+        }
+    }
+
+    @Test
+    void tabletMigration_keepsLegacyCheckpointWhenReplacementPersistenceFails() {
+        GenerationId generation = taskId.getGenerationId();
+        TaskId legacyTask = new TaskId(generation, new VNodeId(0), taskId.getTable());
+        Map<TaskId, SortedSet<StreamId>> taskMap = tabletTasks(generation, taskId.getTable());
+        store.states.put(legacyTask, taskState);
+        store.statesRequiredBeforeDelete = taskMap.keySet();
+        store.failSecondTabletTaskSave = true;
+
+        Worker worker = migrationWorker(transport, generation);
+        try {
+            assertThrows(IllegalStateException.class,
+                    () -> worker.addTasks(new GroupedTasks(taskMap, generation)));
+
+            assertTrue(store.states.containsKey(legacyTask));
+            assertEquals(0, store.deleteCount);
+            assertEquals(1, store.states.keySet().stream()
+                    .filter(TaskId::isTabletStreamTask)
+                    .count());
+        } finally {
+            worker.stop();
+        }
+    }
+
+    @Test
+    void tabletMigration_cleanupFailureDoesNotAbortAndIsRetried() throws Exception {
+        GenerationId generation = taskId.getGenerationId();
+        TaskId legacyTask = new TaskId(generation, new VNodeId(0), taskId.getTable());
+        Map<TaskId, SortedSet<StreamId>> taskMap = tabletTasks(generation, taskId.getTable());
+        store.states.put(legacyTask, taskState);
+        store.statesRequiredBeforeDelete = taskMap.keySet();
+        store.deleteFailuresRemaining = 1;
+
+        PendingReaderWorkerCQL firstWorkerCQL = new PendingReaderWorkerCQL();
+        Worker firstWorker = migrationWorker(transport, generation, firstWorkerCQL);
+        try {
+            firstWorker.addTasks(new GroupedTasks(taskMap, generation));
+
+            assertTrue(store.requiredStatesPresentAtDelete);
+            assertTrue(store.states.keySet().containsAll(taskMap.keySet()));
+            assertTrue(store.states.containsKey(legacyTask));
+            assertEquals(1, store.deleteAttempts);
+            assertEquals(0, store.deleteCount);
+            assertEquals(taskMap.size(), firstWorkerCQL.readerCreationCount.get());
+        } finally {
+            firstWorker.stop();
+        }
+
+        Worker restartedWorker = migrationWorker(transport, generation);
+        try {
+            restartedWorker.addTasks(new GroupedTasks(taskMap, generation));
+
+            assertFalse(store.states.containsKey(legacyTask));
+            assertTrue(store.states.keySet().containsAll(taskMap.keySet()));
+            assertEquals(2, store.deleteAttempts);
+            assertEquals(1, store.deleteCount);
+        } finally {
+            restartedWorker.stop();
+        }
     }
 
     @Test
@@ -220,5 +355,67 @@ class LocalTransportWithStoreTest {
 
         TableName table = new TableName("ks", "tbl");
         assertFalse(t.getCurrentGenerationId(table).isPresent());
+    }
+
+    private static Map<TaskId, SortedSet<StreamId>> tabletTasks(
+            GenerationId generation, TableName table) {
+        Map<TaskId, SortedSet<StreamId>> tasks = new HashMap<>();
+        tasks.put(TaskId.forTabletStream(generation, 0, table),
+                singletonStream(tabletStream(1)));
+        tasks.put(TaskId.forTabletStream(generation, 1, table),
+                singletonStream(tabletStream(2)));
+        return tasks;
+    }
+
+    private static SortedSet<StreamId> singletonStream(StreamId stream) {
+        return new TreeSet<>(Collections.singleton(stream));
+    }
+
+    private static StreamId tabletStream(long token) {
+        ByteBuffer value = ByteBuffer.allocate(16);
+        value.putLong(token);
+        value.putLong(1L);
+        value.flip();
+        return new StreamId(value);
+    }
+
+    private static Worker migrationWorker(LocalTransport transport, GenerationId generation) {
+        return migrationWorker(transport, generation, new PendingReaderWorkerCQL());
+    }
+
+    private static Worker migrationWorker(LocalTransport transport, GenerationId generation,
+                                          PendingReaderWorkerCQL workerCQL) {
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
+        executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        WorkerConfiguration configuration = WorkerConfiguration.builder()
+                .withCQL(workerCQL)
+                .withTransport(transport)
+                .withConsumer(change -> CompletableFuture.completedFuture(null))
+                .withExecutorService(executor)
+                .withClock(Clock.fixed(
+                        Instant.ofEpochMilli(generation.getGenerationStart().toDate().getTime()
+                                + 100_000L),
+                        ZoneOffset.UTC))
+                .build();
+        return new Worker(configuration);
+    }
+
+    private static final class PendingReaderWorkerCQL implements WorkerCQL {
+        private final AtomicInteger readerCreationCount = new AtomicInteger();
+
+        @Override
+        public void prepare(Set<TableName> tables) {
+        }
+
+        @Override
+        public CompletableFuture<Reader> createReader(Task task) {
+            readerCreationCount.incrementAndGet();
+            return new CompletableFuture<>();
+        }
+
+        @Override
+        public CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
     }
 }
