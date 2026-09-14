@@ -460,7 +460,11 @@ public final class Worker {
                     .sum();
 
             Set<TaskId> coordinatedLegacyTasks = new HashSet<>();
-            coordinationProgress.forEach((group, completedParticipants) -> {
+            coordinationProgress.entrySet().stream()
+                    .filter(entry -> discoveredLegacyTasks.contains(entry.getKey().getKey()))
+                    .forEach(entry -> {
+                CoordinationGroup<TaskId, TaskId> group = entry.getKey();
+                Set<TaskId> completedParticipants = entry.getValue();
                 try {
                     if (workerConfiguration.transport.recordCompletion(
                             group, Collections.unmodifiableSet(completedParticipants))) {

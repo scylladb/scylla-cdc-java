@@ -617,6 +617,33 @@ public class TabletTaskStateMigrationTest {
         assertEquals(Set.of(transport.coordinationGroup), transport.finishedCoordinations);
     }
 
+    @Test
+    public void doesNotRecordCoordinationForAbsentLegacyCheckpointWhenAnotherExists()
+            throws Exception {
+        TableName absentTable = new TableName("ks", "absent_legacy_table");
+        TaskId presentReplacement = tabletTaskId(0);
+        TaskId absentReplacement = TaskId.forTabletStream(GENERATION, 0, absentTable);
+        TaskId absentLegacy = new TaskId(GENERATION, new VNodeId(0), absentTable);
+        Map<TaskId, SortedSet<StreamId>> tasks = Map.of(
+                presentReplacement, singletonStream(tabletStream(1)),
+                absentReplacement, singletonStream(tabletStream(2)));
+        CoordinationGroup<TaskId, TaskId> presentGroup = new CoordinationGroup<>(
+                CoordinationNamespaces.TABLET_TASK_STATE_MIGRATION,
+                legacyTaskId(), Set.of(presentReplacement));
+        CoordinationGroup<TaskId, TaskId> absentGroup = new CoordinationGroup<>(
+                CoordinationNamespaces.TABLET_TASK_STATE_MIGRATION,
+                absentLegacy, Set.of(absentReplacement));
+        TaskState legacyState = TaskState.createInitialFor(GENERATION, 10_000);
+        RecordingTransport transport = new RecordingTransport(
+                Collections.emptyMap(), Collections.singletonMap(legacyTaskId(), legacyState));
+
+        addTasksAndStop(workerWithTransport(transport),
+                new GroupedTasks(tasks, GENERATION, Set.of(presentGroup, absentGroup)));
+
+        assertEquals(Set.of(presentGroup), transport.recordedCoordinations);
+        assertEquals(Set.of(presentGroup, absentGroup), transport.finishedCoordinations);
+    }
+
     private static void addTasksAndStop(
             Worker worker, Map<TaskId, SortedSet<StreamId>> tasks) throws Exception {
         try {
@@ -702,6 +729,8 @@ public class TabletTaskStateMigrationTest {
         private Set<TaskId> statesPresentAtCompletion = Collections.emptySet();
         private CoordinationGroup<TaskId, TaskId> coordinationGroup;
         private Set<TaskId> coordinationCompletedParticipants = Collections.emptySet();
+        private final Set<CoordinationGroup<TaskId, TaskId>> recordedCoordinations =
+                new HashSet<>();
         private Set<CoordinationGroup<TaskId, TaskId>> finishedCoordinations = new HashSet<>();
         private Boolean coordinationResult;
         private RuntimeException coordinationFailure;
@@ -752,6 +781,7 @@ public class TabletTaskStateMigrationTest {
                                         Set<TaskId> completedParticipants) {
             coordinationGroup = group;
             coordinationCompletedParticipants = Set.copyOf(completedParticipants);
+            recordedCoordinations.add(group);
             if (coordinationFailure != null) {
                 throw coordinationFailure;
             }
