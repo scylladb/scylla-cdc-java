@@ -34,6 +34,11 @@ public final class TaskId implements Comparable<TaskId> {
                 new VNodeId(TABLET_STREAM_TASK_INDEX_OFFSET + streamIndex), table);
     }
 
+    /** Returns the ID of the legacy single-task tablet checkpoint replaced by per-stream tasks. */
+    public static TaskId legacyTabletTask(GenerationId generationId, TableName table) {
+        return new TaskId(generationId, new VNodeId(0), table);
+    }
+
     /** Returns whether this task uses the tablet stream task ID namespace. */
     public boolean isTabletStreamTask() {
         return vNodeId.getIndex() >= TABLET_STREAM_TASK_INDEX_OFFSET;

@@ -4,7 +4,6 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
-import com.scylladb.cdc.model.VNodeId;
 import com.scylladb.cdc.transport.CoordinationGroup;
 import com.scylladb.cdc.transport.CoordinationNamespaces;
 import com.scylladb.cdc.transport.GroupedTasks;
@@ -47,7 +46,7 @@ public class TableCDCControllerTest {
             assertEquals(sortedStreams.next(), tasks.getStreamsForTask(taskId).first());
         }
 
-        TaskId legacyTask = new TaskId(generation.getId(), new VNodeId(0), table);
+        TaskId legacyTask = TaskId.legacyTabletTask(generation.getId(), table);
         assertEquals(Set.of(new CoordinationGroup<>(
                         CoordinationNamespaces.TABLET_TASK_STATE_MIGRATION,
                         legacyTask,

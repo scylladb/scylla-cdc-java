@@ -37,7 +37,6 @@ import java.util.stream.Collectors;
 import static com.scylladb.cdc.model.worker.ChangeSchemaTest.TEST_SCHEMA_SIMPLE;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -168,6 +167,27 @@ public class TabletTaskStateMigrationTest {
         assertEquals(new TaskState(legacyState.getWindowStartTimestamp(),
                         legacyState.getWindowEndTimestamp(), Optional.empty()),
                 transport.persistedStates.get(tabletTaskId(2)));
+    }
+
+    @Test
+    public void replaysWindowWhenStoredTabletCheckpointBelongsToAnotherStream()
+            throws Exception {
+        TaskId taskId = tabletTaskId(0);
+        StreamId assignedStream = tabletStream(1);
+        StreamId checkpointStream = tabletStream(2);
+        TaskState storedState = new TaskState(
+                new Timestamp(new Date(1_700_000_010_000L)),
+                new Timestamp(new Date(1_700_000_020_000L)),
+                Optional.of(rawChange(checkpointStream, 1_700_000_015_000L).getId()));
+        RecordingTransport transport = new RecordingTransport(
+                Collections.singletonMap(taskId, storedState), Collections.emptyMap());
+
+        addTasksAndStop(workerWithTransport(transport),
+                Collections.singletonMap(taskId, singletonStream(assignedStream)));
+
+        assertEquals(new TaskState(storedState.getWindowStartTimestamp(),
+                        storedState.getWindowEndTimestamp(), Optional.empty()),
+                transport.persistedStates.get(taskId));
     }
 
     @Test
@@ -363,7 +383,7 @@ public class TabletTaskStateMigrationTest {
 
         addTasksAndStop(workerWithTransport(transport), tasks);
 
-        TaskId completeLegacyTask = new TaskId(GENERATION, new VNodeId(0), completeTable);
+        TaskId completeLegacyTask = TaskId.legacyTabletTask(GENERATION, completeTable);
         assertEquals(Set.of(legacyTaskId(), completeLegacyTask), transport.migrationLookup);
         assertEquals(completeState, transport.persistedStates.get(completeTask));
         assertEquals(legacyState, transport.persistedStates.get(missingTask));
@@ -623,7 +643,7 @@ public class TabletTaskStateMigrationTest {
         TableName absentTable = new TableName("ks", "absent_legacy_table");
         TaskId presentReplacement = tabletTaskId(0);
         TaskId absentReplacement = TaskId.forTabletStream(GENERATION, 0, absentTable);
-        TaskId absentLegacy = new TaskId(GENERATION, new VNodeId(0), absentTable);
+        TaskId absentLegacy = TaskId.legacyTabletTask(GENERATION, absentTable);
         Map<TaskId, SortedSet<StreamId>> tasks = Map.of(
                 presentReplacement, singletonStream(tabletStream(1)),
                 absentReplacement, singletonStream(tabletStream(2)));
@@ -822,7 +842,7 @@ public class TabletTaskStateMigrationTest {
     }
 
     private static TaskId legacyTaskId() {
-        return vnodeTaskId(0);
+        return TaskId.legacyTabletTask(GENERATION, TABLE);
     }
 
     private static SortedSet<StreamId> singletonStream(StreamId stream) {

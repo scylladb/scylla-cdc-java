@@ -21,7 +21,9 @@ public interface WorkerTransport extends Coordinator<TaskId, TaskId> {
      * <p>This separate method prevents migration lookups from violating the assignment assumptions
      * of {@link #getTaskStates(Set)}. Transports must override it before running tablet task
      * assignments. Stateless transports which cannot have a legacy checkpoint may return an empty
-     * map; persistent transports must look up the requested unassigned checkpoints. The default
+     * map; persistent transports must look up the requested unassigned checkpoints and must throw
+     * rather than return an empty map when that lookup fails. An empty result is treated as proof
+     * that the legacy checkpoint is absent and its migration cleanup has completed. The default
      * fails fast rather than silently replaying retained CDC history.
      */
     default Map<TaskId, TaskState> getTaskStatesForMigration(Set<TaskId> tasks) {

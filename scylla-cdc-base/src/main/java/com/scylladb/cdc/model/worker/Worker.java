@@ -25,7 +25,6 @@ import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.Timestamp;
-import com.scylladb.cdc.model.VNodeId;
 import com.scylladb.cdc.transport.CoordinationGroup;
 import com.scylladb.cdc.transport.CoordinationNamespaces;
 import com.scylladb.cdc.transport.GroupedTasks;
@@ -94,8 +93,8 @@ public final class Worker {
                 }
 
                 TaskId exampleTask = tableTasks.get(0).getKey();
-                TaskId legacyTask = new TaskId(exampleTask.getGenerationId(), new VNodeId(0),
-                        exampleTask.getTable());
+                TaskId legacyTask = TaskId.legacyTabletTask(
+                        exampleTask.getGenerationId(), exampleTask.getTable());
                 Set<TaskId> replacementTasks = tableTasks.stream()
                         .map(Map.Entry::getKey)
                         .collect(Collectors.toSet());
@@ -250,6 +249,31 @@ public final class Worker {
             return new TaskState(legacyState.getWindowStartTimestamp(),
                     legacyState.getWindowEndTimestamp(), Optional.empty());
         }
+
+        private static TaskState validateStoredStreamCursor(TaskId taskId, TaskState state,
+                                                             SortedSet<StreamId> streams) {
+            if (!taskId.isTabletStreamTask()) {
+                return state;
+            }
+            Optional<ChangeId> checkpoint = state.getLastConsumedChangeId();
+            if (!checkpoint.isPresent()) {
+                return state;
+            }
+
+            StreamId assignedStream = streams.first();
+            StreamId checkpointStream = checkpoint.get().getStreamId();
+            if (assignedStream.equals(checkpointStream)) {
+                return state;
+            }
+
+            logger.atWarning().log(
+                    "Stored checkpoint for tablet task %s holds a cursor for stream %s, but the "
+                            + "task is assigned stream %s. Replaying window [%s, %s).",
+                    taskId, checkpointStream, assignedStream,
+                    state.getWindowStartTimestamp(), state.getWindowEndTimestamp());
+            return new TaskState(state.getWindowStartTimestamp(),
+                    state.getWindowEndTimestamp(), Optional.empty());
+        }
     }
 
     private static final class PreparedTasks {
@@ -324,6 +348,8 @@ public final class Worker {
                 // streams read the whole window.
                 state = TabletMigrationPlan.normalizeStateForReplacementStream(
                         state, streams.first(), workerConfiguration.queryTimeWindowSizeMs);
+            } else {
+                state = TabletMigrationPlan.validateStoredStreamCursor(id, state, streams);
             }
             return new Task(id, streams, state);
         }).collect(Collectors.toList());

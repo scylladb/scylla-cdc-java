@@ -167,7 +167,7 @@ class LocalTransportWithStoreTest {
     void tabletMigration_persistsReplacementCheckpointsBeforeDeletingLegacyCheckpoint()
             throws Exception {
         GenerationId generation = taskId.getGenerationId();
-        TaskId legacyTask = new TaskId(generation, new VNodeId(0), taskId.getTable());
+        TaskId legacyTask = TaskId.legacyTabletTask(generation, taskId.getTable());
         Map<TaskId, SortedSet<StreamId>> taskMap = tabletTasks(generation, taskId.getTable());
         store.states.put(legacyTask, taskState);
         store.statesRequiredBeforeDelete = taskMap.keySet();
@@ -189,7 +189,7 @@ class LocalTransportWithStoreTest {
     void tabletMigration_retiresLegacyCheckpointAfterRestartWithAllReplacements()
             throws Exception {
         GenerationId generation = taskId.getGenerationId();
-        TaskId legacyTask = new TaskId(generation, new VNodeId(0), taskId.getTable());
+        TaskId legacyTask = TaskId.legacyTabletTask(generation, taskId.getTable());
         Map<TaskId, SortedSet<StreamId>> taskMap = tabletTasks(generation, taskId.getTable());
         store.states.put(legacyTask, taskState);
         taskMap.keySet().forEach(replacement -> store.states.put(replacement, taskState));
@@ -211,7 +211,7 @@ class LocalTransportWithStoreTest {
     @Test
     void tabletMigration_keepsLegacyCheckpointWhenReplacementPersistenceFails() {
         GenerationId generation = taskId.getGenerationId();
-        TaskId legacyTask = new TaskId(generation, new VNodeId(0), taskId.getTable());
+        TaskId legacyTask = TaskId.legacyTabletTask(generation, taskId.getTable());
         Map<TaskId, SortedSet<StreamId>> taskMap = tabletTasks(generation, taskId.getTable());
         store.states.put(legacyTask, taskState);
         store.statesRequiredBeforeDelete = taskMap.keySet();
@@ -235,7 +235,7 @@ class LocalTransportWithStoreTest {
     @Test
     void tabletMigration_cleanupFailureDoesNotAbortAndIsRetried() throws Exception {
         GenerationId generation = taskId.getGenerationId();
-        TaskId legacyTask = new TaskId(generation, new VNodeId(0), taskId.getTable());
+        TaskId legacyTask = TaskId.legacyTabletTask(generation, taskId.getTable());
         Map<TaskId, SortedSet<StreamId>> taskMap = tabletTasks(generation, taskId.getTable());
         store.states.put(legacyTask, taskState);
         store.statesRequiredBeforeDelete = taskMap.keySet();
