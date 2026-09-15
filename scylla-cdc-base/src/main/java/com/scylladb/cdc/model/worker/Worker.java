@@ -643,10 +643,8 @@ public final class Worker {
                                 || previousGeneration.equals(taskId.getGenerationId()),
                         "Tasks for table %s span multiple generations: %s and %s",
                         table, previousGeneration, taskId.getGenerationId());
-                if (streams.isEmpty()) {
-                    logger.atWarning().log("Task %s has no streams assigned to it.", taskId);
-                }
             });
+            logTasksWithoutStreams(taskMap);
             nonEmptyTaskGroups.add(workerTasks);
         }
 
@@ -681,6 +679,14 @@ public final class Worker {
                 workerTasks.getGenerationId()));
     }
 
+    private static void logTasksWithoutStreams(Map<TaskId, SortedSet<StreamId>> tasks) {
+        tasks.forEach((taskId, streams) -> {
+            if (streams.isEmpty()) {
+                logger.atWarning().log("Task %s has no streams assigned to it.", taskId);
+            }
+        });
+    }
+
     /**
      * Adds new tasks dynamically to the running worker.
      *
@@ -689,6 +695,7 @@ public final class Worker {
      * @throws InterruptedException if the thread is interrupted
      */
     public void addTasks(GroupedTasks workerTasks) throws ExecutionException, InterruptedException {
+        Preconditions.checkNotNull(workerTasks, "Worker tasks cannot be null");
         Map<TaskId, SortedSet<StreamId>> newTasks = workerTasks.getTasks();
 
         if (shouldStop) {
@@ -696,8 +703,10 @@ public final class Worker {
         }
 
         if (newTasks.isEmpty()) {
+            logEmptyTaskGroup(workerTasks);
             return;
         }
+        logTasksWithoutStreams(newTasks);
 
         // Prepare any new tables
         Set<TableName> tables = newTasks.keySet().stream()

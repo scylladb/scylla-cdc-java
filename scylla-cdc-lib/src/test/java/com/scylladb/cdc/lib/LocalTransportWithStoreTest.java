@@ -135,7 +135,6 @@ class LocalTransportWithStoreTest {
         store = new RecordingStateStore();
         Supplier<ScheduledExecutorService> exec = () -> new ScheduledThreadPoolExecutor(1);
         transport = new LocalTransport(
-                new ThreadGroup("test"),
                 com.scylladb.cdc.model.worker.WorkerConfiguration.builder()
                         .withConsumer(change -> java.util.concurrent.CompletableFuture.completedFuture(null)),
                 exec,
@@ -308,7 +307,6 @@ class LocalTransportWithStoreTest {
         PreseededStateStore seededStore = new PreseededStateStore(persistedGen);
         Supplier<ScheduledExecutorService> exec = () -> new ScheduledThreadPoolExecutor(1);
         LocalTransport t = new LocalTransport(
-                new ThreadGroup("test-restart"),
                 com.scylladb.cdc.model.worker.WorkerConfiguration.builder()
                         .withConsumer(change -> java.util.concurrent.CompletableFuture.completedFuture(null)),
                 exec,
@@ -330,7 +328,6 @@ class LocalTransportWithStoreTest {
         PreseededStateStore seededStore = new PreseededStateStore(vnodeGen, tableGens);
         Supplier<ScheduledExecutorService> exec = () -> new ScheduledThreadPoolExecutor(1);
         LocalTransport t = new LocalTransport(
-                new ThreadGroup("test-tablet"),
                 com.scylladb.cdc.model.worker.WorkerConfiguration.builder()
                         .withConsumer(change -> java.util.concurrent.CompletableFuture.completedFuture(null)),
                 exec,
@@ -350,7 +347,6 @@ class LocalTransportWithStoreTest {
     void getCurrentGenerationId_tablet_noStore_returnsEmpty() {
         Supplier<ScheduledExecutorService> exec = () -> new ScheduledThreadPoolExecutor(1);
         LocalTransport t = new LocalTransport(
-                new ThreadGroup("test-tablet-nostore"),
                 com.scylladb.cdc.model.worker.WorkerConfiguration.builder()
                         .withConsumer(change -> java.util.concurrent.CompletableFuture.completedFuture(null)),
                 exec);

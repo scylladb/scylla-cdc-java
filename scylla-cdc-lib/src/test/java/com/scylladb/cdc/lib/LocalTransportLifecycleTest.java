@@ -122,7 +122,7 @@ class LocalTransportLifecycleTest {
         WorkerConfiguration.Builder configuration = WorkerConfiguration.builder()
                 .withCQL(cql)
                 .withConsumer(change -> CompletableFuture.completedFuture(null));
-        return new LocalTransport(new ThreadGroup("test"), configuration, executors);
+        return new LocalTransport(configuration, executors);
     }
 
     private static GroupedTasks vnodeTasks(TableName table) {

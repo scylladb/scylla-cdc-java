@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import com.google.common.base.Preconditions;
+import com.google.common.flogger.FluentLogger;
 import com.scylladb.cdc.model.GenerationId;
 import com.scylladb.cdc.model.StreamId;
 import com.scylladb.cdc.model.TableName;
@@ -27,6 +28,8 @@ import com.scylladb.cdc.transport.TaskAbortedException;
 import com.scylladb.cdc.transport.WorkerTransport;
 
 class LocalTransport implements MasterTransport, WorkerTransport {
+    private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
     private final WorkerConfiguration.Builder workerConfigurationBuilder;
     private final Supplier<ScheduledExecutorService> executorServiceSupplier;
     private final TaskStateBackend backend;
@@ -38,16 +41,14 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     // Track generation IDs by table for tablet mode
     protected final Map<TableName, GenerationMetadata> currentGenerationByTable = new ConcurrentHashMap<>();
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
+    public LocalTransport(WorkerConfiguration.Builder workerConfigurationBuilder,
                           Supplier<ScheduledExecutorService> executorServiceSupplier) {
-        this(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier,
-                new InProcessTaskStateBackend());
+        this(workerConfigurationBuilder, executorServiceSupplier, new InProcessTaskStateBackend());
     }
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
+    public LocalTransport(WorkerConfiguration.Builder workerConfigurationBuilder,
                           Supplier<ScheduledExecutorService> executorServiceSupplier,
                           TaskStateBackend backend) {
-        Preconditions.checkNotNull(cdcThreadGroup);
         this.workerConfigurationBuilder = Preconditions.checkNotNull(workerConfigurationBuilder);
         this.executorServiceSupplier = Preconditions.checkNotNull(executorServiceSupplier);
         this.backend = Preconditions.checkNotNull(backend);
@@ -136,6 +137,8 @@ class LocalTransport implements MasterTransport, WorkerTransport {
                     stopCurrentWorkerAfterInterruption();
                     throw e;
                 }
+            } else {
+                logEmptyTaskGroup(workerTasks);
             }
         }
     }
@@ -147,6 +150,7 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
     private void startNewWorker(GroupedTasks workerTasks) throws InterruptedException {
         if (workerTasks.getTasks().isEmpty()) {
+            logEmptyTaskGroup(workerTasks);
             return;
         }
 
@@ -178,6 +182,14 @@ class LocalTransport implements MasterTransport, WorkerTransport {
             stopWorkerAfterInterruption(workerHandle);
             throw e;
         }
+    }
+
+    private static void logEmptyTaskGroup(GroupedTasks workerTasks) {
+        logger.atSevere().log(String.format("Worker was given an empty set of tasks to run (Generation %s). " +
+                "Check the integrity of your cluster and system CDC tables. (For vnodes model check " +
+                "cdc_streams_descriptions_v2 and cdc_generation_timestamp within system_distributed " +
+                "keyspace. For tablets check cdc_timestamps and cdc_streams within system keyspace).",
+                workerTasks.getGenerationId()));
     }
 
     @Override
