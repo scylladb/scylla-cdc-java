@@ -21,6 +21,13 @@ public class MockWorkerTransport implements WorkerTransport {
     }
 
     @Override
+    public Map<TaskId, TaskState> getTaskStatesForMigration(Set<TaskId> tasks) {
+        return taskStates.entrySet().stream()
+                .filter(entry -> tasks.contains(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
     public void setState(TaskId task, TaskState newState) {
         taskStates.put(task, newState);
         setStatesInvocations.add(new AbstractMap.SimpleEntry<>(task, newState));

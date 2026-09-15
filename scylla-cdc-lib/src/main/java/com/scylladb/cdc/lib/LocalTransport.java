@@ -8,6 +8,7 @@ import java.util.SortedSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import com.google.common.base.Preconditions;
@@ -29,30 +30,25 @@ import com.scylladb.cdc.transport.WorkerTransport;
 class LocalTransport implements MasterTransport, WorkerTransport {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
-    private final ThreadGroup workersThreadGroup;
     private final WorkerConfiguration.Builder workerConfigurationBuilder;
     private final Supplier<ScheduledExecutorService> executorServiceSupplier;
     private final TaskStateBackend backend;
 
     private Optional<GenerationId> currentGenerationId;
 
-    // Single worker reference
-    private Worker currentWorker = null;
-    private Thread workerThread = null;
+    private WorkerHandle currentWorker;
 
     // Track generation IDs by table for tablet mode
     protected final Map<TableName, GenerationMetadata> currentGenerationByTable = new ConcurrentHashMap<>();
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
+    public LocalTransport(WorkerConfiguration.Builder workerConfigurationBuilder,
                           Supplier<ScheduledExecutorService> executorServiceSupplier) {
-        this(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier,
-                new InProcessTaskStateBackend());
+        this(workerConfigurationBuilder, executorServiceSupplier, new InProcessTaskStateBackend());
     }
 
-    public LocalTransport(ThreadGroup cdcThreadGroup, WorkerConfiguration.Builder workerConfigurationBuilder,
+    public LocalTransport(WorkerConfiguration.Builder workerConfigurationBuilder,
                           Supplier<ScheduledExecutorService> executorServiceSupplier,
                           TaskStateBackend backend) {
-        workersThreadGroup = new ThreadGroup(cdcThreadGroup, "Scylla-CDC-Worker-Threads");
         this.workerConfigurationBuilder = Preconditions.checkNotNull(workerConfigurationBuilder);
         this.executorServiceSupplier = Preconditions.checkNotNull(executorServiceSupplier);
         this.backend = Preconditions.checkNotNull(backend);
@@ -81,7 +77,8 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
-    public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
+    public synchronized void configureWorkers(GroupedTasks workerTasks)
+            throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
         // Determine which tasks are being removed and clean them up
@@ -97,14 +94,15 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         }
 
         // Stop current worker if exists
-        stopWorkerThread();
+        stopCurrentWorker();
 
         // Create and start a new worker
-        startNewWorkerThread(workerTasks);
+        startNewWorker(workerTasks);
     }
 
     @Override
-    public void configureWorkers(TableName tableName, GroupedTasks workerTasks) throws InterruptedException {
+    public synchronized void configureWorkers(TableName tableName, GroupedTasks workerTasks)
+            throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
         // Determine which tasks for this table are being removed
@@ -124,44 +122,93 @@ class LocalTransport implements MasterTransport, WorkerTransport {
 
         if (currentWorker == null) {
             // No worker exists, start a new one
-            startNewWorkerThread(workerTasks);
+            startNewWorker(workerTasks);
         } else {
             if (!tasks.isEmpty()) {
                 try {
-                    currentWorker.addTasks(workerTasks);
+                    currentWorker.worker.addTasks(workerTasks);
                 } catch (ExecutionException e) {
-                    logger.atSevere().withCause(e).log("Error adding tasks for table %s", tableName);
+                    stopCurrentWorkerAfterFailure(e);
                     throw new RuntimeException("Error adding tasks", e);
+                } catch (RuntimeException e) {
+                    stopCurrentWorkerAfterFailure(e);
+                    throw e;
+                } catch (InterruptedException e) {
+                    stopCurrentWorkerAfterInterruption();
+                    throw e;
                 }
+            } else {
+                logEmptyTaskGroup(workerTasks);
             }
         }
     }
 
     @Override
-    public void stopWorkers() throws InterruptedException {
-        stopWorkerThread();
+    public synchronized void stopWorkers() throws InterruptedException {
+        stopCurrentWorker();
     }
 
-    private void startNewWorkerThread(GroupedTasks workerTasks) {
-        WorkerConfiguration workerConfiguration = workerConfigurationBuilder
-                .withTransport(this)
-                .withExecutorService(executorServiceSupplier.get())
-                .build();
+    private void startNewWorker(GroupedTasks workerTasks) throws InterruptedException {
+        if (workerTasks.getTasks().isEmpty()) {
+            logEmptyTaskGroup(workerTasks);
+            return;
+        }
 
-        currentWorker = new Worker(workerConfiguration);
-        workerThread = new Thread(workersThreadGroup, () -> {
-            try {
-                currentWorker.run(workerTasks);
-            } catch (InterruptedException | ExecutionException e) {
-                logger.atSevere().withCause(e).log("Unhandled exception in worker thread");
-            }
-        });
-        workerThread.start();
+        ScheduledExecutorService executor = Preconditions.checkNotNull(
+                executorServiceSupplier.get(), "Worker executor cannot be null");
+        Worker worker;
+        try {
+            WorkerConfiguration workerConfiguration = workerConfigurationBuilder
+                    .withTransport(this)
+                    .withExecutorService(executor)
+                    .build();
+            worker = new Worker(workerConfiguration);
+        } catch (RuntimeException e) {
+            executor.shutdownNow();
+            throw e;
+        }
+
+        WorkerHandle workerHandle = new WorkerHandle(worker, executor);
+        try {
+            worker.addTasks(workerTasks);
+            currentWorker = workerHandle;
+        } catch (ExecutionException e) {
+            stopWorkerAfterFailure(workerHandle, e);
+            throw new RuntimeException("Error starting worker", e);
+        } catch (RuntimeException e) {
+            stopWorkerAfterFailure(workerHandle, e);
+            throw e;
+        } catch (InterruptedException e) {
+            stopWorkerAfterInterruption(workerHandle);
+            throw e;
+        }
+    }
+
+    private static void logEmptyTaskGroup(GroupedTasks workerTasks) {
+        logger.atSevere().log(String.format("Worker was given an empty set of tasks to run (Generation %s). " +
+                "Check the integrity of your cluster and system CDC tables. (For vnodes model check " +
+                "cdc_streams_descriptions_v2 and cdc_generation_timestamp within system_distributed " +
+                "keyspace. For tablets check cdc_timestamps and cdc_streams within system keyspace).",
+                workerTasks.getGenerationId()));
     }
 
     @Override
     public Map<TaskId, TaskState> getTaskStates(Set<TaskId> tasks) {
         return backend.getTaskStates(tasks);
+    }
+
+    @Override
+    public Map<TaskId, TaskState> getTaskStatesForMigration(Set<TaskId> tasks) {
+        return backend.getTaskStates(tasks);
+    }
+
+    @Override
+    public void completeTaskStateMigration(Set<TaskId> legacyTasks) {
+        // LocalTransport receives the complete table assignment from the tablet master. The
+        // default stateless coordinator therefore reaches completion only after this worker has
+        // persisted every replacement in the authoritative coordination group. Worker handles a
+        // deletion failure without interrupting consumption and retries it on the next start.
+        backend.deleteTasks(legacyTasks);
     }
 
     @Override
@@ -183,24 +230,74 @@ class LocalTransport implements MasterTransport, WorkerTransport {
         }
     }
 
-    private void stopWorkerThread() throws InterruptedException {
-        if (currentWorker != null) {
-            Worker workerToStop = currentWorker;
-            Thread threadToJoin = workerThread;
-
-            currentWorker = null;
-            workerThread = null;
-
-            workerToStop.stop();
-            threadToJoin.join();
+    private void stopCurrentWorker() throws InterruptedException {
+        WorkerHandle workerToStop = currentWorker;
+        currentWorker = null;
+        if (workerToStop != null) {
+            stopWorker(workerToStop);
         }
     }
 
-    public void stop() throws InterruptedException {
-        stopWorkerThread();
+    private void stopCurrentWorkerAfterFailure(Exception failure)
+            throws InterruptedException {
+        WorkerHandle workerToStop = currentWorker;
+        currentWorker = null;
+        if (workerToStop != null) {
+            stopWorkerAfterFailure(workerToStop, failure);
+        }
     }
 
-    public boolean isReadyToStart() {
+    private void stopCurrentWorkerAfterInterruption() {
+        WorkerHandle workerToStop = currentWorker;
+        currentWorker = null;
+        if (workerToStop != null) {
+            stopWorkerAfterInterruption(workerToStop);
+        }
+    }
+
+    private static void stopWorkerAfterFailure(WorkerHandle workerHandle, Exception failure)
+            throws InterruptedException {
+        try {
+            stopWorker(workerHandle);
+        } catch (InterruptedException e) {
+            e.addSuppressed(failure);
+            throw e;
+        }
+    }
+
+    private static void stopWorkerAfterInterruption(WorkerHandle workerHandle) {
+        workerHandle.worker.stop();
+        workerHandle.executor.shutdownNow();
+    }
+
+    private static void stopWorker(WorkerHandle workerHandle) throws InterruptedException {
+        workerHandle.worker.stop();
+        try {
+            while (!workerHandle.executor.awaitTermination(Long.MAX_VALUE,
+                    TimeUnit.NANOSECONDS)) {
+                // Keep waiting until every worker action has stopped.
+            }
+        } catch (InterruptedException e) {
+            workerHandle.executor.shutdownNow();
+            throw e;
+        }
+    }
+
+    public synchronized void stop() throws InterruptedException {
+        stopCurrentWorker();
+    }
+
+    public synchronized boolean isReadyToStart() {
         return currentWorker == null;
+    }
+
+    private static final class WorkerHandle {
+        private final Worker worker;
+        private final ScheduledExecutorService executor;
+
+        private WorkerHandle(Worker worker, ScheduledExecutorService executor) {
+            this.worker = worker;
+            this.executor = executor;
+        }
     }
 }

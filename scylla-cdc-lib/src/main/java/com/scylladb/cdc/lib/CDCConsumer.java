@@ -44,7 +44,7 @@ public final class CDCConsumer implements AutoCloseable {
 
         this.session = new Driver3Session(cqlConfiguration);
         workerConfigurationBuilder.withCQL(workerCQLProvider.apply(session));
-        this.transport = new LocalTransport(cdcThreadGroup, workerConfigurationBuilder, executorServiceSupplier, backend);
+        this.transport = new LocalTransport(workerConfigurationBuilder, executorServiceSupplier, backend);
 
         MasterCQL masterCQL = new Driver3MasterCQL(session);
         this.masterConfiguration = masterConfigurationBuilder
