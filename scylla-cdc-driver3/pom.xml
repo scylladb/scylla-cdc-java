@@ -94,6 +94,16 @@
                                         <exclude>META-INF/*.RSA</exclude>
                                     </excludes>
                                 </filter>
+                                <!-- io.netty is relocated below, but its Maven metadata was
+                                     otherwise left behind unrelocated, so a scanner reading
+                                     META-INF could still flag the jar against the pre-shading
+                                     netty version (e.g. CVE-2026-59901 against 1.3.12). -->
+                                <filter>
+                                    <artifact>io.netty:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/maven/io.netty/**</exclude>
+                                    </excludes>
+                                </filter>
                             </filters>
                             <relocations>
                                 <relocation>
