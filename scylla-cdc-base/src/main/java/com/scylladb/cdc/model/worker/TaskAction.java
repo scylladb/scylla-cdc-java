@@ -30,6 +30,14 @@ abstract class TaskAction {
         return result;
     }
 
+    protected CompletableFuture<TaskAction> retryCheckpointWrite(Throwable ex, int tryAttempt,
+                                                                  TaskAction retryAction) {
+        long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
+        logger.atSevere().withCause(ex).log("Error while writing task checkpoint. Task: %s. " +
+                "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+        return delay(backoffTime).thenApply(ignored -> retryAction);
+    }
+
     public abstract CompletableFuture<TaskAction> run();
 
     public static TaskAction createFirstAction(WorkerConfiguration workerConfiguration, Task task) {
@@ -121,6 +129,10 @@ abstract class TaskAction {
                     workerConfiguration.transport.updateState(task.id, newState);
                 } catch (TaskAbortedException e) {
                     return CompletableFuture.completedFuture(null);
+                } catch (RuntimeException ex) {
+                    return retryCheckpointWrite(ex, tryAttempt,
+                            new ReadChangeTaskAction(workerConfiguration, task, reader,
+                                    tryAttempt + 1, newState));
                 }
             }
             try {
@@ -186,8 +198,16 @@ abstract class TaskAction {
     }
 
     private static final class MoveToNextWindowTaskAction extends TaskAction {
+        private final int tryAttempt;
+
         public MoveToNextWindowTaskAction(WorkerConfiguration workerConfiguration, Task task) {
+            this(workerConfiguration, task, 0);
+        }
+
+        private MoveToNextWindowTaskAction(WorkerConfiguration workerConfiguration, Task task,
+                                           int tryAttempt) {
             super(workerConfiguration, task);
+            this.tryAttempt = tryAttempt;
         }
 
         @Override
@@ -197,6 +217,9 @@ abstract class TaskAction {
                 workerConfiguration.transport.moveStateToNextWindow(task.id, newState);
             } catch (TaskAbortedException e) {
                 return CompletableFuture.completedFuture(null);
+            } catch (RuntimeException ex) {
+                return retryCheckpointWrite(ex, tryAttempt,
+                        new MoveToNextWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
             }
             Task newTask = task.updateState(newState);
             return CompletableFuture.completedFuture(new ReadNewWindowTaskAction(workerConfiguration, newTask, 0));
