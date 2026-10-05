@@ -10,6 +10,7 @@ import com.scylladb.cdc.model.worker.TaskState;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.Response;
+import redis.clients.jedis.Transaction;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -127,15 +128,21 @@ public class RedisStateStore implements CDCStateStore {
         String key = taskKey(task);
         Map<String, String> hash = TaskStateSerde.taskStateToMap(state);
         try (var jedis = jedisPool.getResource()) {
-            // Write all fields. Using HSET (not DEL+HSET) avoids a transient window
-            // where the key is absent between the delete and the write.
-            jedis.hset(key, hash);
-            // Remove stale change_id_* fields when the new state has no lastConsumedChangeId
-            // (i.e. only window boundaries are present, no partially-consumed change yet).
-            if (!hash.containsKey(TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM)) {
-                jedis.hdel(key,
-                        TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM,
-                        TaskStateSerde.TASK_STATE_CHANGE_ID_TIME);
+            // Queue the entire checkpoint update before executing it. A lost connection
+            // before EXEC leaves the old checkpoint intact; readers never see new window
+            // boundaries paired with the previous window's cursor.
+            try (Transaction transaction = jedis.multi()) {
+                transaction.hset(key, hash);
+                if (!hash.containsKey(TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM)) {
+                    transaction.hdel(key,
+                            TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM,
+                            TaskStateSerde.TASK_STATE_CHANGE_ID_TIME);
+                }
+                for (Object reply : transaction.exec()) {
+                    if (reply instanceof RuntimeException) {
+                        throw (RuntimeException) reply;
+                    }
+                }
             }
         }
     }
