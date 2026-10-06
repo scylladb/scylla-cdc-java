@@ -169,6 +169,32 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Sets how far behind the reader's clock a CDC query window must end before it is read.
+         * This gives writes with earlier timestamps time to become visible before the reader
+         * advances its progress past them. The default is
+         * {@value com.scylladb.cdc.model.worker.WorkerConfiguration#DEFAULT_CONFIDENCE_WINDOW_SIZE_MS}
+         * milliseconds.
+         *
+         * <p>Whether you keep the default or change it, choose a value longer than the effective
+         * write timeout for the original CDC-enabled table, including service-level and CQL
+         * {@code USING TIMEOUT} overrides. Allow additional margin for clock skew between the
+         * reader and the host assigning write timestamps
+         * (the application or a ScyllaDB node), and for late replica writes. ScyllaDB's default
+         * {@code write_request_timeout_in_ms} is 2,000 milliseconds, but that default alone does
+         * not establish a safe confidence window. With client-side timestamps, account for client
+         * queueing, retries, and speculative executions after timestamp assignment. Explicitly
+         * old {@code USING TIMESTAMP} values, such as backfills, can fall outside any practical
+         * confidence window.
+         *
+         * <p>By default, CDC log reads use QUORUM. Base-table writes need a consistency level whose
+         * acknowledged replicas overlap those reads (for example, QUORUM); writes at ONE,
+         * LOCAL_ONE, or ANY may become visible only after hint replay or repair. A shorter window
+         * reduces latency at the risk of missing late entries. Query-window size affects latency separately.
+         *
+         * @param confidenceWindowSizeMs confidence window in milliseconds
+         * @return this builder
+         */
         public Builder withConfidenceWindowSizeMs(long confidenceWindowSizeMs) {
             workerConfigurationBuilder.withConfidenceWindowSizeMs(confidenceWindowSizeMs);
             return this;
