@@ -172,9 +172,7 @@ public final class CDCConsumer implements AutoCloseable {
         /**
          * Sets how far behind the reader's clock a CDC query window must end before it is read.
          * This gives writes with earlier timestamps time to become visible before the reader
-         * advances its progress past them. The default is
-         * {@value com.scylladb.cdc.model.worker.WorkerConfiguration#DEFAULT_CONFIDENCE_WINDOW_SIZE_MS}
-         * milliseconds.
+         * advances its progress past them. The default is 30,000 milliseconds (30 seconds).
          *
          * <p>Whether you keep the default or change it, choose a value longer than the effective
          * write timeout for the original CDC-enabled table, including service-level and CQL
@@ -188,9 +186,10 @@ public final class CDCConsumer implements AutoCloseable {
          * confidence window.
          *
          * <p>By default, CDC log reads use QUORUM. Base-table writes need a consistency level whose
-         * acknowledged replicas overlap those reads (for example, QUORUM); writes at ONE,
-         * LOCAL_ONE, or ANY may become visible only after hint replay or repair. A shorter window
-         * reduces latency at the risk of missing late entries. Query-window size affects latency separately.
+         * acknowledged replicas overlap those reads (QUORUM, or LOCAL_QUORUM in a single-DC cluster).
+         * Writes at ONE, LOCAL_ONE (the Java driver default), ANY, or LOCAL_QUORUM across DCs may not
+         * yet be visible to a QUORUM read. A shorter window reduces latency at the risk of missing
+         * late entries. Query-window size affects latency separately.
          *
          * @param confidenceWindowSizeMs confidence window in milliseconds
          * @return this builder
