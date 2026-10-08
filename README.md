@@ -71,6 +71,30 @@ The consumer is started as a single-thread CDC consumer and reads the CDC log fo
 
 **Next steps: read more about how to use the library in the [Printer example application documentation](scylla-cdc-printer).**
 
+## Confidence window
+
+`CDCConsumer.Builder.withConfidenceWindowSizeMs()` defaults to 30,000 ms. The reader waits until
+the end of a CDC query window is older than its own clock by this amount before querying and
+advancing progress through that window. The wait reduces the chance of missing an older CDC
+entry that becomes visible after a newer one.
+
+Whether you keep the default or change it, check the effective timeout for writes to the original
+CDC-enabled **base table**, rather than the CDC log table. Check ScyllaDB's
+`write_request_timeout_in_ms` (2,000 ms by default), applicable service levels, and the original
+CQL write queries for `USING TIMEOUT`. Choose a window longer than that timeout and leave
+additional margin for clock skew between the reader and the host assigning write timestamps
+(the application or a ScyllaDB node), and for late replica writes. With client-side timestamps,
+allow for time spent in the client queue, retries, and speculative executions after timestamp
+assignment. Writes using explicitly old `USING TIMESTAMP` values, such as backfills, can fall
+outside any practical confidence window.
+
+By default, the CDC log is read at QUORUM. Writes to the base table need a consistency level
+whose acknowledged replicas overlap those reads (QUORUM, or LOCAL_QUORUM in a single-DC cluster).
+Writes at ONE, LOCAL_ONE (the Java driver default), ANY, or LOCAL_QUORUM across DCs may not
+yet be visible to a QUORUM read. The timeout is a starting point, not a guarantee that every
+write will be visible by then. Shorter confidence windows can reduce latency but increase the
+risk of missing late entries; `withQueryTimeWindowSizeMs()` affects latency separately.
+
 ## Checkpoint persistence (CDCStateStore)
 
 By default, `CDCConsumer` keeps all read progress in memory. This means that if the process
