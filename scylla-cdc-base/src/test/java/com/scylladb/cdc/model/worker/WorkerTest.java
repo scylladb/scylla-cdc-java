@@ -746,6 +746,58 @@ public class WorkerTest {
     }
 
     @Test
+    public void testWorkerRetriesDistinctTimeUuidsWithSameTimestamp() {
+        UUID firstTime = TimeUUID.middleOf(TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS + 1);
+        UUID secondTime = new UUID(firstTime.getMostSignificantBits(), firstTime.getLeastSignificantBits() + 1);
+        MockRawChange change1 = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 0)
+                .withTime(firstTime)
+                .addPrimaryKey("pk", 1)
+                .addPrimaryKey("ck", 2)
+                .addAtomicRegularColumn("v", 3)
+                .build();
+        MockRawChange change2 = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(TEST_GENERATION, 0, 0)
+                .withTime(secondTime)
+                .addPrimaryKey("pk", 4)
+                .addPrimaryKey("ck", 5)
+                .addAtomicRegularColumn("v", 6)
+                .build();
+        assertEquals(firstTime.timestamp(), secondTime.timestamp());
+        assertEquals(secondTime, change2.getId().getChangeTime().getUUID());
+
+        MockWorkerTransport workerTransport = new MockWorkerTransport();
+        MockWorkerCQL mockWorkerCQL = new MockWorkerCQL();
+        List<MockRawChange> rawChanges = Lists.newArrayList(change1, change2);
+        mockWorkerCQL.setRawChanges(rawChanges);
+        List<RawChange> observedChanges = Collections.synchronizedList(new ArrayList<>());
+        // Fail after the first change is checkpointed. The retry must resume at the
+        // second UUID even though its timestamp matches the saved cursor.
+        OnceChangeErrorInject errorInjection = new OnceChangeErrorInject();
+        errorInjection.requestRawChangeError(change2);
+        mockWorkerCQL.setCQLErrorStrategy(errorInjection);
+
+        Task windowReadTask = generateTask(TEST_GENERATION, 0, TEST_TABLE_NAME,
+                TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS,
+                TEST_GENERATION_START_MS + 3 * DEFAULT_QUERY_WINDOW_SIZE_MS);
+        try (WorkerThread workerThread = new WorkerThread(
+                mockWorkerCQL, workerTransport, Consumer.syncRawChangeConsumer(observedChanges::add),
+                TEST_GENERATION, TEST_TABLE_NAME)) {
+            DEFAULT_AWAIT.until(() -> mockWorkerCQL.getFailureCount() == 1);
+            DEFAULT_AWAIT.until(() -> observedChanges.equals(rawChanges));
+            DEFAULT_AWAIT.until(() -> workerTransport.getUpdateStateInvocations(windowReadTask.id)
+                    .contains(windowReadTask.state.update(change2.getId())));
+        }
+
+        assertEquals(rawChanges, observedChanges);
+        List<TaskState> savedStates = workerTransport.getUpdateStateInvocations(windowReadTask.id);
+        assertTrue(savedStates.contains(windowReadTask.state.update(change1.getId())));
+        assertTrue(savedStates.contains(windowReadTask.state.update(change2.getId())));
+    }
+
+    @Test
     public void testWorkerSurvivesFailureAndRestart() {
         // Test that Worker correctly handles the following
         // scenario: successful reading of a few changes,
