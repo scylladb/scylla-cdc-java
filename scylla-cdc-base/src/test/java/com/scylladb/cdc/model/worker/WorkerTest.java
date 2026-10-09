@@ -705,7 +705,7 @@ public class WorkerTest {
     }
 
     @Test
-    public void testWorkerStopsCheckpointUpdateWhenRetryIsAborted() throws InterruptedException {
+    public void testWorkerStopsCheckpointUpdateWhenRetryIsAborted() {
         GenerationMetadata generation = MockGenerationMetadata.mockGenerationMetadata(
                 new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
         MockRawChange change = MockRawChange.builder()
@@ -740,17 +740,17 @@ public class WorkerTest {
                 MockGenerationMetadata.generationMetadataToWorkerTasks(
                         generation, Collections.singleton(TEST_TABLE_NAME)))) {
             DEFAULT_AWAIT.until(() -> checkpointAttempts.get() == 2);
-            Thread.sleep(100);
-            assertEquals(2, checkpointAttempts.get());
-            assertTrue(transport.getMoveStateToNextWindowInvocations(
-                    generateTask(generation, 0, TEST_TABLE_NAME,
-                            TEST_GENERATION_START_MS,
-                            TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS).id).isEmpty());
+            TaskId taskId = generateTask(generation, 0, TEST_TABLE_NAME,
+                    TEST_GENERATION_START_MS,
+                    TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS).id;
+            DEFAULT_AWAIT.during(100, TimeUnit.MILLISECONDS).until(() ->
+                    checkpointAttempts.get() == 2
+                            && transport.getMoveStateToNextWindowInvocations(taskId).isEmpty());
         }
     }
 
     @Test
-    public void testWorkerStopsWindowMoveWhenRetryIsAborted() throws InterruptedException {
+    public void testWorkerStopsWindowMoveWhenRetryIsAborted() {
         GenerationMetadata generation = MockGenerationMetadata.mockGenerationMetadata(
                 new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
         Task firstWindow = generateTask(generation, 0, TEST_TABLE_NAME,
@@ -775,9 +775,9 @@ public class WorkerTest {
                 MockGenerationMetadata.generationMetadataToWorkerTasks(
                         generation, Collections.singleton(TEST_TABLE_NAME)))) {
             DEFAULT_AWAIT.until(() -> moveAttempts.get() == 2);
-            Thread.sleep(100);
-            assertEquals(2, moveAttempts.get());
-            assertEquals(1, transport.getUpdateStateInvocations(firstWindow.id).size());
+            DEFAULT_AWAIT.during(100, TimeUnit.MILLISECONDS).until(() ->
+                    moveAttempts.get() == 2
+                            && transport.getUpdateStateInvocations(firstWindow.id).size() == 1);
         }
     }
 

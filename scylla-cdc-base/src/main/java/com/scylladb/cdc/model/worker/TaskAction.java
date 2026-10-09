@@ -103,13 +103,20 @@ abstract class TaskAction {
     private static class ReadChangeTaskAction extends TaskAction {
         private final Reader reader;
         private final int tryAttempt;
+        private final int checkpointTryAttempt;
         private final TaskState newState;
 
         public ReadChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader, int tryAttempt, TaskState newState) {
+            this(workerConfiguration, task, reader, tryAttempt, 0, newState);
+        }
+
+        private ReadChangeTaskAction(WorkerConfiguration workerConfiguration, Task task, Reader reader,
+                                     int tryAttempt, int checkpointTryAttempt, TaskState newState) {
             super(workerConfiguration, task);
             this.reader = Preconditions.checkNotNull(reader);
             Preconditions.checkArgument(tryAttempt >= 0);
             this.tryAttempt = tryAttempt;
+            this.checkpointTryAttempt = checkpointTryAttempt;
             this.newState = newState;
         }
 
@@ -131,9 +138,9 @@ abstract class TaskAction {
                 } catch (TaskAbortedException e) {
                     return CompletableFuture.completedFuture(null);
                 } catch (RuntimeException ex) {
-                    return retryCheckpointWrite(ex, tryAttempt, newState,
+                    return retryCheckpointWrite(ex, checkpointTryAttempt, newState,
                             new ReadChangeTaskAction(workerConfiguration, task, reader,
-                                    tryAttempt + 1, newState));
+                                    tryAttempt, checkpointTryAttempt + 1, newState));
                 }
             }
             try {
