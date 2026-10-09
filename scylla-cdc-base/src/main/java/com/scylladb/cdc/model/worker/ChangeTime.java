@@ -38,9 +38,22 @@ public class ChangeTime implements Comparable<ChangeTime> {
         return Objects.hash(time);
     }
 
+    /**
+     * Orders CDC cursors like CQL timeuuid values. A timestamp alone is not a unique cursor:
+     * two changes can share it, so resume must also compare the remaining UUID bytes.
+     */
     @Override
     public int compareTo(ChangeTime changeTime) {
-        return Long.compare(time.timestamp(), changeTime.time.timestamp());
+        int timestampComparison = Long.compare(time.timestamp(), changeTime.time.timestamp());
+        if (timestampComparison != 0) {
+            return timestampComparison;
+        }
+
+        long leastSignificantBits = time.getLeastSignificantBits();
+        long otherLeastSignificantBits = changeTime.time.getLeastSignificantBits();
+        // Flip each byte's sign bit so unsigned long order matches CQL's signed-byte network order.
+        return Long.compareUnsigned(leastSignificantBits ^ 0x8080808080808080L,
+                otherLeastSignificantBits ^ 0x8080808080808080L);
     }
 
     @Override
