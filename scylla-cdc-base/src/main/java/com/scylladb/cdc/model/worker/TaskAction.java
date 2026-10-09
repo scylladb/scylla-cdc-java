@@ -31,10 +31,11 @@ abstract class TaskAction {
     }
 
     protected CompletableFuture<TaskAction> retryCheckpointWrite(Throwable ex, int tryAttempt,
-                                                                  TaskAction retryAction) {
+                                                                  TaskState state, TaskAction retryAction) {
         long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
         logger.atSevere().withCause(ex).log("Error while writing task checkpoint. Task: %s. " +
-                "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+                "Task state: %s. Attempt: %d. Will retry after backoff (%d ms).",
+                task.id, state, tryAttempt + 1, backoffTime);
         return delay(backoffTime).thenApply(ignored -> retryAction);
     }
 
@@ -130,7 +131,7 @@ abstract class TaskAction {
                 } catch (TaskAbortedException e) {
                     return CompletableFuture.completedFuture(null);
                 } catch (RuntimeException ex) {
-                    return retryCheckpointWrite(ex, tryAttempt,
+                    return retryCheckpointWrite(ex, tryAttempt, newState,
                             new ReadChangeTaskAction(workerConfiguration, task, reader,
                                     tryAttempt + 1, newState));
                 }
@@ -218,7 +219,7 @@ abstract class TaskAction {
             } catch (TaskAbortedException e) {
                 return CompletableFuture.completedFuture(null);
             } catch (RuntimeException ex) {
-                return retryCheckpointWrite(ex, tryAttempt,
+                return retryCheckpointWrite(ex, tryAttempt, newState,
                         new MoveToNextWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
             }
             Task newTask = task.updateState(newState);

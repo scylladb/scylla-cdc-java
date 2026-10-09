@@ -28,9 +28,10 @@ import java.util.Set;
  * or more worker threads. Implementations must be thread-safe.
  *
  * <p><b>Failure handling:</b> If a write fails, implementations should throw a
- * {@link RuntimeException}. The library will treat this as a fatal error for the affected task.
- * At-least-once delivery is guaranteed — if a state write fails and the process restarts, the
- * last successfully written checkpoint will be used, meaning some changes may be re-delivered.
+ * {@link RuntimeException}. The worker retries failed task checkpoint writes with backoff,
+ * including a write whose result is uncertain. Implementations must tolerate the same task state
+ * being saved more than once. If the process restarts, the last successfully written checkpoint
+ * will be used, meaning some changes may be re-delivered.
  *
  * <p><b>Default behaviour:</b> When no store is configured (i.e.
  * {@link CDCConsumer.Builder#withStateStore} is not called), the consumer keeps state in-process
