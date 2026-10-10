@@ -41,6 +41,9 @@ import java.util.Set;
  * {@link RuntimeException} is thrown and the task is considered failed. On restart, the consumer
  * resumes from the last successfully written checkpoint, so some changes may be re-delivered.
  *
+ * <p><b>Redis permissions:</b>
+ * Redis credentials must permit {@code MULTI} and {@code EXEC} for atomic window transitions.
+ *
  * <h2>Usage example</h2>
  * <pre>{@code
  * JedisPool pool = new JedisPool("redis-host", 6379);
@@ -128,16 +131,18 @@ public class RedisStateStore implements CDCStateStore {
         String key = taskKey(task);
         Map<String, String> hash = TaskStateSerde.taskStateToMap(state);
         try (var jedis = jedisPool.getResource()) {
+            if (hash.containsKey(TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM)) {
+                jedis.hset(key, hash);
+                return;
+            }
             // Queue the entire checkpoint update before executing it. A lost connection
             // before EXEC leaves the old checkpoint intact; readers never see new window
             // boundaries paired with the previous window's cursor.
             try (Transaction transaction = jedis.multi()) {
                 transaction.hset(key, hash);
-                if (!hash.containsKey(TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM)) {
-                    transaction.hdel(key,
-                            TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM,
-                            TaskStateSerde.TASK_STATE_CHANGE_ID_TIME);
-                }
+                transaction.hdel(key,
+                        TaskStateSerde.TASK_STATE_CHANGE_ID_STREAM,
+                        TaskStateSerde.TASK_STATE_CHANGE_ID_TIME);
                 for (Object reply : transaction.exec()) {
                     if (reply instanceof RuntimeException) {
                         throw (RuntimeException) reply;
@@ -202,7 +207,7 @@ public class RedisStateStore implements CDCStateStore {
     // Key helpers
     // -------------------------------------------------------------------------
 
-    private String taskKey(TaskId task) {
+    String taskKey(TaskId task) {
         return keyPrefix + ":" + TASK_KEY_SEGMENT + ":" + TaskStateSerde.taskIdToKey(task);
     }
 
