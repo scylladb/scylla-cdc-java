@@ -30,9 +30,12 @@ public final class WorkerConfiguration {
     private final ScheduledExecutorService executorService;
 
     private final Clock clock;
-    
+
+    final NoisyExceptionSuppressor noisyExceptionSuppressor;
+
     private WorkerConfiguration(WorkerTransport transport, WorkerCQL cql, Consumer consumer, long queryTimeWindowSizeMs,
-            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs) {
+            long confidenceWindowSizeMs, RetryBackoff workerRetryBackoff, ScheduledExecutorService executorService, Clock clock, long minimalWaitForWindowMs,
+            NoisyExceptionSuppressor noisyExceptionSuppressor) {
         this.transport = Preconditions.checkNotNull(transport);
         this.cql = Preconditions.checkNotNull(cql);
         this.consumer = Preconditions.checkNotNull(consumer);
@@ -44,6 +47,7 @@ public final class WorkerConfiguration {
         this.executorService = executorService;
         this.clock = Preconditions.checkNotNull(clock);
         this.minimalWaitForWindowMs = minimalWaitForWindowMs;
+        this.noisyExceptionSuppressor = Preconditions.checkNotNull(noisyExceptionSuppressor);
     }
     
     public ScheduledExecutorService getExecutorService() {
@@ -79,6 +83,9 @@ public final class WorkerConfiguration {
         private RetryBackoff workerRetryBackoff = DEFAULT_WORKER_RETRY_BACKOFF;
 
         private Clock clock = Clock.systemDefaultZone();
+
+        private long noisyExceptionSuppressionWindowMs = 0;
+        private NoisyExceptionSuppressor noisyExceptionSuppressor;
 
         public Builder withTransport(WorkerTransport transport) {
             this.transport = Preconditions.checkNotNull(transport);
@@ -170,12 +177,34 @@ public final class WorkerConfiguration {
             return this;
         }
 
+        /**
+         * Sets the time window for suppressing repeated logging of transient CQL
+         * exceptions (overload, busy pool, read timeout, or no host available
+         * when every host failed for one of those reasons). When such an exception
+         * occurs it is logged once, then subsequent occurrences are suppressed
+         * until the window elapses. Set to 0 to disable suppression (default).
+         *
+         * @param noisyExceptionSuppressionWindowMs suppression window in milliseconds.
+         * @return this builder.
+         */
+        public Builder withNoisyExceptionSuppressionWindowMs(long noisyExceptionSuppressionWindowMs) {
+            Preconditions.checkArgument(noisyExceptionSuppressionWindowMs >= 0);
+            if (this.noisyExceptionSuppressionWindowMs != noisyExceptionSuppressionWindowMs) {
+                noisyExceptionSuppressor = null;
+            }
+            this.noisyExceptionSuppressionWindowMs = noisyExceptionSuppressionWindowMs;
+            return this;
+        }
+
         public WorkerConfiguration build() {
             if (executorService == null) {
                 executorService = Executors.newScheduledThreadPool(1);
             }
+            if (noisyExceptionSuppressor == null) {
+                noisyExceptionSuppressor = new NoisyExceptionSuppressor(noisyExceptionSuppressionWindowMs, System::nanoTime);
+            }
             return new WorkerConfiguration(transport, cql, consumer, queryTimeWindowSizeMs, confidenceWindowSizeMs,
-                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs);
+                    workerRetryBackoff, executorService, clock, minimalWaitForWindowMs, noisyExceptionSuppressor);
         }
     }
 }
