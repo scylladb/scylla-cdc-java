@@ -134,6 +134,9 @@ JedisPool pool = new JedisPool("redis-host", 6379);
 CDCStateStore store = new RedisStateStore(pool);
 ```
 
+The Redis user must have permission to run `MULTI` and `EXEC` for atomic window
+transitions. A Redis proxy must support both commands.
+
 ### Custom implementations
 
 Implement the `CDCStateStore` interface to use any backend (SQL, etcd, DynamoDB, etc.):
