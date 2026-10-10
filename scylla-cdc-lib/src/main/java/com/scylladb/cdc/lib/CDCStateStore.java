@@ -28,10 +28,11 @@ import java.util.Set;
  * or more worker threads. Implementations must be thread-safe.
  *
  * <p><b>Failure handling:</b> If a write fails, implementations should throw a
- * {@link RuntimeException}. The worker retries failed task checkpoint writes with backoff,
- * including a write whose result is uncertain. Implementations must tolerate the same task state
- * being saved more than once. If the process restarts, the last successfully written checkpoint
- * will be used, meaning some changes may be re-delivered.
+ * {@link RuntimeException}. The worker retries failed task checkpoint writes without an attempt
+ * limit, using backoff between attempts. This includes writes whose result is uncertain.
+ * Implementations must tolerate the same task state being saved more than once. If the process
+ * restarts, the last successfully written checkpoint will be used, meaning some changes may be
+ * re-delivered.
  *
  * <p><b>Default behaviour:</b> When no store is configured (i.e.
  * {@link CDCConsumer.Builder#withStateStore} is not called), the consumer keeps state in-process
@@ -84,6 +85,10 @@ public interface CDCStateStore {
      * <p>Called by the worker to initialize a new task's state before it starts processing, and
      * subsequently on every change consumed and every time-window advancement. This is on the hot
      * path — implementations should complete quickly.
+     *
+     * <p>For a given task, the library calls this method sequentially. If a call throws, the
+     * library may retry it with the same state. After a call succeeds, an earlier call must not
+     * change the state returned by {@link #loadTaskStates(Set)} for that task.
      *
      * @param task     the task ID whose state is being saved
      * @param state    the new state to persist

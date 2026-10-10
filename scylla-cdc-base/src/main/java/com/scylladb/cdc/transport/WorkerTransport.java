@@ -71,6 +71,8 @@ public interface WorkerTransport extends Coordinator<TaskId, TaskId> {
      * May throw TaskAbortedException if the task is no longer active and should abort.
      * A failed call may be retried with the same state, even if the first write succeeded.
      * Implementations must tolerate repeated writes of the same state.
+     * After a later checkpoint call succeeds for this task, an earlier call must not change the
+     * state returned by {@link #getTaskStates(Set)}.
      */
     void updateState(TaskId task, TaskState newState) throws TaskAbortedException;
 
@@ -79,6 +81,7 @@ public interface WorkerTransport extends Coordinator<TaskId, TaskId> {
      * May throw TaskAbortedException if the task is no longer active and should abort.
      * A failed call may be retried with the same state, even if the first move succeeded.
      * Implementations must tolerate repeated moves to the same state.
+     * The ordering guarantee documented for {@link #updateState(TaskId, TaskState)} also applies.
      */
     void moveStateToNextWindow(TaskId task, TaskState newState) throws TaskAbortedException;
 
