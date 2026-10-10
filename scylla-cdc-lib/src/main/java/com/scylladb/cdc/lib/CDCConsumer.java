@@ -282,6 +282,23 @@ public final class CDCConsumer implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Sets the time window for suppressing repeated logging of transient CQL
+         * exceptions (overload, busy pool, read timeout, or no host available
+         * when every host failed for one of those reasons). When such an exception
+         * occurs it is logged once, then subsequent occurrences are suppressed
+         * until the window elapses. The window is shared per table across exception
+         * types and is not reset by successful reads. Set to 0 to disable
+         * suppression (default).
+         *
+         * @param noisyExceptionSuppressionWindowMs suppression window in milliseconds.
+         * @return this builder.
+         */
+        public Builder withNoisyExceptionSuppressionWindowMs(long noisyExceptionSuppressionWindowMs) {
+            workerConfigurationBuilder.withNoisyExceptionSuppressionWindowMs(noisyExceptionSuppressionWindowMs);
+            return this;
+        }
+
         public Builder withWorkerCQLProvider(Function<Driver3Session, WorkerCQL> workerCQLProvider) {
             this.workerCQLProvider = Preconditions.checkNotNull(workerCQLProvider);
             return this;

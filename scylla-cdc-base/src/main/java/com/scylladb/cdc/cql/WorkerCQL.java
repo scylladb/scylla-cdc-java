@@ -19,4 +19,13 @@ public interface WorkerCQL {
     CompletableFuture<Reader> createReader(Task task);
 
     CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName);
+
+    /**
+     * Whether a failure is expected to recur during a transient CQL problem and
+     * may have its repeated worker log messages suppressed. Implementations that
+     * do not classify failures keep the existing logging behavior.
+     */
+    default boolean isNoisyException(Throwable exception) {
+        return false;
+    }
 }
