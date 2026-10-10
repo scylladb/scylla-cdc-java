@@ -4,6 +4,8 @@ import java.util.Date;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
@@ -39,6 +41,22 @@ abstract class TaskAction {
         return delay(backoffTime).thenApply(ignored -> retryAction);
     }
 
+    /**
+     * Looks through future wrappers to classify the failure without changing
+     * the exception that callers and unsuppressed logs observe.
+     *
+     * @param key the suppression key (typically a table name) for per-key tracking.
+     */
+    protected static boolean shouldSuppressLog(Throwable ex, WorkerConfiguration config, Object key) {
+        Throwable cause = ex;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
+                && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return config.cql.isNoisyException(cause)
+                && config.noisyExceptionSuppressor.shouldSuppress(key);
+    }
+
     public abstract CompletableFuture<TaskAction> run();
 
     public static TaskAction createFirstAction(WorkerConfiguration workerConfiguration, Task task) {
@@ -58,8 +76,10 @@ abstract class TaskAction {
             // Exception occured while starting up the reader. Retry by starting
             // this TaskAction once again.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
-            logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
-                    "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+            if (!shouldSuppressLog(ex, workerConfiguration, task.id.getTable())) {
+                logger.atSevere().withCause(ex).log("Error while starting reading next window. Task: %s. " +
+                        "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+            }
             return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }
@@ -124,8 +144,10 @@ abstract class TaskAction {
             // Exception occured while reading the window, we will have to restart
             // ReadNewWindowTaskAction - read a window from state defined in task.
             long backoffTime = workerConfiguration.workerRetryBackoff.getRetryBackoffTimeMs(tryAttempt);
-            logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
-                    "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+            if (!shouldSuppressLog(ex, workerConfiguration, task.id.getTable())) {
+                logger.atSevere().withCause(ex).log("Error while reading a CDC change. Task: %s. " +
+                        "Task state: %s. Will retry after backoff (%d ms).", task.id, task.state, backoffTime);
+            }
             return delay(backoffTime)
                     .thenApply(t -> new ReadNewWindowTaskAction(workerConfiguration, task, tryAttempt + 1));
         }

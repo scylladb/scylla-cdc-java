@@ -18,13 +18,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.driver.core.EndPoint;
 import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.RegularStatement;
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.ResultSetFuture;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.exceptions.BusyPoolException;
+import com.datastax.driver.core.exceptions.NoHostAvailableException;
+import com.datastax.driver.core.exceptions.OverloadedException;
+import com.datastax.driver.core.exceptions.ReadTimeoutException;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -39,6 +45,8 @@ import com.scylladb.cdc.model.worker.Task;
 
 public class Driver3WorkerCQL implements WorkerCQL {
     private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+    private static final ImmutableSet<Class<? extends Throwable>> NOISY_EXCEPTIONS =
+            ImmutableSet.of(BusyPoolException.class, OverloadedException.class, ReadTimeoutException.class);
 
     private final Session session;
     private final Map<TableName, PreparedStatement> preparedStmts = new HashMap<>();
@@ -275,5 +283,25 @@ public class Driver3WorkerCQL implements WorkerCQL {
     @Override
     public CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName) {
         return Driver3CommonCQL.fetchTableTTL(session, tableName);
+    }
+
+    private static boolean isDirectNoisyException(Throwable ex) {
+        return NOISY_EXCEPTIONS.stream().anyMatch(c -> c.isInstance(ex));
+    }
+
+    @Override
+    public boolean isNoisyException(Throwable ex) {
+        return isNoisyDriverFailure(ex);
+    }
+
+    static boolean isNoisyDriverFailure(Throwable ex) {
+        if (isDirectNoisyException(ex)) {
+            return true;
+        }
+        if (ex instanceof NoHostAvailableException) {
+            Map<EndPoint, Throwable> errors = ((NoHostAvailableException) ex).getErrors();
+            return !errors.isEmpty() && errors.values().stream().allMatch(Driver3WorkerCQL::isDirectNoisyException);
+        }
+        return false;
     }
 }
