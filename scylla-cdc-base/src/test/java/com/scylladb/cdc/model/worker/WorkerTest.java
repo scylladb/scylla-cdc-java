@@ -9,6 +9,7 @@ import com.scylladb.cdc.model.master.GenerationMetadata;
 import com.scylladb.cdc.model.master.MockGenerationMetadata;
 import com.scylladb.cdc.transport.MockWorkerTransport;
 import com.scylladb.cdc.transport.GroupedTasks;
+import com.scylladb.cdc.transport.TaskAbortedException;
 
 import org.awaitility.core.ConditionFactory;
 import org.junit.jupiter.api.Test;
@@ -638,6 +639,146 @@ public class WorkerTest {
         TaskState afterChange2State = windowReadTask.state.update(change2.getId());
 
         assertEquals(Lists.newArrayList(windowBeginningState, afterChange1State, afterChange2State), windows);
+    }
+
+    @Test
+    public void testWorkerRetriesCheckpointUpdateAfterAmbiguousStoreFailure() {
+        GenerationMetadata generation = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
+        MockRawChange change = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(generation, 0, 0)
+                .withTimeMs(TEST_GENERATION_START_MS + 1)
+                .addPrimaryKey("pk", 1)
+                .addPrimaryKey("ck", 2)
+                .addAtomicRegularColumn("v", 3)
+                .build();
+        AtomicInteger failedWrites = new AtomicInteger();
+        MockWorkerTransport transport = new MockWorkerTransport() {
+            @Override
+            public void updateState(TaskId taskId, TaskState newState) {
+                super.updateState(taskId, newState);
+                if (newState.getLastConsumedChangeId().isPresent()
+                        && failedWrites.getAndIncrement() == 0) {
+                    throw new IllegalStateException("Store failed after checkpoint write");
+                }
+            }
+        };
+        MockWorkerCQL cql = new MockWorkerCQL();
+        cql.setRawChanges(Collections.singletonList(change));
+        List<RawChange> consumed = Collections.synchronizedList(new ArrayList<>());
+
+        try (WorkerThread workerThread = new WorkerThread(cql, transport,
+                Consumer.syncRawChangeConsumer(consumed::add), generation, TEST_TABLE_NAME)) {
+            DEFAULT_AWAIT.until(() -> failedWrites.get() >= 2);
+            DEFAULT_AWAIT.until(() -> consumed.size() == 1);
+            assertEquals(Collections.singletonList(change), consumed);
+        }
+    }
+
+    @Test
+    public void testWorkerRetriesWindowMoveAfterStoreFailure() {
+        GenerationMetadata generation = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
+        Task secondWindow = generateTask(generation, 0, TEST_TABLE_NAME,
+                TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS,
+                TEST_GENERATION_START_MS + 2 * DEFAULT_QUERY_WINDOW_SIZE_MS);
+        AtomicInteger moveAttempts = new AtomicInteger();
+        MockWorkerTransport transport = new MockWorkerTransport() {
+            @Override
+            public void moveStateToNextWindow(TaskId taskId, TaskState newState) {
+                if (moveAttempts.getAndIncrement() == 0) {
+                    throw new IllegalStateException("Store failed before checkpoint write");
+                }
+                super.moveStateToNextWindow(taskId, newState);
+            }
+        };
+        MockWorkerCQL cql = new MockWorkerCQL();
+
+        try (WorkerThread workerThread = new WorkerThread(cql, transport,
+                Consumer.syncRawChangeConsumer(change -> {}), generation, TEST_TABLE_NAME)) {
+            DEFAULT_AWAIT.until(() -> moveAttempts.get() >= 2);
+            DEFAULT_AWAIT.until(() -> cql.isReaderFinished(secondWindow));
+            assertEquals(secondWindow.state,
+                    transport.getMoveStateToNextWindowInvocations(secondWindow.id).get(0));
+        }
+    }
+
+    @Test
+    public void testWorkerStopsCheckpointUpdateWhenRetryIsAborted() {
+        GenerationMetadata generation = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
+        MockRawChange change = MockRawChange.builder()
+                .withChangeSchema(TEST_CHANGE_SCHEMA)
+                .withStreamId(generation, 0, 0)
+                .withTimeMs(TEST_GENERATION_START_MS + 1)
+                .addPrimaryKey("pk", 1)
+                .addPrimaryKey("ck", 2)
+                .addAtomicRegularColumn("v", 3)
+                .build();
+        AtomicInteger checkpointAttempts = new AtomicInteger();
+        MockWorkerTransport transport = new MockWorkerTransport() {
+            @Override
+            public void updateState(TaskId taskId, TaskState newState) {
+                if (newState.getLastConsumedChangeId().isPresent()) {
+                    if (checkpointAttempts.incrementAndGet() == 1) {
+                        throw new IllegalStateException("Store failed");
+                    }
+                    throw new TaskAbortedException("Task stopped");
+                }
+                super.updateState(taskId, newState);
+            }
+        };
+        MockWorkerCQL cql = new MockWorkerCQL();
+        cql.setRawChanges(Collections.singletonList(change));
+        WorkerConfiguration configuration = WorkerConfiguration.builder()
+                .withCQL(cql).withTransport(transport)
+                .withConsumer(Consumer.syncRawChangeConsumer(ignored -> {}))
+                .withWorkerRetryBackoff(attempt -> 0).build();
+
+        try (WorkerThread workerThread = new WorkerThread(configuration,
+                MockGenerationMetadata.generationMetadataToWorkerTasks(
+                        generation, Collections.singleton(TEST_TABLE_NAME)))) {
+            DEFAULT_AWAIT.until(() -> checkpointAttempts.get() == 2);
+            TaskId taskId = generateTask(generation, 0, TEST_TABLE_NAME,
+                    TEST_GENERATION_START_MS,
+                    TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS).id;
+            DEFAULT_AWAIT.during(100, TimeUnit.MILLISECONDS).until(() ->
+                    checkpointAttempts.get() == 2
+                            && transport.getMoveStateToNextWindowInvocations(taskId).isEmpty());
+        }
+    }
+
+    @Test
+    public void testWorkerStopsWindowMoveWhenRetryIsAborted() {
+        GenerationMetadata generation = MockGenerationMetadata.mockGenerationMetadata(
+                new Timestamp(new Date(TEST_GENERATION_START_MS)), Optional.empty(), 1, 1);
+        Task firstWindow = generateTask(generation, 0, TEST_TABLE_NAME,
+                TEST_GENERATION_START_MS,
+                TEST_GENERATION_START_MS + DEFAULT_QUERY_WINDOW_SIZE_MS);
+        AtomicInteger moveAttempts = new AtomicInteger();
+        MockWorkerTransport transport = new MockWorkerTransport() {
+            @Override
+            public void moveStateToNextWindow(TaskId taskId, TaskState newState) {
+                if (moveAttempts.incrementAndGet() == 1) {
+                    throw new IllegalStateException("Store failed");
+                }
+                throw new TaskAbortedException("Task stopped");
+            }
+        };
+        WorkerConfiguration configuration = WorkerConfiguration.builder()
+                .withCQL(new MockWorkerCQL()).withTransport(transport)
+                .withConsumer(Consumer.syncRawChangeConsumer(ignored -> {}))
+                .withWorkerRetryBackoff(attempt -> 0).build();
+
+        try (WorkerThread workerThread = new WorkerThread(configuration,
+                MockGenerationMetadata.generationMetadataToWorkerTasks(
+                        generation, Collections.singleton(TEST_TABLE_NAME)))) {
+            DEFAULT_AWAIT.until(() -> moveAttempts.get() == 2);
+            DEFAULT_AWAIT.during(100, TimeUnit.MILLISECONDS).until(() ->
+                    moveAttempts.get() == 2
+                            && transport.getUpdateStateInvocations(firstWindow.id).size() == 1);
+        }
     }
 
     @Test
