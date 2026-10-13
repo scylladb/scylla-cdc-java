@@ -56,12 +56,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Checkout Code One Commit Before ${{ inputs.target-tag }}
-        if: inputs.target-tag != 'master'
+      - name: Preserve release guard
         run: |
-          git fetch --prune --unshallow || true
-          git checkout ${{ inputs.target-tag }}~1
-          git tag -d ${{ inputs.target-tag }}
+          mkdir -p "$RUNNER_TEMP/release-safety"
+          cp scripts/release/*.py "$RUNNER_TEMP/release-safety/"
+          echo "RELEASE_GUARD=$RUNNER_TEMP/release-safety/guard.py" >> "$GITHUB_ENV"
+          echo "RELEASE_LOG_DIR=$RUNNER_TEMP/release-logs" >> "$GITHUB_ENV"
+
+      - name: Checkout release target
+        if: inputs.target-tag != 'master'
+        env:
+          RELEASE_TARGET_TAG: ${{ inputs.target-tag }}
+        run: |
+          git fetch --prune --unshallow || git fetch --prune
+          git checkout "refs/tags/$RELEASE_TARGET_TAG~1"
+          git tag -d "$RELEASE_TARGET_TAG"
+
+      - name: Check release credential safety before importing credentials
+        run: python3 "$RUNNER_TEMP/release-safety/guard.py" check
 
       - name: Set up Java
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
@@ -93,10 +105,10 @@ jobs:
           git config user.email "github-promoter@scylladb.com"
 
       - name: Clean project
-        run: $MVNCMD clean
+        run: python3 "$RELEASE_GUARD" run $MVNCMD clean
 
       - name: Clean release
-        run: $MVNCMD release:clean
+        run: python3 "$RELEASE_GUARD" run $MVNCMD release:clean
 
       - name: Prepare release
         env:
@@ -106,7 +118,7 @@ jobs:
             MAVEN_OPTS="${MAVEN_OPTS} -DskipTests=true -DskipITs=true"
           fi
           export MAVEN_OPTS
-          $MVNCMD release:prepare -DpushChanges=false
+          python3 "$RELEASE_GUARD" run $MVNCMD release:prepare -DpushChanges=false
 
       - name: Recheck for open release blockers
         if: inputs.dry-run == false
@@ -144,10 +156,18 @@ jobs:
             MAVEN_OPTS="${MAVEN_OPTS} -DskipTests=true -DskipITs=true"
           fi
           export MAVEN_OPTS
-          $MVNCMD release:perform $CMD_OPTS
+          python3 "$RELEASE_GUARD" run $MVNCMD release:perform $CMD_OPTS
 
       - name: Push changes to SCM
         if: ${{ inputs.dry-run == false && inputs.target-tag == 'master' }}
         run: |
           git status && git log -3
           git push origin --follow-tags -v
+
+      - name: Upload sanitized release logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: maven-release-logs
+          path: ${{ runner.temp }}/release-logs/*.log
+          if-no-files-found: ignore
