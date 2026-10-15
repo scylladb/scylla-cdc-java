@@ -10,12 +10,18 @@ import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
 import com.datastax.driver.core.exceptions.InvalidQueryException;
 import com.google.common.base.Preconditions;
+import com.scylladb.cdc.cql.WorkerCQL;
+import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
 import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;
+import com.scylladb.cdc.model.worker.Task;
 import java.net.InetSocketAddress;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -217,6 +223,114 @@ public class TabletsIT {
       }
 
       session.execute(String.format("DROP KEYSPACE %s;", keyspace));
+    }
+  }
+
+  @Test
+  public void consumeFromManyTablesAddedWhileTasksActive() throws InterruptedException {
+    String keyspace = "tabletsks_many";
+    // The master adds tables one by one; 26 crosses the default HashMap resizes
+    // (13th and 25th put) while earlier tables' tasks call createReader.
+    int tableCount = 26;
+    Session session;
+
+    try (Cluster cluster = Cluster.builder().addContactPoint(hostname).withPort(port).build()) {
+      session = cluster.connect();
+
+      session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
+      session.execute(String.format(
+          "CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', "
+              + "'replication_factor': 1} AND tablets = {'initial': 2};", keyspace));
+
+      for (int t = 0; t < tableCount; t++) {
+        session.execute(String.format(
+            "CREATE TABLE %s.t%d (id int, value text, PRIMARY KEY (id)) "
+                + "WITH cdc = {'enabled': 'true'};",
+            keyspace, t));
+      }
+
+      AtomicInteger changeCounter = new AtomicInteger(0);
+      RawChangeConsumer changeConsumer =
+          change -> {
+            changeCounter.incrementAndGet();
+            return CompletableFuture.completedFuture(null);
+          };
+      AtomicInteger createReaderFailures = new AtomicInteger(0);
+
+      CDCConsumer.Builder builder =
+          CDCConsumer.builder()
+              .addContactPoint(new InetSocketAddress(hostname, port))
+              .withConsumer(changeConsumer)
+              .withWorkerCQLProvider(driverSession -> new FailureCountingWorkerCQL(
+                  new Driver3WorkerCQL(driverSession), createReaderFailures))
+              .withQueryTimeWindowSizeMs(10 * 1000)
+              .withConfidenceWindowSizeMs(5 * 1000)
+              .withWorkersCount(1);
+      for (int t = 0; t < tableCount; t++) {
+        builder.addTable(new TableName(keyspace, "t" + t));
+      }
+
+      try (CDCConsumer consumer = builder.build()) {
+        consumer.start();
+
+        for (int t = 0; t < tableCount; t++) {
+          session.execute(String.format(
+              "INSERT INTO %s.t%d (id, value) VALUES (1, 'value');", keyspace, t));
+        }
+
+        // Wait for all changes to be consumed
+        long timeoutMs = 60 * 1000;
+        long startTime = System.currentTimeMillis();
+        long pollIntervalMs = 500; // Check every 500ms
+
+        while (changeCounter.get() < tableCount &&
+               (System.currentTimeMillis() - startTime) < timeoutMs) {
+          Thread.sleep(pollIntervalMs);
+        }
+
+        assertEquals(tableCount, changeCounter.get(),
+            "Expected to receive " + tableCount + " changes but got " + changeCounter.get());
+        // Retries still deliver every change, so only this catches a missed cache lookup.
+        assertEquals(0, createReaderFailures.get(),
+            "createReader failed while later tables were being prepared");
+      }
+
+      session.execute(String.format("DROP KEYSPACE %s;", keyspace));
+    }
+  }
+
+  private static final class FailureCountingWorkerCQL implements WorkerCQL {
+    private final WorkerCQL delegate;
+    private final AtomicInteger createReaderFailures;
+
+    FailureCountingWorkerCQL(WorkerCQL delegate, AtomicInteger createReaderFailures) {
+      this.delegate = delegate;
+      this.createReaderFailures = createReaderFailures;
+    }
+
+    @Override
+    public void prepare(Set<TableName> tables) throws InterruptedException, ExecutionException {
+      delegate.prepare(tables);
+    }
+
+    @Override
+    public CompletableFuture<Reader> createReader(Task task) {
+      try {
+        return delegate.createReader(task);
+      } catch (RuntimeException e) {
+        createReaderFailures.incrementAndGet();
+        throw e;
+      }
+    }
+
+    @Override
+    public CompletableFuture<Optional<Long>> fetchTableTTL(TableName tableName) {
+      return delegate.fetchTableTTL(tableName);
+    }
+
+    @Override
+    public boolean isNoisyException(Throwable exception) {
+      return delegate.isNoisyException(exception);
     }
   }
 
