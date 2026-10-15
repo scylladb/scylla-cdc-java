@@ -14,6 +14,10 @@ public interface WorkerCQL {
         CompletableFuture<Optional<RawChange>> nextChange();
     }
 
+    /**
+     * May run while {@link #createReader} is called for tables prepared earlier,
+     * so implementations must make prepared tables safely visible to concurrent readers.
+     */
     void prepare(Set<TableName> tables) throws InterruptedException, ExecutionException;
 
     CompletableFuture<Reader> createReader(Task task);
