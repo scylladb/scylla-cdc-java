@@ -1,6 +1,8 @@
 package com.scylladb.cdc.lib;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.abort;
 
 import com.datastax.driver.core.Cluster;
@@ -13,17 +15,22 @@ import com.google.common.base.Preconditions;
 import com.scylladb.cdc.cql.WorkerCQL;
 import com.scylladb.cdc.cql.driver3.Driver3WorkerCQL;
 import com.scylladb.cdc.model.TableName;
+import com.scylladb.cdc.model.TaskId;
 import com.scylladb.cdc.model.worker.RawChange;
 import com.scylladb.cdc.model.worker.RawChangeConsumer;
 import com.scylladb.cdc.model.worker.Task;
+import com.scylladb.cdc.model.worker.TaskAndRawChangeConsumer;
 import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -464,6 +471,102 @@ public class TabletsIT {
       }
 
       session.execute(String.format("DROP KEYSPACE %s;", keyspace));
+    }
+  }
+
+  @Test
+  public void consumeTabletStreamsInParallel() throws Exception {
+    String keyspace = "tabletsks_parallel";
+    String table = "tabletstest";
+
+    try (Cluster cluster = Cluster.builder().addContactPoint(hostname).withPort(port).build()) {
+      Session session = cluster.connect();
+
+      session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
+      session.execute(String.format(
+          "CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', "
+              + "'replication_factor': 1} AND tablets = {'initial': 8};", keyspace));
+      session.execute(String.format(
+              "CREATE TABLE %s.%s (id int, value text, PRIMARY KEY (id)) "
+                  + "WITH cdc = {'enabled': 'true'};",
+              keyspace, table));
+
+      // The first change is held open until a change from a different task arrives. With all
+      // tablet streams in one task, nothing else can be delivered meanwhile and the hold times
+      // out; with one task per stream, another task delivers while the first is still pending.
+      // The hold is a future, not a blocked thread, so no driver or worker thread is parked.
+      Set<TaskId> seenTasks = ConcurrentHashMap.newKeySet();
+      // Delivery is at-least-once, so count distinct rows rather than deliveries.
+      Set<Integer> seenIds = ConcurrentHashMap.newKeySet();
+      AtomicBoolean multiStreamTask = new AtomicBoolean(false);
+      AtomicReference<TaskId> heldTask = new AtomicReference<>();
+      CompletableFuture<Void> release = new CompletableFuture<>();
+      AtomicBoolean overlapped = new AtomicBoolean(false);
+      TaskAndRawChangeConsumer changeConsumer =
+          (task, change) -> {
+            seenTasks.add(task.id);
+            seenIds.add(change.getCell("id").getInt());
+            if (task.streams.size() != 1) {
+              multiStreamTask.set(true);
+            }
+            if (release.isDone()) {
+              return CompletableFuture.completedFuture(null);
+            }
+            if (heldTask.compareAndSet(null, task.id)) {
+              return release.completeOnTimeout(null, 30, TimeUnit.SECONDS);
+            }
+            if (!heldTask.get().equals(task.id)) {
+              overlapped.set(true);
+              release.complete(null);
+            }
+            return CompletableFuture.completedFuture(null);
+          };
+
+      // A resource rather than a finally block: if the drop fails, its exception is suppressed
+      // onto the assertion failure instead of replacing it.
+      try (AutoCloseable dropKeyspace = () ->
+               session.execute(String.format("DROP KEYSPACE IF EXISTS %s;", keyspace));
+           CDCConsumer consumer =
+          CDCConsumer.builder()
+              .addContactPoint(new InetSocketAddress(hostname, port))
+              .addTable(new TableName(keyspace, table))
+              .withTaskAndRawChangeConsumer(changeConsumer)
+              .withQueryTimeWindowSizeMs(10 * 1000)
+              .withConfidenceWindowSizeMs(5 * 1000)
+              .withWorkersCount(4)
+              .build()) {
+
+        consumer.start();
+
+        PreparedStatement ps = session.prepare(
+            String.format("INSERT INTO %s.%s (id, value) VALUES (?, ?);", keyspace, table));
+
+        // Enough partitions to very likely land in every tablet.
+        int expectedChanges = 200;
+        for (int i = 1; i <= expectedChanges; i++) {
+          session.execute(ps.bind(i, "value" + i));
+        }
+
+        long timeoutMs = 90 * 1000;
+        long startTime = System.currentTimeMillis();
+        long pollIntervalMs = 500;
+
+        while (seenIds.size() < expectedChanges &&
+               (System.currentTimeMillis() - startTime) < timeoutMs) {
+          Thread.sleep(pollIntervalMs);
+        }
+
+        assertEquals(expectedChanges, seenIds.size(),
+            "Expected to receive " + expectedChanges + " rows but got " + seenIds.size());
+        // Overlap needs two distinct tasks, so this also covers "more than one task".
+        assertTrue(overlapped.get(),
+            "Expected a second task to deliver while the first was held; tasks seen: "
+                + seenTasks);
+        assertTrue(seenTasks.stream().allMatch(TaskId::isTabletStreamTask),
+            "Expected only per-stream tablet tasks but got " + seenTasks);
+        assertFalse(multiStreamTask.get(),
+            "Expected every tablet task to own exactly one stream");
+      }
     }
   }
 
