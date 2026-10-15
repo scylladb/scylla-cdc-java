@@ -7,12 +7,12 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.lte;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.select;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -49,7 +49,8 @@ public class Driver3WorkerCQL implements WorkerCQL {
             ImmutableSet.of(BusyPoolException.class, OverloadedException.class, ReadTimeoutException.class);
 
     private final Session session;
-    private final Map<TableName, PreparedStatement> preparedStmts = new HashMap<>();
+    // Concurrent: tablet mode prepares later tables while running tasks look up earlier ones.
+    private final Map<TableName, PreparedStatement> preparedStmts = new ConcurrentHashMap<>();
     private final ConsistencyLevel consistencyLevel;
 
     public Driver3WorkerCQL(Driver3Session session) {
