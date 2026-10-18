@@ -206,6 +206,7 @@ public class Driver3WorkerCQL implements WorkerCQL {
             // use many readers
             if(currentReaderIndex.get() >= readers.size()) {
                 fut.complete(Optional.empty());
+                return;
             }
 
             readers.get(currentReaderIndex.get()).nextChange()
