@@ -56,6 +56,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
+      - name: Preserve repository signing policy
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/release-signing-policy"
+          cp scripts/release/signing.py scripts/release/publisher.asc "$RUNNER_TEMP/release-signing-policy/"
+          echo "RELEASE_SIGNING_HELPER=$RUNNER_TEMP/release-signing-policy/signing.py" >> "$GITHUB_ENV"
+
       - name: Preserve release guard
         run: |
           mkdir -p "$RUNNER_TEMP/release-safety"
@@ -76,12 +82,13 @@ jobs:
         run: python3 "$RUNNER_TEMP/release-safety/guard.py" check
 
       - name: Set up Java
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version: '11'
           distribution: 'temurin'
           server-id: central
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase-env-var: MAVEN_GPG_PASSPHRASE
           server-username: SONATYPE_TOKEN_USERNAME
           server-password: SONATYPE_TOKEN_PASSWORD
 
@@ -99,10 +106,10 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/apache-maven-${maven_version}/bin" >> "$GITHUB_PATH"
 
-      - name: Configure Git user
-        run: |
-          git config user.name "ScyllaDB Promoter"
-          git config user.email "github-promoter@scylladb.com"
+      - name: Configure protected repository signing subkey
+        env:
+          RELEASE_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: python3 "$RELEASE_SIGNING_HELPER" configure
 
       - name: Clean project
         run: python3 "$RELEASE_GUARD" run $MVNCMD clean
@@ -119,6 +126,9 @@ jobs:
           fi
           export MAVEN_OPTS
           python3 "$RELEASE_GUARD" run $MVNCMD release:prepare -DpushChanges=false
+
+      - name: Verify prepared release commits and tag with public key only
+        run: python3 "$RELEASE_SIGNING_HELPER" verify-prepared
 
       - name: Recheck for open release blockers
         if: inputs.dry-run == false
@@ -171,3 +181,7 @@ jobs:
           name: maven-release-logs
           path: ${{ runner.temp }}/release-logs/*.log
           if-no-files-found: ignore
+
+      - name: Remove temporary release signing files
+        if: always() && env.RELEASE_SIGNING_DIR != ''
+        run: python3 "$RELEASE_SIGNING_HELPER" cleanup
