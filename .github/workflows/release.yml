@@ -121,6 +121,7 @@ jobs:
         env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
+          export MAVEN_OPTS="${MAVEN_OPTS:-} $RELEASE_MAVEN_OPTS"
           if [[ "${{ inputs.skip-tests }}" == "true" ]]; then
             MAVEN_OPTS="${MAVEN_OPTS} -DskipTests=true -DskipITs=true"
           fi
@@ -158,6 +159,7 @@ jobs:
           SONATYPE_TOKEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_USERNAME }}
           SONATYPE_TOKEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASSWORD }}
         run: |
+          export MAVEN_OPTS="${MAVEN_OPTS:-} $RELEASE_MAVEN_OPTS"
           CMD_OPTS=""
           if [[ "${{ inputs.dry-run }}" != "true" ]]; then
             CMD_OPTS="-Drelease.autopublish=true"
