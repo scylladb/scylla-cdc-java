@@ -215,6 +215,8 @@ class ReleaseTests(unittest.TestCase):
             '${project.getProperties()}',
             '${project.class.classLoader}',
             '${project.build.directory.class}',
+            '${project.build.sourceEncoding.class}',
+            '${project.reporting.outputDirectory.class}',
             '${project}',
             '${project.build}',
             '${projectLabel}',
@@ -231,6 +233,8 @@ class ReleaseTests(unittest.TestCase):
                 guard.check_text(value)
         for value in ('${project.version}', '${project.build.directory}', '${pom.groupId}',
                       '${project.build.directory}/classes',
+                      '${project.build.sourceEncoding}', '${pom.build.sourceEncoding}',
+                      '${project.reporting.outputDirectory}/x', '--limit-modules',
                       '${project.parent.version}', '${release.alias}', '${releaseLabel}',
                       '${env.LANG}', '${signing.env.name}', 'MAVEN_GPG_PASSPHRASE',
                       '${MAVEN_OPTS:-}', '${NEXT_RELEASE[@]}', '${VALUE:0:2}', '${array[0]}',
@@ -295,7 +299,8 @@ class ReleaseTests(unittest.TestCase):
                     capture.assert_called_once()
 
     def test_maven_aliases_are_rejected_across_argument_sources(self):
-        for value in ("--X", "--l raw.log", "--l=raw.log",
+        for value in ("--X", "--l raw.log", "--l=raw.log", "--lo=raw.log",
+                      "--log raw.log", "--log-f=raw.log", "--log-fi raw.log",
                       "--Dgpg.bestPractices=false", "--D=gpg.bestPractices=false",
                       "--Dorg.slf4j.simpleLogger.logFile=raw.log"):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
@@ -735,6 +740,25 @@ class ReleaseTests(unittest.TestCase):
                         self.assertEqual(result.stdout, b"out\n")
                         self.assertEqual(result.stderr, b"err\n")
                         self.assertEqual((logs / "stderr.log").read_bytes(), b"err\n")
+
+    def test_success_waits_for_pipe_connected_descendant_completion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / 'completed'
+            command = [sys.executable, '-c',
+                       'import os,time\nchild=os.fork()\nif child == 0:\n'
+                       ' time.sleep(0.5)\n os.write(1,b"descendant complete\\n")\n'
+                       f' open({str(marker)!r},"w").write("done")\n os._exit(0)\n'
+                       'os._exit(0)']
+            script = (
+                'import guard,os\nfrom pathlib import Path\nguard.DRAIN_GRACE=0.01\n'
+                f'raise SystemExit(guard.capture({command!r},os.environ,[],Path({directory!r})))'
+            )
+            result = subprocess.run([sys.executable, '-c', script], capture_output=True,
+                                    cwd=ROOT / 'scripts/release', timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(marker.read_text(), 'done')
+            self.assertEqual(result.stdout, b'descendant complete\n')
+            self.assertEqual((Path(directory) / 'stdout.log').read_bytes(), result.stdout)
 
     def test_inherited_pipes_have_bounded_safe_capture(self):
         for complete_stderr in (False, True):

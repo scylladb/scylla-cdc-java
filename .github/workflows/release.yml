@@ -13,6 +13,11 @@ on:
         description: 'skip-tests: skip project tests during validation; release helper tests always run'
         default: false
 
+      target-tag:
+        type: string
+        description: 'target-tag: master, or a tag whose preceding commit passes release credential safety checks. Other branches and unsafe historical targets are unsupported.'
+        default: master
+
       release-version:
         required: false
         type: string
@@ -96,20 +101,35 @@ jobs:
           python3 scripts/release/guard.py check
           python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
 
+      - name: Preserve validation tooling
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-tooling"
+          cp scripts/release/*.py scripts/release/publisher.asc Makefile "$RUNNER_TEMP/release-tooling/"
+          echo "RELEASE_GUARD=$RUNNER_TEMP/release-tooling/guard.py" >> "$GITHUB_ENV"
+          echo "RELEASE_SIGNING_HELPER=$RUNNER_TEMP/release-tooling/signing.py" >> "$GITHUB_ENV"
+          echo "RELEASE_MAKEFILE=$RUNNER_TEMP/release-tooling/Makefile" >> "$GITHUB_ENV"
+          echo "RELEASE_LOG_DIR=$RUNNER_TEMP/release-logs" >> "$GITHUB_ENV"
+
       - name: Record validated commit
         id: target
-        run: git rev-parse HEAD | sed 's/^/sha=/' >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_TARGET_TAG: ${{ inputs.target-tag }}
+        run: |
+          if [[ "$RELEASE_TARGET_TAG" != master ]]; then
+            git check-ref-format "refs/tags/$RELEASE_TARGET_TAG"
+            git checkout --detach "refs/tags/$RELEASE_TARGET_TAG~1"
+          fi
+          git rev-parse HEAD | sed 's/^/sha=/' >> "$GITHUB_OUTPUT"
 
       - name: Validate target without release credentials
         env:
           RELEASE_SKIP_TESTS: ${{ inputs.skip-tests }}
-          RELEASE_LOG_DIR: ${{ runner.temp }}/release-logs
         run: |
-          python3 scripts/release/guard.py check
+          python3 "$RELEASE_GUARD" check
           if [[ "$RELEASE_SKIP_TESTS" == true ]]; then
             export MAVEN_OPTS="${MAVEN_OPTS:-} -DskipTests=true -DskipITs=true"
           fi
-          python3 scripts/release/guard.py run mvn -B --no-transfer-progress -Prelease -Dgpg.skip=true verify
+          python3 "$RELEASE_GUARD" run mvn -B --no-transfer-progress -Prelease -Dgpg.skip=true verify
 
       - name: Upload sanitized validation stdout
         if: always()
@@ -143,11 +163,22 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          ref: ${{ needs.validate.outputs.target-sha }}
-          fetch-depth: 0
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
 
-      - name: Check validated master
+      - name: Preserve release tooling
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-tooling"
+          cp scripts/release/*.py scripts/release/publisher.asc Makefile "$RUNNER_TEMP/release-tooling/"
+          echo "RELEASE_GUARD=$RUNNER_TEMP/release-tooling/guard.py" >> "$GITHUB_ENV"
+          echo "RELEASE_SIGNING_HELPER=$RUNNER_TEMP/release-tooling/signing.py" >> "$GITHUB_ENV"
+          echo "RELEASE_MAKEFILE=$RUNNER_TEMP/release-tooling/Makefile" >> "$GITHUB_ENV"
+          echo "RELEASE_LOG_DIR=$RUNNER_TEMP/release-logs" >> "$GITHUB_ENV"
+
+      - name: Checkout validated target
         env:
+          RELEASE_TARGET_TAG: ${{ inputs.target-tag }}
           RELEASE_TARGET_COMMIT: ${{ needs.validate.outputs.target-sha }}
         run: |
           if [[ "$GITHUB_REF" != refs/heads/master ]]; then
@@ -155,16 +186,21 @@ jobs:
             exit 1
           fi
           [[ "$RELEASE_TARGET_COMMIT" =~ ^[0-9a-f]{40}$ ]]
-          git fetch --no-tags origin master
-          current_master=$(git rev-parse FETCH_HEAD)
-          if [[ "$current_master" != "$RELEASE_TARGET_COMMIT" ]]; then
-            echo "master advanced after validation; start a new release workflow."
-            exit 1
+          git fetch --no-tags origin "$RELEASE_TARGET_COMMIT"
+          if [[ "$RELEASE_TARGET_TAG" == master ]]; then
+            git fetch --no-tags origin master
+            current_master=$(git rev-parse FETCH_HEAD)
+            if [[ "$current_master" != "$RELEASE_TARGET_COMMIT" ]]; then
+              echo "master advanced after validation; start a new release workflow."
+              exit 1
+            fi
+            git checkout -B master "$RELEASE_TARGET_COMMIT"
+          else
+            git checkout --detach "$RELEASE_TARGET_COMMIT"
           fi
-          git checkout -B master "$RELEASE_TARGET_COMMIT"
 
       - name: Check release credential safety before importing credentials
-        run: python3 scripts/release/guard.py check
+        run: python3 "$RELEASE_GUARD" check
 
       - name: Set up Java
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
@@ -193,7 +229,7 @@ jobs:
         env:
           SONATYPE_TOKEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_USERNAME }}
           SONATYPE_TOKEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASSWORD }}
-        run: python3 scripts/release/credentials.py
+        run: python3 "$RUNNER_TEMP/release-tooling/credentials.py"
 
       - name: Prepare release
         env:
@@ -207,10 +243,10 @@ jobs:
           baseline=$(git rev-parse HEAD)
           export RELEASE_BASE_COMMIT="$baseline"
           echo "RELEASE_BASE_COMMIT=$baseline" >> "$GITHUB_ENV"
-          make ci-release-prepare
+          make -f "$RELEASE_MAKEFILE" ci-release-prepare
 
       - name: Verify prepared release commits and tag with public key only
-        run: python3 scripts/release/signing.py verify-prepared
+        run: python3 "$RELEASE_SIGNING_HELPER" verify-prepared
 
       - name: Recheck for open release blockers
         if: inputs.dry-run == false
@@ -233,6 +269,18 @@ jobs:
             exit 1
           fi
 
+      - name: Recheck validated master before publication
+        if: inputs.target-tag == 'master'
+        env:
+          RELEASE_TARGET_COMMIT: ${{ needs.validate.outputs.target-sha }}
+        run: |
+          git fetch --no-tags origin master
+          current_master=$(git rev-parse FETCH_HEAD)
+          if [[ "$current_master" != "$RELEASE_TARGET_COMMIT" ]]; then
+            echo "master advanced after validation; start a new release workflow."
+            exit 1
+          fi
+
       - name: Perform release
         env:
           RELEASE_DRY_RUN: ${{ inputs.dry-run }}
@@ -245,16 +293,20 @@ jobs:
           IS_CICD: true
         run: |
           if [[ "$RELEASE_DRY_RUN" == true ]]; then
-            make ci-release-dry-run
+            make -f "$RELEASE_MAKEFILE" ci-release-dry-run
           else
-            make ci-release
+            make -f "$RELEASE_MAKEFILE" ci-release
           fi
 
       - name: Push changes to SCM
-        if: inputs.dry-run == false
+        if: ${{ inputs.dry-run == false && inputs.target-tag == 'master' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git status && git log -3
-          git push origin --follow-tags -v HEAD:refs/heads/master
+          git -c credential.helper= \
+            -c 'credential.helper=!f() { if [ "$1" = get ]; then printf "%s\n" "username=x-access-token" "password=$GH_TOKEN"; fi; }; f' \
+            push origin --follow-tags -v HEAD:refs/heads/master
 
       - name: Upload sanitized stdout
         if: always()

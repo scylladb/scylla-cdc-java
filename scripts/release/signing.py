@@ -109,14 +109,20 @@ def public_environment():
             gpg("--import", PUBLIC_KEY, env=env)
             yield env
         finally:
-            run(["gpgconf", "--homedir", temp, "--kill", "gpg-agent"])
+            try:
+                run(["gpgconf", "--homedir", temp, "--kill", "gpg-agent"])
+            except SigningError:
+                # A shutdown failure must not replace the verification result.
+                pass
 
 
 def passphrase_value(env):
     value = env.get("RELEASE_GPG_PASSPHRASE",
                     env.get("MAVEN_GPG_PASSPHRASE", env.get("PGP_PASSPHRASE", "")))
     if "RELEASE_GPG_PASSPHRASE_FILE" in env:
-        value = Path(env["RELEASE_GPG_PASSPHRASE_FILE"]).read_text().removesuffix("\n")
+        with Path(env["RELEASE_GPG_PASSPHRASE_FILE"]).open(newline="") as source:
+            value = source.read()
+    value = value.removesuffix("\n")
     if not value or "\n" in value or "\r" in value or len(value.encode()) > 1024:
         raise SigningError("Release signing requires a nonempty single-line passphrase.")
     return value
@@ -276,7 +282,11 @@ def signing_session():
             interrupted.check()
             yield env
         finally:
-            run(["gpgconf", "--homedir", str(signing_home), "--kill", "gpg-agent"])
+            try:
+                run(["gpgconf", "--homedir", str(signing_home), "--kill", "gpg-agent"])
+            except SigningError:
+                # Preserve the command result or exception while removing its keyring.
+                pass
 
 
 def verify_release(tag, baseline=None):
@@ -307,6 +317,30 @@ def verify_prepared(baseline=None):
     verify_release(tags[0], baseline)
 
 
+def sign_files(files, signing_env=None):
+    if not files:
+        raise SigningError("At least one release artifact is required.")
+    # Explicit callers pass the environment from an already validated signing_session.
+    if (signing_env is None
+            and any(not Path(str(Path(filename).resolve()) + ".asc").exists() for filename in files)):
+        with signing_session() as session:
+            sign_files(files, session)
+            return
+    with session_signals() as interrupted, public_environment() as env:
+        for filename in files:
+            interrupted.check()
+            artifact = Path(filename).resolve()
+            if not artifact.is_file() or artifact.suffix == ".asc":
+                raise SigningError("Expected an unsigned release artifact.")
+            # Existing signatures are immutable: never overwrite them on a rerun.
+            signature = Path(str(artifact) + ".asc")
+            if not signature.exists():
+                credential_gpg(["--local-user", SIGNING + "!", "--armor",
+                                "--detach-sign", "--output", signature, artifact], env=signing_env)
+                interrupted.check()
+            verify_status(gpg("--status-fd", "1", "--verify", signature, artifact, env=env))
+
+
 def main():
     try:
         if len(sys.argv) > 1 and sys.argv[1] == "gpg-program":
@@ -314,11 +348,13 @@ def main():
             return credential_gpg(sys.argv[2:], capture=False)
         if len(sys.argv) in (2, 3) and sys.argv[1] == "verify-prepared":
             verify_prepared(*sys.argv[2:])
+        elif len(sys.argv) > 2 and sys.argv[1] == "sign-files":
+            sign_files(sys.argv[2:])
         elif len(sys.argv) > 2 and sys.argv[1] == "exec":
             with signing_session() as env:
                 return execute(sys.argv[2:], env)
         else:
-            raise SigningError("Expected verify-prepared [BASELINE] or exec COMMAND...")
+            raise SigningError("Expected verify-prepared [BASELINE], sign-files FILE..., or exec COMMAND...")
         print("Release signing " + sys.argv[1] + " passed.")
         return 0
     except SigningError as error:
@@ -327,7 +363,7 @@ def main():
         category = ("OS error" if isinstance(error, OSError) else
                     "invalid value" if isinstance(error, ValueError) else "internal error")
         operation = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in (
-            "gpg-program", "verify-prepared", "exec") else "command"
+            "gpg-program", "verify-prepared", "sign-files", "exec") else "command"
         print(f"Release signing {operation} failed ({category}); values withheld.", file=sys.stderr)
     return 1
 

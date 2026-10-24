@@ -16,12 +16,15 @@ Validation records the exact target commit as a job output.
 
 The `release` job depends on successful validation and uses a fresh runner. Only
 this job uses the GitHub deployment environment `release`, so approval is requested
-after validation finishes. It checks out the validated commit, rejects `master` if
-it has advanced, and independently checks target policy before importing keys.
+after validation finishes. It checks out the validated source commit and independently
+checks target policy before importing keys. Releases targeting `master` reject it
+if it has advanced, including a final check immediately before publication.
 It does not restore the validation workspace or Maven cache. Signed preparation,
 signature verification, and publication happen after approval; project tests are
-not repeated with production credentials. Releases must be dispatched from
-`master`; historical tags and other branches are unsupported.
+not repeated with production credentials. Releases must be dispatched from `master`.
+The `target-tag` input selects `master` by default, or the commit preceding an
+existing release tag. Historical sources must pass the same credential safety
+checks; other source branches are unsupported.
 
 Before running it, a repository owner must create and protect that environment,
 configure its protection rules and allowed deployment refs, and store
@@ -94,12 +97,17 @@ boundary. Do not derive it from the release tag's parent or replace it after
 preparation. Do not change or replace existing release tags. A failed verification
 blocks publication.
 
-Validation checks out the workflow's launch SHA. The release job checks out that
-exact validated commit, including its Makefile, guard, signing helper and public
-certificate, and rejects the release if remote `master` has advanced. POMs and
-Maven runtime options must pass credential safety checks before any signing key
-is imported. Shell commands, Make recipes and workflow structure are reviewed
-and tested with the repository; the runtime guard does not parse them.
+Both jobs first check out the workflow's launch SHA and preserve its Makefile,
+release helpers and public certificate in runner temporary storage. Validation
+then selects the requested source and records its exact SHA. The release job
+uses that SHA even if the selected tag moves after validation. It executes the
+preserved tooling through explicit paths, so historical Makefiles and helpers
+cannot replace it. POMs and Maven runtime options from the selected source must
+pass the trusted credential safety checks before any signing key is imported.
+Shell commands, Make recipes and workflow structure are reviewed and tested with
+the repository; the runtime guard does not parse them. Historical releases never
+push their prepared commits or tags to SCM, and existing remote tags remain
+unchanged. Only a release targeting `master` pushes its prepared history.
 
 These checks inspect expressions without evaluating the Maven model. Simple
 nonreserved aliases and canonical public metadata such as `${project.version}`
@@ -115,9 +123,25 @@ closes. Checks that need additional signatures can use their own scoped invocati
 python3 scripts/release/signing.py exec make YOUR_CHECK_TARGET
 ```
 
+Use `python3 scripts/release/signing.py sign-files PATH...` to create and verify
+detached artifact signatures. Missing signatures open a protected signing session;
+existing signatures are preserved and verified with the pinned public certificate,
+without requiring private credentials. Tampered files or signatures fail verification.
+
 The low-level helper does not impose release-account policy. Wrapped commands have
-no overall time limit; individual GPG operations have their own timeout. A failed
-command propagates its exit status and still cleans up its session. Helper errors
+no overall time limit; individual GPG operations have their own timeout. The workflow
+uses the existing Actions job limit without a separate publication-step deadline.
+Operators must interrupt hung local commands and check for partial publication
+before retrying.
+
+Log capture retains at most 64 MiB of combined stdout and stderr. Exceeding this
+limit discards both streams and records a fixed overflow message, even if only
+one stream was noisy. Maven continues running and its exit status is preserved;
+log overflow does not interrupt publication. Successful Maven parents with
+pipe-connected descendants wait for their output streams to close before the
+workflow can push release history.
+
+A failed command propagates its exit status and still cleans up its session. Helper errors
 identify a fixed operation and status or category without printing command arguments,
 captured output, or exception payloads. Maven signs release artifacts; the helper's
 `verify-prepared` command verifies the prepared commits and tag using public

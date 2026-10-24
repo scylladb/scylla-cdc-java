@@ -250,6 +250,70 @@ class SigningTests(unittest.TestCase):
                 self.fail("Unprotected subkey export accepted")
             self.assertFalse(list(directory.glob("release-signing-*")))
 
+    def test_batch_signing_reuse_and_tamper_rejection(self):
+        with self.repository(), self.session() as env:
+            files = [Path("package.jar"), Path("package.pom"), Path("SHA256SUMS")]
+            for artifact in files:
+                artifact.write_bytes(b"release package")
+            signing.sign_files(files, env)
+            signatures = [Path(str(artifact) + ".asc").read_bytes() for artifact in files]
+            signing.sign_files(files, env)
+            self.assertEqual([Path(str(artifact) + ".asc").read_bytes() for artifact in files], signatures)
+            with patch.object(signing, "credential_gpg") as credential, \
+                    patch.object(signing, "SIGNING", "0" * 40), \
+                    self.assertRaisesRegex(signing.SigningError, "release subkey"):
+                signing.sign_files(files)
+            credential.assert_not_called()
+            files[0].write_bytes(b"changed package")
+            with self.assertRaises(signing.SigningError):
+                signing.sign_files(files, env)
+
+    def test_direct_sign_files_imports_credentials_and_preserves_verification_only_use(self):
+        with self.make_repository() as directory:
+            default_home = directory / "empty-default-keyring"
+            default_home.mkdir(mode=0o700)
+            os.environ["GNUPGHOME"] = str(default_home)
+            files = [Path("package.jar"), Path("package.pom")]
+            for artifact in files:
+                artifact.write_bytes(b"release package")
+            command = [sys.executable, "scripts/release/signing.py", "sign-files"]
+            def invoke(*artifacts):
+                result = subprocess.run(command + list(map(str, artifacts)), capture_output=True,
+                                        text=True, timeout=60)
+                self.assertNotIn(self.password, result.stdout + result.stderr)
+                self.assertNotIn("PRIVATE KEY", result.stdout + result.stderr)
+                return result
+            # A populated caller keyring (including the primary secret) is not
+            # a substitute for importing and validating the protected export.
+            del os.environ["RELEASE_GPG_PRIVATE_KEY_FILE"]
+            os.environ["GNUPGHOME"] = str(self.keyring)
+            result = invoke(files[0])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("protected signing-subkey export", result.stderr)
+            self.assertFalse(Path(str(files[0]) + ".asc").exists())
+            self.assertFalse(list(directory.glob("release-signing-*")))
+            os.environ["GNUPGHOME"] = str(default_home)
+            os.environ["RELEASE_GPG_PRIVATE_KEY_FILE"] = str(self.private)
+            result = invoke(files[0])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            first_signature = Path(str(files[0]) + ".asc").read_bytes()
+            # Inline export input also opens a session, preserving existing signatures.
+            del os.environ["RELEASE_GPG_PRIVATE_KEY_FILE"]
+            os.environ["RELEASE_GPG_PRIVATE_KEY"] = self.private.read_text()
+            result = invoke(*files)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(Path(str(files[0]) + ".asc").read_bytes(), first_signature)
+            signatures = [Path(str(artifact) + ".asc").read_bytes() for artifact in files]
+            del os.environ["RELEASE_GPG_PRIVATE_KEY"]
+            del os.environ["RELEASE_GPG_PASSPHRASE"]
+            result = invoke(*files)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual([Path(str(artifact) + ".asc").read_bytes() for artifact in files], signatures)
+            files[0].write_bytes(b"tampered release")
+            self.assertNotEqual(invoke(*files).returncode, 0)
+            self.assertFalse(list(default_home.iterdir()))
+            self.assertFalse(list(directory.glob("release-signing-*")))
+
     @unittest.skipUnless(Path("/proc/self/stat").exists(), "Linux process observation required")
     def test_exec_termination_stops_child_group_before_keyring_and_agent_cleanup(self):
         self.check_exec_termination("active")
@@ -417,6 +481,39 @@ class SigningTests(unittest.TestCase):
             self.verify_head()
             self.assertFalse(list(directory.glob("release-signing-*")))
 
+    def test_env_passphrases_accept_one_trailing_newline(self):
+        for name in ("RELEASE_GPG_PASSPHRASE", "MAVEN_GPG_PASSPHRASE", "PGP_PASSPHRASE"):
+            with self.subTest(source=name), self.repository() as directory:
+                del os.environ["RELEASE_GPG_PASSPHRASE"]
+                os.environ[name] = self.password + "\n"
+                with self.session() as env:
+                    self.assertEqual(env["MAVEN_GPG_PASSPHRASE"], self.password)
+                    signing.run(["git", "commit", "--allow-empty", "-qm", "Newline credentials"])
+                self.verify_head()
+                self.assertFalse(list(directory.glob("release-signing-*")))
+
+    def test_passphrase_normalization_and_boundaries(self):
+        with tempfile.TemporaryDirectory(prefix="repo-passphrase-test-") as temp:
+            path = Path(temp) / "passphrase"
+            for name in ("RELEASE_GPG_PASSPHRASE", "MAVEN_GPG_PASSPHRASE",
+                         "PGP_PASSPHRASE", "RELEASE_GPG_PASSPHRASE_FILE"):
+                for value, expected in [("secret", "secret"), ("secret\n", "secret"),
+                                        ("é" * 512 + "\n", "é" * 512), ("", None),
+                                        ("\n", None), ("secret\n\n", None), ("sec\nret", None),
+                                        ("secret\r", None), ("secret\r\n", None),
+                                        ("é" * 512 + "x\n", None)]:
+                    with self.subTest(source=name, length=len(value), ending=value[-2:]):
+                        if name.endswith("_FILE"):
+                            path.write_bytes(value.encode())
+                            env = {name: str(path), "RELEASE_GPG_PASSPHRASE": "fallback"}
+                        else:
+                            env = {name: value}
+                        if expected is None:
+                            with self.assertRaisesRegex(signing.SigningError, "nonempty single-line"):
+                                signing.passphrase_value(env)
+                        else:
+                            self.assertEqual(signing.passphrase_value(env), expected)
+
     def test_passphrase_fallback_precedence(self):
         with self.repository():
             self.assertEqual(signing.passphrase_value(os.environ), self.password)
@@ -432,15 +529,65 @@ class SigningTests(unittest.TestCase):
             self.assertEqual(signing.passphrase_value(values), expected)
 
     def test_cleanup_removes_files_even_when_agent_shutdown_fails(self):
+        for status in (0, 7):
+            with self.subTest(status=status), self.repository() as directory:
+                real_run, real_execute = signing.run, signing.execute
+                finished, shutdowns = False, []
+                def completed(command, env):
+                    nonlocal finished
+                    result = real_execute(command, env)
+                    finished = True
+                    return result
+                def fail_shutdown(command, env=None, **kwargs):
+                    result = real_run(command, env, **kwargs)
+                    if finished and command[0] == "gpgconf":
+                        shutdowns.append(Path(command[2]))
+                        raise signing.SigningError("shutdown failed")
+                    return result
+                with patch.object(signing, "run", side_effect=fail_shutdown), \
+                        patch.object(signing, "execute", side_effect=completed), \
+                        patch("sys.argv", ["signing.py", "exec", sys.executable, "-c",
+                                           f"raise SystemExit({status})"]):
+                    self.assertEqual(signing.main(), status)
+                self.assertEqual(len(shutdowns), 1)
+                self.assertFalse(shutdowns[0].exists())
+                self.assertFalse(list(directory.glob("release-signing-*")))
+
+    def test_cleanup_preserves_context_result_or_exception(self):
+        for context in (signing.public_environment, signing.signing_session):
+            for error in (None, ValueError("original failure"), SystemExit(23), KeyboardInterrupt()):
+                with self.subTest(context=context.__name__, error=type(error).__name__), self.repository():
+                    real_run = signing.run
+                    finished, shutdowns = False, []
+                    def fail_shutdown(command, env=None, **kwargs):
+                        result = real_run(command, env, **kwargs)
+                        if finished and command[0] == "gpgconf":
+                            shutdowns.append(Path(command[2]))
+                            raise signing.SigningError("shutdown failed")
+                        return result
+                    try:
+                        with patch.object(signing, "run", side_effect=fail_shutdown), context():
+                            finished = True
+                            if error is not None:
+                                raise error
+                    except BaseException as caught:
+                        self.assertIs(caught, error)
+                    else:
+                        self.assertIsNone(error)
+                    self.assertEqual(len(shutdowns), 1)
+                    self.assertFalse(shutdowns[0].exists())
+
+    def test_preflight_agent_reset_failure_is_fatal(self):
         with self.repository() as directory:
             real_run = signing.run
-            def fail_shutdown(command, env=None):
-                real_run(command, env)
-                raise signing.SigningError("shutdown failed")
-            with self.assertRaisesRegex(signing.SigningError, "shutdown"), \
-                    patch.object(signing, "run", wraps=real_run) as command:
-                with self.session():
-                    command.side_effect = fail_shutdown
+            def fail_shutdown(command, env=None, **kwargs):
+                result = real_run(command, env, **kwargs)
+                if command[0] == "gpgconf":
+                    raise signing.SigningError("reset failed")
+                return result
+            with patch.object(signing, "run", side_effect=fail_shutdown), \
+                    self.assertRaisesRegex(signing.SigningError, "reset failed"), self.session():
+                self.fail("Failed preflight reset accepted")
             self.assertFalse(list(directory.glob("release-signing-*")))
 
     def test_git_wrapper_reads_current_passphrase_after_agent_reset(self):
