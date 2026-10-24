@@ -178,3 +178,8 @@ Use the [GitHub Issues](https://github.com/scylladb/scylla-cdc-java/issues) to r
 ## License
 
 The library is licensed under Apache License 2.0. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 or in the LICENSE.txt file in the repository.
+
+## Releases
+
+Maintainers: see [release signing and recovery](scripts/release/SIGNING.md) for
+the protected validation/approval/publishing flow and local release commands.
