@@ -248,7 +248,8 @@ def check_text(text, source=None, maven_options=True, maven_arguments=(), jvm_op
         r"|(?-i:\$\{(?![A-Za-z_]\w*:(?:[-+?=][\w/-]*|[0-9]+(?::[0-9]+)?)\})"
         r"(?:project|pom)(?!\.(?:parent\.)*"
         r"(?:version|groupId|artifactId|packaging|name|description|url|basedir|"
-        r"build\.(?:directory|outputDirectory|testOutputDirectory|sourceDirectory|testSourceDirectory|finalName))\}))"
+        r"build\.(?:directory|outputDirectory|testOutputDirectory|sourceDirectory|testSourceDirectory|finalName|sourceEncoding)|"
+        r"reporting\.outputDirectory)\}))"
         # Quotes were removed above; '=' also starts a property alias's value.
         r"|(?:^|[\s=])--(?:pass|passp|passph|passphr|passphra|passphras|passphrase)"
         r"(?:[-=\s]|$)",
@@ -257,7 +258,8 @@ def check_text(text, source=None, maven_options=True, maven_arguments=(), jvm_op
     )
     if maven_options and not match:
         match = re.search(
-            r"(?:^|[\s=\"'])(?:--log-file(?:[=\s]|$)|-l(?!lr(?:[\s\"']|$))|--l)", text
+            r"(?:^|[\s=\"'])(?:--(?:l|lo|log|log-|log-f|log-fi|log-fil|log-file)(?=[=\s]|$)"
+            r"|-l(?!lr(?:[\s\"']|$)))", text
         )
     if match:
         if source is not None:
@@ -327,7 +329,8 @@ def check_policy(root):
             if element.tag.rsplit("}", 1)[-1].lower() in (
                     "passphrase", "password", "gpg.passphrase"):
                 raise Unsafe("POM credential configuration is not allowed")
-            check_text(element.text or "")
+            check_text(element.text or "",
+                       f"{path.relative_to(root)} <{element.tag.rsplit('}', 1)[-1]}>")
     check_config_files(root)
 
 
@@ -467,7 +470,9 @@ def capture(command, env, forms, logs):
             selector.register(process.stderr, selectors.EVENT_READ, 1)
             exited_at = None
             while selector.get_map():
-                if process.poll() is not None:
+                # A successful Maven parent can leave pipe-connected publication
+                # work running. Drain it to EOF before allowing the SCM push.
+                if process.poll() not in (None, 0):
                     if exited_at is None:
                         exited_at = time.monotonic()
                     elif time.monotonic() - exited_at >= DRAIN_GRACE:
@@ -484,6 +489,12 @@ def capture(command, env, forms, logs):
                             continue
                         buffers[key.data].extend(chunk)
         status = process.wait()
+        if status != 0:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                # All descendants may have exited during the drain.
+                pass
         # Sanitize both streams completely before opening artifacts or emitting output.
         try:
             clean = [OVERFLOW_LOG, OVERFLOW_LOG] if overflow else [
@@ -535,6 +546,8 @@ def capture(command, env, forms, logs):
         if not logs_started:
             write_logs(clean, logs)
         if isinstance(error, Exception) and completed_status is not None:
+            if completed_status == 0 and not all(complete):
+                raise
             return completed_status if completed_status >= 0 else 128 - completed_status
         raise
     finally:

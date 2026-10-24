@@ -37,7 +37,7 @@ class PolicyTests(unittest.TestCase):
         validation, release = workflow.split('\n  release:\n', 1)
         self.assertNotIn('secrets.', validation)
         self.assertLess(release.index('credentials.py'), release.index('- name: Prepare release'))
-        self.assertIn('run: python3 scripts/release/credentials.py', release)
+        self.assertIn('run: python3 "$RUNNER_TEMP/release-tooling/credentials.py"', release)
         self.assertIn('environment: release', release)
         self.assertNotIn('cache:', release)
         result = subprocess.run(
@@ -121,12 +121,29 @@ class PolicyTests(unittest.TestCase):
             (child / 'pom.xml').write_text(
                 '<project xmlns="http://maven.apache.org/POM/4.0.0"><properties>'
                 '<label>release signing</label><signing.env.name>MAVEN_GPG_PASSPHRASE</signing.env.name>'
+                '<sourceEncoding>${project.build.sourceEncoding}</sourceEncoding>'
+                '<reports>${project.reporting.outputDirectory}/x</reports>'
+                '<moduleOption>--limit-modules</moduleOption>'
                 '</properties><build><plugins><plugin><artifactId>maven-gpg-plugin</artifactId>'
                 '<configuration><passphraseEnvName>${signing.env.name}</passphraseEnvName>'
                 '<gpgArguments><arg>--pinentry-mode</arg><arg>loopback</arg>'
                 '<arg>--comment</arg><arg>${label}</arg></gpgArguments>'
                 '</configuration></plugin></plugins></build></project>')
             guard.check_policy(root)
+
+    def test_pom_policy_diagnostics_name_element_without_its_value(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copy(ROOT / 'pom.xml', root)
+            child = root / 'child'
+            child.mkdir()
+            (child / 'pom.xml').write_text(
+                '<project><properties><arg>${project.class.synthetic_secret}</arg>'
+                '</properties></project>')
+            with redirect_stderr(StringIO()) as output, self.assertRaises(guard.Unsafe):
+                guard.check_policy(root)
+            self.assertIn('child/pom.xml <arg>', output.getvalue())
+            self.assertNotIn('synthetic_secret', output.getvalue())
 
     def test_maven_config_cannot_hide_gpg_credentials_in_property_aliases(self):
         with tempfile.TemporaryDirectory() as directory:

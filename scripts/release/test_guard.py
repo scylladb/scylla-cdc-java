@@ -215,6 +215,8 @@ class ReleaseTests(unittest.TestCase):
             '${project.getProperties()}',
             '${project.class.classLoader}',
             '${project.build.directory.class}',
+            '${project.build.sourceEncoding.class}',
+            '${project.reporting.outputDirectory.class}',
             '${project}',
             '${project.build}',
             '${projectLabel}',
@@ -231,6 +233,8 @@ class ReleaseTests(unittest.TestCase):
                 guard.check_text(value)
         for value in ('${project.version}', '${project.build.directory}', '${pom.groupId}',
                       '${project.build.directory}/classes',
+                      '${project.build.sourceEncoding}', '${pom.build.sourceEncoding}',
+                      '${project.reporting.outputDirectory}/x', '--limit-modules',
                       '${project.parent.version}', '${release.alias}', '${releaseLabel}',
                       '${env.LANG}', '${signing.env.name}', 'MAVEN_GPG_PASSPHRASE',
                       '${MAVEN_OPTS:-}', '${NEXT_RELEASE[@]}', '${VALUE:0:2}', '${array[0]}',
@@ -295,7 +299,8 @@ class ReleaseTests(unittest.TestCase):
                     capture.assert_called_once()
 
     def test_maven_aliases_are_rejected_across_argument_sources(self):
-        for value in ("--X", "--l raw.log", "--l=raw.log",
+        for value in ("--X", "--l raw.log", "--l=raw.log", "--lo=raw.log",
+                      "--log raw.log", "--log-f=raw.log", "--log-fi raw.log",
                       "--Dgpg.bestPractices=false", "--D=gpg.bestPractices=false",
                       "--Dorg.slf4j.simpleLogger.logFile=raw.log"):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
@@ -428,8 +433,9 @@ class ReleaseTests(unittest.TestCase):
                 "def stop(signum,frame):\n"
                 " descendant.terminate()\n descendant.wait(timeout=2)\n raise SystemExit(128+signum)\n"
                 "signal.signal(signal.SIGTERM,stop)\n"
-                f"Path({str(ready)!r}).write_text(json.dumps({{'pid':os.getpid(),'child':descendant.pid,"
+                f"Path({str(ready) + '.tmp'!r}).write_text(json.dumps({{'pid':os.getpid(),'child':descendant.pid,"
                 "'blocked':sorted(map(int,signal.pthread_sigmask(signal.SIG_BLOCK,[]))) }))\n"
+                f"os.replace({str(ready) + '.tmp'!r},{str(ready)!r})\n"
                 "time.sleep(30)\n")
             script = (
                 "import json,os,signal,subprocess,sys,time\nfrom pathlib import Path\nimport guard\n"
@@ -608,7 +614,7 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(console, (Path(directory) / (name + ".log")).read_bytes())
                 self.assertEqual(console, b"diagnostic: [REDACTED]\n")
 
-    def test_capture_read_failure_preserves_completed_maven_status(self):
+    def test_capture_read_failure_rejects_unfinished_success(self):
         for status in (0, 17):
             with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
                 process = unittest.mock.Mock()
@@ -617,7 +623,11 @@ class ReleaseTests(unittest.TestCase):
                 with patch.object(guard.subprocess, "Popen", return_value=process), \
                      patch.object(guard.selectors, "DefaultSelector", side_effect=OSError("secret")), \
                      patch.object(guard.os, "killpg"), patch.object(guard, "write_logs") as logs:
-                    self.assertEqual(guard.capture(["mvn"], {}, [], Path(directory)), status)
+                    if status == 0:
+                        with self.assertRaises(OSError):
+                            guard.capture(["mvn"], {}, [], Path(directory))
+                    else:
+                        self.assertEqual(guard.capture(["mvn"], {}, [], Path(directory)), status)
                     logs.assert_called_once_with([guard.FAILED_LOG, guard.FAILED_LOG], Path(directory))
 
     def test_configured_maven_executable(self):
@@ -736,6 +746,25 @@ class ReleaseTests(unittest.TestCase):
                         self.assertEqual(result.stderr, b"err\n")
                         self.assertEqual((logs / "stderr.log").read_bytes(), b"err\n")
 
+    def test_success_waits_for_pipe_connected_descendant_completion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / 'completed'
+            command = [sys.executable, '-c',
+                       'import os,time\nchild=os.fork()\nif child == 0:\n'
+                       ' time.sleep(0.5)\n os.write(1,b"descendant complete\\n")\n'
+                       f' open({str(marker)!r},"w").write("done")\n os._exit(0)\n'
+                       'os._exit(0)']
+            script = (
+                'import guard,os\nfrom pathlib import Path\nguard.DRAIN_GRACE=0.01\n'
+                f'raise SystemExit(guard.capture({command!r},os.environ,[],Path({directory!r})))'
+            )
+            result = subprocess.run([sys.executable, '-c', script], capture_output=True,
+                                    cwd=ROOT / 'scripts/release', timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(marker.read_text(), 'done')
+            self.assertEqual(result.stdout, b'descendant complete\n')
+            self.assertEqual((Path(directory) / 'stdout.log').read_bytes(), result.stdout)
+
     def test_inherited_pipes_have_bounded_safe_capture(self):
         for complete_stderr in (False, True):
             with self.subTest(complete_stderr=complete_stderr), tempfile.TemporaryDirectory() as directory:
@@ -766,6 +795,18 @@ class ReleaseTests(unittest.TestCase):
                     else:
                         self.assertEqual(result.stderr, guard.INCOMPLETE_LOG)
                     self.assertEqual((Path(directory) / "stderr.log").read_bytes(), result.stderr)
+                    child = int(pid_file.read_text())
+                    deadline = time.monotonic() + 1
+                    while time.monotonic() < deadline:
+                        try:
+                            state = Path(f"/proc/{child}/stat").read_text().rsplit(")", 1)[1].split()[0]
+                        except (FileNotFoundError, ProcessLookupError):
+                            break
+                        if state == "Z":
+                            break
+                        time.sleep(0.01)
+                    else:
+                        self.fail("Failed Maven left its pipe-connected descendant running")
                 finally:
                     if pid_file.exists():
                         try:

@@ -9,6 +9,8 @@ mvn = mvn -ntp
 MAVEN_OPTS ?=
 RELEASE_SKIP_TESTS ?= false
 RELEASE_VERSION ?=
+# GNU make normalizes -n/--just-print/--dry-run to n in its short flag word.
+RELEASE_MAKE_PREVIEW = $(findstring n,$(filter-out --%,$(firstword $(MAKEFLAGS))))
 
 .PHONY: verify release-check-user release-check-ci release-prepare release release-dry-run test-release-signing _release-prepare _release _release-dry-run
 .PHONY: ci-release-prepare ci-release ci-release-dry-run _ci-release-prepare _ci-release _ci-release-dry-run
@@ -36,13 +38,23 @@ release-prepare release release-dry-run _release-prepare _release _release-dry-r
 ci-release-prepare ci-release ci-release-dry-run _ci-release-prepare _ci-release _ci-release-dry-run: release-check-ci
 
 release-prepare ci-release-prepare:
+ifneq ($(RELEASE_MAKE_PREVIEW),)
+	+@$(MAKE) -f "$(RELEASE_MAKEFILE)" _$@
+else
 	@python3 "$(RELEASE_GUARD)" check
 	+@python3 "$(RELEASE_SIGNING_HELPER)" exec $(MAKE) -f "$(RELEASE_MAKEFILE)" _$@
 
+endif
+
 release ci-release release-dry-run ci-release-dry-run:
+ifneq ($(RELEASE_MAKE_PREVIEW),)
+	+@$(MAKE) -f "$(RELEASE_MAKEFILE)" _$@
+else
 	@python3 "$(RELEASE_GUARD)" check
 	@python3 "$(RELEASE_SIGNING_HELPER)" verify-prepared
 	+@python3 "$(RELEASE_SIGNING_HELPER)" exec $(MAKE) -f "$(RELEASE_MAKEFILE)" _$@
+
+endif
 
 test-release-signing:
 	python3 -m unittest discover -s scripts/release -p 'test_signing.py' -v
