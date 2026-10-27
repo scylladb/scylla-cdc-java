@@ -24,7 +24,13 @@ public interface RawChange extends Iterable<Cell> {
         ROW_RANGE_DELETE_EXCLUSIVE_LEFT_BOUND((byte) 6),
         ROW_RANGE_DELETE_INCLUSIVE_RIGHT_BOUND((byte) 7),
         ROW_RANGE_DELETE_EXCLUSIVE_RIGHT_BOUND((byte) 8),
-        POST_IMAGE((byte) 9);
+        POST_IMAGE((byte) 9),
+        // Deletes initiated by Scylla itself rather than by a client:
+        // Alternator TTL and, since ScyllaDB 2026.2, per-row TTL expiry.
+        SERVICE_ROW_DELETE((byte) -3),
+        SERVICE_PARTITION_DELETE((byte) -4);
+
+        private static final OperationType[] VALUES = values();
 
         byte operationId;
         OperationType(byte operationId) {
@@ -32,11 +38,12 @@ public interface RawChange extends Iterable<Cell> {
         }
 
         public static OperationType parse(byte value) {
-            try {
-                return OperationType.values()[value];
-            } catch (ArrayIndexOutOfBoundsException e) {
-                throw new IllegalArgumentException(Byte.toString(value), e);
+            for (OperationType type : VALUES) {
+                if (type.operationId == value) {
+                    return type;
+                }
             }
+            throw new IllegalArgumentException(Byte.toString(value));
         }
     }
 

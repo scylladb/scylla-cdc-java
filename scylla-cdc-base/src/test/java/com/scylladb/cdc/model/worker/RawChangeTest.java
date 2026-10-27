@@ -11,6 +11,8 @@ import java.util.Iterator;
 import static com.scylladb.cdc.model.worker.ChangeSchemaTest.*;
 import static com.scylladb.cdc.model.worker.RawChange.OperationType.ROW_INSERT;
 import static com.scylladb.cdc.model.worker.RawChange.OperationType.ROW_UPDATE;
+import static com.scylladb.cdc.model.worker.RawChange.OperationType.SERVICE_PARTITION_DELETE;
+import static com.scylladb.cdc.model.worker.RawChange.OperationType.SERVICE_ROW_DELETE;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class RawChangeTest {
@@ -154,5 +156,30 @@ public class RawChangeTest {
         Field secondDeletedElement = deletedElements.next();
         assertEquals(ChangeSchema.CqlType.INT, secondDeletedElement.getDataType().getCqlType());
         assertEquals(4, secondDeletedElement.getInt());
+    }
+
+    @Test
+    public void testParseOperationType() {
+        for (RawChange.OperationType type : RawChange.OperationType.values()) {
+            assertEquals(type, RawChange.OperationType.parse(type.operationId));
+        }
+        assertEquals(SERVICE_ROW_DELETE, RawChange.OperationType.parse((byte) -3));
+        assertEquals(SERVICE_PARTITION_DELETE, RawChange.OperationType.parse((byte) -4));
+        assertThrows(IllegalArgumentException.class, () -> RawChange.OperationType.parse((byte) -1));
+        assertThrows(IllegalArgumentException.class, () -> RawChange.OperationType.parse((byte) 10));
+    }
+
+    @Test
+    public void testGetServicePartitionDeleteOperationType() {
+        // Service partition delete, as logged for per-row TTL expiry; parsing ignores the schema.
+        MockRawChange expiry = MockRawChange.builder()
+                .withChangeSchema(TEST_SCHEMA_SIMPLE)
+                .withStreamId("0xc73400000000000058fe971e700004f1")
+                .withTime("fc7ee7b6-af35-11eb-0443-36839c176f26")
+                .withOperation((byte) -4)
+                .addPrimaryKey("pk", 1)
+                .build();
+
+        assertEquals(SERVICE_PARTITION_DELETE, expiry.getOperationType());
     }
 }
