@@ -53,8 +53,13 @@ public class ReplicatorConsumer implements RawChangeConsumer {
         operationHandlers.put(RawChange.OperationType.PRE_IMAGE, new NoOpOperationHandler());
         operationHandlers.put(RawChange.OperationType.ROW_UPDATE, new PreparedUpdateOperationHandler(destinationSession, driver3FromLibraryTranslator, sourceTableMetadata));
         operationHandlers.put(RawChange.OperationType.ROW_INSERT, new InsertOperationHandler(destinationSession, driver3FromLibraryTranslator, sourceTableMetadata));
-        operationHandlers.put(RawChange.OperationType.ROW_DELETE, new RowDeleteOperationHandler(destinationSession, driver3FromLibraryTranslator, sourceTableMetadata));
-        operationHandlers.put(RawChange.OperationType.PARTITION_DELETE, new PartitionDeleteOperationHandler(destinationSession, driver3FromLibraryTranslator, sourceTableMetadata));
+        CdcOperationHandler rowDeleteHandler = new RowDeleteOperationHandler(destinationSession, driver3FromLibraryTranslator, sourceTableMetadata);
+        CdcOperationHandler partitionDeleteHandler = new PartitionDeleteOperationHandler(destinationSession, driver3FromLibraryTranslator, sourceTableMetadata);
+        operationHandlers.put(RawChange.OperationType.ROW_DELETE, rowDeleteHandler);
+        operationHandlers.put(RawChange.OperationType.PARTITION_DELETE, partitionDeleteHandler);
+        // TTL expiry deletes issued by Scylla itself are replicated like client deletes.
+        operationHandlers.put(RawChange.OperationType.SERVICE_ROW_DELETE, rowDeleteHandler);
+        operationHandlers.put(RawChange.OperationType.SERVICE_PARTITION_DELETE, partitionDeleteHandler);
 
         // Row range deletes in Scylla CDC log are represented as two rows: left and right bound.
         // RangeDeleteState stores the left bound to be used when combined with right bound.
