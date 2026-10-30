@@ -68,6 +68,10 @@ public class UnpreparedUpdateOperationHandler extends ExecutingStatementHandler 
                             throw new IllegalStateException();
                         }
                     } else {
+                        if (change.getAsObject(c.getName()) == null) {
+                            // The change did not touch this collection.
+                            return;
+                        }
                         if (c.getType().getName() == DataType.Name.SET) {
                             op = addAll(c.getName(), (Set) driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
                         } else if (c.getType().getName() == DataType.Name.MAP) {
@@ -121,7 +125,12 @@ public class UnpreparedUpdateOperationHandler extends ExecutingStatementHandler 
                             op = set(c.getName(), list);
                         }
                     } else {
-                        op = set(c.getName(), driver3FromLibraryTranslator.translate(change.getCell(c.getName())));
+                        Object value = driver3FromLibraryTranslator.translate(change.getCell(c.getName()));
+                        if (value == null && !change.getIsDeleted(c.getName())) {
+                            // The change did not touch this column; writing null would delete it.
+                            return;
+                        }
+                        op = set(c.getName(), value);
                     }
                 }
                 builder.with(op);
