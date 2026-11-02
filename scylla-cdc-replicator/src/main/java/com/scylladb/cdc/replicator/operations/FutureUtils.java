@@ -17,22 +17,23 @@ public final class FutureUtils {
     }
 
     public static <T> CompletableFuture<Void> convert(ListenableFuture<T> fut, String errorMsg) {
-        CompletableFuture<T> completableFuture = new CompletableFuture<>();
+        CompletableFuture<Void> result = new CompletableFuture<>();
 
-        fut.addListener(() -> {
-            try {
-                completableFuture.complete(fut.get()); // Transfer result
-            } catch (Exception e) {
-                completableFuture.completeExceptionally(e); // Transfer exception
+        Futures.addCallback(fut, new FutureCallback<T>() {
+            @Override
+            public void onSuccess(T ignored) {
+                result.complete(null);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                logger.atSevere().withCause(t).log(errorMsg);
+                // Fail the change so the task re-reads it instead of moving past it.
+                result.completeExceptionally(t);
             }
         }, MoreExecutors.directExecutor());
 
-        return completableFuture
-            .thenAccept(ignored -> {}) // Explicitly consume and return Void
-            .exceptionally(t -> {
-                logger.atSevere().withCause(t).log(errorMsg);
-                return null;
-            });
+        return result;
     }
 
     public static <T, R> CompletableFuture<R> transformDeferred(ListenableFuture<T> fut,
