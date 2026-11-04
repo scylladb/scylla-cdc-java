@@ -25,6 +25,7 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <flogger.version>0.9</flogger.version>
+        <guava.version>33.7.2-jre</guava.version>
         <release.autopublish>false</release.autopublish>
     </properties>
 

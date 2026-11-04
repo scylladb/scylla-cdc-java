@@ -10,10 +10,6 @@
     <description>A library for reading the Scylla CDC log.</description>
     <packaging>jar</packaging>
 
-    <properties>
-        <guava.version>33.5.0-jre</guava.version>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>com.google.guava</groupId>
