@@ -53,6 +53,9 @@
                             <alias>scylla</alias>
                             <name>scylladb/scylla:${scylla.docker.version}</name>
                             <run>
+                                <!-- Expire per-row TTL rows within seconds for PerRowTtlIT (the scan defaults to 24h).
+                                     This is the module's only container, so it applies to every lib IT. -->
+                                <cmd>--alternator-ttl-period-in-seconds=1</cmd>
                                 <ports>
                                     <port>${scylla.docker.port}:9042</port>
                                 </ports>
