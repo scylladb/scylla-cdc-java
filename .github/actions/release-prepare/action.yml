@@ -1,0 +1,118 @@
+name: Prepare signed release
+description: Select the validated commit and prepare and verify signed release history
+inputs:
+  target-tag:
+    description: Source target (master or a compatible scylla-cdc-X.Y.Z tag)
+    required: true
+  release-version:
+    description: Optional release version override (X.Y.Z)
+    required: false
+    default: ''
+  target-sha:
+    description: Exact commit that passed validation
+    required: true
+  signing-private-key:
+    description: Protected signing subkey
+    required: true
+  signing-passphrase:
+    description: Signing subkey passphrase
+    required: true
+  sonatype-token-username:
+    description: Central publishing token username
+    required: true
+  sonatype-token-password:
+    description: Central publishing token password
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Preserve release tooling
+      shell: bash
+      run: bash scripts/release/preserve-tools.sh
+    - name: Checkout validated target
+      env:
+        RELEASE_TARGET_TAG: ${{ inputs.target-tag }}
+        RELEASE_TARGET_COMMIT: ${{ inputs.target-sha }}
+        RELEASE_WORKFLOW_COMMIT: ${{ github.sha }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ "$GITHUB_REF" != refs/heads/master ]]; then
+          echo "Releases must be dispatched from master."
+          exit 1
+        fi
+        [[ "$RELEASE_TARGET_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+        git fetch --no-tags origin "$RELEASE_TARGET_COMMIT"
+        if [[ "$RELEASE_TARGET_TAG" == master ]]; then
+          git fetch --no-tags origin master
+          current_master=$(git rev-parse FETCH_HEAD)
+          if [[ "$current_master" != "$RELEASE_TARGET_COMMIT" ]]; then
+            echo "master advanced after validation; start a new release workflow."
+            exit 1
+          fi
+          git checkout -B master "$RELEASE_TARGET_COMMIT"
+        else
+          if ! git merge-base --is-ancestor "$RELEASE_TARGET_COMMIT" "$RELEASE_WORKFLOW_COMMIT"; then
+            echo "Historical release source is outside the workflow's trusted master history."
+            exit 1
+          fi
+          git checkout --detach "$RELEASE_TARGET_COMMIT"
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TARGET_TAG"; then
+            git tag -d -- "$RELEASE_TARGET_TAG"
+          fi
+        fi
+    - name: Check release credential safety before importing credentials
+      shell: bash
+      run: python3 "$RELEASE_GUARD" check
+    - name: Set up Java
+      uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        server-id: central
+        server-username: SONATYPE_TOKEN_USERNAME
+        server-password: SONATYPE_TOKEN_PASSWORD
+
+    # Maven 3.10 adds repository metadata to the Central publishing bundle.
+    # Sonatype rejects the resulting bundle; see apache/maven#13388.
+    - name: Set up Maven 3.9.16
+      shell: bash
+      run: bash "$RUNNER_TEMP/release-tooling/setup-maven.sh"
+    - name: Check publishing credentials before signing preparation
+      env:
+        SONATYPE_TOKEN_USERNAME: ${{ inputs.sonatype-token-username }}
+        SONATYPE_TOKEN_PASSWORD: ${{ inputs.sonatype-token-password }}
+      shell: bash
+      run: python3 "$RUNNER_TEMP/release-tooling/credentials.py"
+    - name: Prepare release
+      env:
+        RELEASE_LOG_DIR: ${{ runner.temp }}/release-logs
+        RELEASE_GPG_PRIVATE_KEY: ${{ inputs.signing-private-key }}
+        MAVEN_GPG_PASSPHRASE: ${{ inputs.signing-passphrase }}
+        RELEASE_SKIP_TESTS: 'true'
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        RELEASE_TARGET_TAG: ${{ inputs.target-tag }}
+        SONATYPE_TOKEN_USERNAME: ${{ inputs.sonatype-token-username }}
+        SONATYPE_TOKEN_PASSWORD: ${{ inputs.sonatype-token-password }}
+      shell: bash
+      run: |
+        if [[ "$RELEASE_TARGET_TAG" != master && -z "$RELEASE_VERSION" ]]; then
+          export RELEASE_VERSION="${RELEASE_TARGET_TAG#scylla-cdc-}"
+        fi
+        baseline=$(git rev-parse HEAD)
+        export RELEASE_BASE_COMMIT="$baseline"
+        echo "RELEASE_BASE_COMMIT=$baseline" >> "$GITHUB_ENV"
+        make -f "$RELEASE_MAKEFILE" ci-release-prepare
+    - name: Verify prepared release commits and tag with public key only
+      env:
+        RELEASE_TARGET_TAG: ${{ inputs.target-tag }}
+      shell: bash
+      run: |
+        python3 "$RELEASE_SIGNING_HELPER" verify-prepared
+        if [[ "$RELEASE_TARGET_TAG" != master ]] && ! grep -Fxq -- "scm.tag=$RELEASE_TARGET_TAG" release.properties; then
+          echo "Prepared tag does not match historical target."
+          exit 1
+        fi
+    - name: Save prepared release recovery before publication
+      shell: bash
+      run: python3 "$RELEASE_SIGNING_HELPER" bundle-prepared "$RUNNER_TEMP/release-recovery"

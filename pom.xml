@@ -27,6 +27,8 @@
         <flogger.version>0.9</flogger.version>
         <guava.version>33.7.2-jre</guava.version>
         <release.autopublish>false</release.autopublish>
+        <release.waitUntil>validated</release.waitUntil>
+        <release.waitMaxTime>1800</release.waitMaxTime>
     </properties>
 
     <dependencyManagement>
@@ -95,7 +97,7 @@
                         <useReleaseProfile>false</useReleaseProfile>
                         <localCheckout>true</localCheckout>
                         <pushChanges>false</pushChanges>
-                        <arguments>-Drelease.autopublish=${release.autopublish}</arguments>
+                        <arguments>-Drelease.autopublish=${release.autopublish} -Drelease.waitUntil=${release.waitUntil} -Drelease.waitMaxTime=${release.waitMaxTime}</arguments>
                     </configuration>
                     <dependencies>
                         <dependency>
@@ -131,12 +133,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
-                <version>3.2.0</version>
+                <version>3.3.1</version>
             </plugin>
             <plugin>
                 <groupId>org.sonatype.central</groupId>
                 <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.11.0</version>
+                <version>0.12.0</version>
             </plugin>
         </plugins>
     </build>
@@ -226,7 +228,8 @@
                             <publishingServerId>central</publishingServerId>
                             <excludeArtifacts>scylla-cdc-printer,scylla-cdc-replicator,scylla-cdc-state-redis</excludeArtifacts>
                             <autoPublish>${release.autopublish}</autoPublish>
-                            <waitUntil>validated</waitUntil>
+                            <waitUntil>${release.waitUntil}</waitUntil>
+                            <waitMaxTime>${release.waitMaxTime}</waitMaxTime>
                         </configuration>
                     </plugin>
                 </plugins>
