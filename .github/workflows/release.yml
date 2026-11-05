@@ -60,6 +60,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/release-safety"
           cp scripts/release/*.py "$RUNNER_TEMP/release-safety/"
+          cp .github/scripts/github-release.cjs "$RUNNER_TEMP/release-safety/"
           echo "RELEASE_GUARD=$RUNNER_TEMP/release-safety/guard.py" >> "$GITHUB_ENV"
           echo "RELEASE_LOG_DIR=$RUNNER_TEMP/release-logs" >> "$GITHUB_ENV"
 
@@ -163,6 +164,19 @@ jobs:
         run: |
           git status && git log -3
           git push origin --follow-tags -v
+
+      - name: Create GitHub release from the published tag
+        if: inputs.dry-run == false
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const {releaseTag, publish} = require(path.join(
+              process.env.RUNNER_TEMP, 'release-safety', 'github-release.cjs'));
+            const tag = releaseTag(fs.readFileSync('release.properties', 'utf8'));
+            const result = await exec.getExecOutput('git', ['rev-parse', `refs/tags/${tag}^{commit}`]);
+            await publish({github, context, core}, tag, result.stdout.trim());
 
       - name: Upload sanitized release logs
         if: always()

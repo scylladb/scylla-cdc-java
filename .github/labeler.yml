@@ -1,0 +1,6 @@
+# Every changed filename must match this union of support paths.
+# Keep production code, POMs, executable examples, and release tooling visible.
+omit-from-release-notes:
+  - changed-files:
+      - all-globs-to-all-files:
+          - '{.github/**,scylla-cdc-base/src/test/**,scylla-cdc-driver3/src/test/**,scylla-cdc-lib/src/test/**,scylla-cdc-printer/src/test/**,scylla-cdc-replicator/src/test/**,examples/scylla-cdc-state-redis/src/test/**,README.md,CHANGELOG.md,.gitignore,renovate.json,scylla-cdc-printer/README.md,scylla-cdc-replicator/README.md,scylla-cdc-kafka-connect/README.md,scripts/release/test_guard.py}'
