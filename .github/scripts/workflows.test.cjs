@@ -36,3 +36,28 @@ test('other Jira events retain their routes and reusable workflow authentication
     assert.equal(job.secrets.caller_jira_auth, '${{ secrets.USER_AND_KEY_FOR_JIRA_AUTOMATION }}');
   }
 });
+
+test('test reports use check permissions and annotate fork pull requests without writing checks', () => {
+  const tests = yaml.load(readFileSync(join(__dirname, '../workflows/tests.yml'), 'utf8'));
+  assert.deepEqual(tests.permissions, {contents: 'read', checks: 'write'});
+  for (const job of Object.values(tests.jobs)) {
+    const reports = job.steps.filter(step => step.uses?.startsWith('mikepenz/action-junit-report@'));
+    assert.equal(reports.length, 1);
+    const report = reports[0];
+    assert.equal(report.if, 'always()');
+    const expression = report.with.annotate_only;
+    assert.match(expression, /^\$\{\{ .* \}\}$/);
+    const annotateOnly = new Function('github', `return ${expression.slice(3, -2)}`);
+    for (const event of [
+      {event_name: 'push', event: {}, expected: false},
+      {event_name: 'pull_request', event: {pull_request: {head: {repo: {
+        full_name: 'scylladb/scylla-cdc-java'
+      }}}}, expected: false},
+      {event_name: 'pull_request', event: {pull_request: {head: {repo: {
+        full_name: 'contributor/scylla-cdc-java'
+      }}}}, expected: true}
+    ]) {
+      assert.equal(annotateOnly({repository: 'scylladb/scylla-cdc-java', ...event}), event.expected);
+    }
+  }
+});
