@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ master ]
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   run-unit-tests:
     name: Run unit tests
@@ -35,6 +39,7 @@ jobs:
         if: always()
         with:
           check_name: Publish unit tests report
+          annotate_only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
           require_tests: true
           report_paths: '**/target/*-reports/TEST-*.xml'
           follow_symlink: true
@@ -74,6 +79,7 @@ jobs:
         if: always()
         with:
           check_name: Publish integration tests report (${{ matrix.scylla-docker-version }})
+          annotate_only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
           require_tests: true
           report_paths: '**/target/*-reports/TEST-*.xml'
           follow_symlink: true
