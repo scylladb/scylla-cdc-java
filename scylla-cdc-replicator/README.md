@@ -29,7 +29,7 @@ named arguments:
   -d DESTINATION, --destination DESTINATION
                          Address of a node in destination cluster
   -cl CONSISTENCY_LEVEL, --consistency-level CONSISTENCY_LEVEL
-                         Consistency level of writes. QUORUM by default (default: quorum)
+                         Consistency level of writes. LOCAL_QUORUM by default (default: local_quorum)
 ```
 
 You can adjust the logging level of Replicator by editing [`src/main/resources/logging.properties`](src/main/resources/logging.properties) file, when launching with `./scylla-cdc-replicator` script. If you start the replicator externally, use `-Djava.util.logging.config.file=` JVM system property to specify a path to `logging.properties` file.

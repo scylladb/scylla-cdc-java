@@ -96,8 +96,13 @@ The timeout is a starting point, not a guarantee that every write will be visibl
 Shorter confidence windows can reduce latency but increase the risk of missing late entries;
 `withQueryTimeWindowSizeMs()` affects latency separately.
 
-The lower-level `CQLConfiguration.Builder.withConsistencyLevel()` option overrides CDC log
-read consistency. Generation and topology queries use a separate policy: QUORUM when the
+Configure `CDCConsumer.Builder.withLocalDCName("dc1")` to keep reads in the datacenter
+of the base-table write coordinators. Without this option, routing can use any datacenter.
+For base-table writes at global QUORUM, use
+`CDCConsumer.Builder.withConsistencyLevel(CQLConfiguration.ConsistencyLevel.QUORUM)`
+to retain guaranteed read/write overlap. LOCAL_QUORUM reads do not generally overlap global
+QUORUM writes. Both settings are also available on the lower-level `CQLConfiguration.Builder`.
+Generation and topology queries use a separate policy: QUORUM when the
 driver knows more than one host, and ONE otherwise.
 
 ## Checkpoint persistence (CDCStateStore)

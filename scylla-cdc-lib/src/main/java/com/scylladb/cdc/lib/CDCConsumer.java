@@ -191,6 +191,10 @@ public final class CDCConsumer implements AutoCloseable {
          * or at ONE, LOCAL_ONE, or ANY, may not yet be visible to a LOCAL_QUORUM read. A shorter
          * window reduces latency at the risk of missing late entries. Query-window size affects
          * latency separately.
+         * Configure the read datacenter with {@link #withLocalDCName(String)}. Without it,
+         * routing can use any datacenter. For global QUORUM base-table writes, select
+         * {@link CQLConfiguration.ConsistencyLevel#QUORUM} with
+         * {@link #withConsistencyLevel(CQLConfiguration.ConsistencyLevel)} to retain guaranteed overlap.
          *
          * @param confidenceWindowSizeMs confidence window in milliseconds
          * @return this builder
@@ -232,6 +236,31 @@ public final class CDCConsumer implements AutoCloseable {
 
         public Builder withCredentials(String user, String password) {
             cqlConfigurationBuilder.withCredentials(user, password);
+            return this;
+        }
+
+        /**
+         * Sets CDC log read consistency (LOCAL_QUORUM by default).
+         * Generation and topology queries retain their independent consistency policy.
+         *
+         * @param consistencyLevel consistency level for CDC log reads
+         * @return this builder
+         */
+        public Builder withConsistencyLevel(CQLConfiguration.ConsistencyLevel consistencyLevel) {
+            cqlConfigurationBuilder.withConsistencyLevel(consistencyLevel);
+            return this;
+        }
+
+        /**
+         * Restricts query routing to the named datacenter. Configure the same datacenter as
+         * the base-table write coordinators when relying on LOCAL_QUORUM read/write overlap.
+         * Without this setting, query routing can use any datacenter.
+         *
+         * @param localDCName name of the local datacenter
+         * @return this builder
+         */
+        public Builder withLocalDCName(String localDCName) {
+            cqlConfigurationBuilder.withLocalDCName(localDCName);
             return this;
         }
 
