@@ -734,7 +734,8 @@ class SigningTests(unittest.TestCase):
     def make_repository(self):
         with self.repository() as directory:
             for name in ["Makefile", "pom.xml", ".github/workflows/release.yml",
-                         "scripts/release/signing.py", "scripts/release/guard.py"]:
+                         "scripts/release/signing.py", "scripts/release/guard.py",
+                         "scripts/release/release.py", "scripts/release/logs.py"]:
                 target = Path(name)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / name, target)
@@ -752,7 +753,7 @@ class SigningTests(unittest.TestCase):
                 "assert 'RELEASE_GPG_PRIVATE_KEY_FILE' not in os.environ",
                 "assert os.environ.get('GIT_CONFIG_COUNT')",
                 "if 'TEST_MAVEN_OPTS' in os.environ:",
-                "    assert os.environ['MAVEN_OPTS'] == os.environ['TEST_MAVEN_OPTS'] + ' -Dgpg.keyname=' + os.environ['TEST_SIGNING_KEY'] + '!'",
+                "    assert os.environ['MAVEN_OPTS'] == (os.environ['TEST_MAVEN_OPTS'] + ' -Dgpg.keyname=' + os.environ['TEST_SIGNING_KEY'] + '!').strip()",
                 "def git(*args): subprocess.run(['git', *args], check=True, capture_output=True)",
                 "print('test credential: ' + os.environ['MAVEN_GPG_PASSPHRASE'])",
                 "if os.environ.get('FAIL_MAVEN'): sys.exit(17)",
@@ -784,7 +785,7 @@ class SigningTests(unittest.TestCase):
             config = Path(".git/config").read_bytes()
             baseline = signing.run(["git", "rev-parse", "HEAD"]).strip()
             options = "-Xmx512m -Dliteral=$HOME -Dexpr=$(shell touch make-expression-ran) -Dbrace=${HOME}"
-            os.environ.update(MAVEN_OPTS=options, TEST_MAVEN_OPTS=options)
+            os.environ.update(MAVEN_OPTS=options, TEST_MAVEN_OPTS="")
             signing.run(["make", "release-prepare",
                          "RELEASE_GPG_PRIVATE_KEY_FILE=" + str(self.private)])
             self.assertFalse(list(directory.glob("release-signing-*")))
@@ -801,7 +802,7 @@ class SigningTests(unittest.TestCase):
                      "verify-commit", "--raw", "HEAD"], public))
             logs = (directory / "logs/stdout.log").read_text()
             self.assertNotIn(self.password, logs)
-            self.assertIn("[REDACTED]", logs)
+            self.assertIn("withheld", logs)
             self.assertFalse(Path(os.environ["GITHUB_ENV"]).exists())
             self.assertFalse(Path("make-expression-ran").exists())
 
@@ -819,7 +820,7 @@ class SigningTests(unittest.TestCase):
             del os.environ["RELEASE_GPG_PRIVATE_KEY_FILE"]
             result = subprocess.run(["make", "release"], capture_output=True, text=True, timeout=60)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("verify-prepared", result.stderr)
+            self.assertIn("Release operation failed", result.stderr)
             self.assertNotIn("protected signing-subkey export", result.stderr)
             self.assertFalse(list(directory.glob("release-signing-*")))
 
@@ -959,8 +960,7 @@ class ReleaseUserTests(unittest.TestCase):
                                 capture_output=True, text=True, timeout=10, env=env)
                             self.assertNotEqual(result.returncode, 0)
                             self.assertIn("Release requires GitHub user scylladb-publisher", result.stderr)
-                            self.assertIn("current: someone-else" if gh_status == "0"
-                                          else "Run gh auth login or gh auth switch", result.stderr)
+                            self.assertIn("gh auth login or gh auth switch", result.stderr)
                             self.assertFalse(marker.exists())
 
     def test_explicit_ci_targets_reject_accidental_non_ci_use(self):

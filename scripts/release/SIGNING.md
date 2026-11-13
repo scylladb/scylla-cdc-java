@@ -23,7 +23,7 @@ It does not restore the validation workspace or Maven cache. Signed preparation,
 signature verification, and publication happen after approval; project tests are
 not repeated with production credentials. Releases must be dispatched from `master`.
 The `target-tag` input selects `master` by default, or the commit preceding an
-existing release tag. Historical sources must pass the same credential safety
+existing release tag. Historical sources must pass the same release configuration
 checks; other source branches are unsupported.
 
 Before running it, a repository owner must create and protect that environment,
@@ -44,22 +44,22 @@ credentials or changing the checkout; switch accounts with `gh auth switch` if
 needed. Local dry runs and the underscored `_release*` recipes enforce the same
 account requirement, even when `GITHUB_ACTIONS=true` is set locally.
 
-The protected workflow uses explicit `ci-release-prepare`, `ci-release`, and
-`ci-release-dry-run` entrypoints, sharing the local phase recipes through their
-`_ci-release*` inner targets. In Actions, the protected `release` environment
-authorizes operators, including dry runs and reruns. The triggering actor need not
-be the publisher account: signing still uses the repository's pinned publisher
-subkey and identity. CI targets check `GITHUB_ACTIONS=true` to catch accidental use
-outside Actions; that marker does not authenticate a caller or grant credentials.
-Like the low-level signing helper, these explicit CI interfaces rely on the caller
-to enforce the protected workflow boundary.
+The workflow invokes `release.py prepare`, `perform`, or `dry-run` with `--ci`.
+Local Make targets are thin wrappers around the same Python phases; the legacy
+`ci-release*` and underscored aliases also call them directly. There is no recursive
+Make invocation. Local phases authenticate `scylladb-publisher`; CI phases require
+`GITHUB_ACTIONS=true` to catch accidental use outside Actions. The protected
+`release` environment authorizes CI operators. The marker alone authenticates
+nobody and grants no credentials. The triggering actor need not be the publisher.
 
-Each local public target and CI wrapper runs Maven in a scoped `signing.py exec`
-session. It imports only the protected signing-subkey export, checks that primary
+`release.py` owns each complete phase: configuration checks, a temporary signing
+session, foreground Maven execution, verification, and cleanup. `signing.py` owns
+the single child process group and forwards cancellation before removing keys.
+It imports only the protected signing-subkey export, checks that primary
 private material is absent, and verifies a fresh-agent signing preflight against
 the pinned public certificate. Anonymous pipes supply the key import and passphrase;
-neither credential is written to a temporary file or included in command-line
-arguments. Runtime Git settings apply only to the command and its children,
+credentials are not passed as command-line values or staged in separate input files.
+Maven output can contain credentials and is captured privately as described below. Runtime Git settings apply only to the command and its children,
 including Maven's local checkout clones. Sessions leave checkout Git configuration
 unchanged and remove their temporary keyrings on success or failure. No credentials
 or signing-session state are written to `GITHUB_ENV` or retained between workflow
@@ -87,7 +87,7 @@ make release-dry-run
 ```
 
 Maven owns version changes, release and development commits, annotated tags, and
-artifact signing. The Make recipes retain sanitized Maven stdout and stderr.
+artifact signing. Maven stdout and stderr go directly to private files for the final scan.
 Preparation verifies every new commit and the release tag against the pinned
 certificate before closing its session. The workflow repeats verification with
 public material only. Perform and dry-run commands verify prepared history before
@@ -97,24 +97,29 @@ boundary. Do not derive it from the release tag's parent or replace it after
 preparation. Do not change or replace existing release tags. A failed verification
 blocks publication.
 
-Both jobs first check out the workflow's launch SHA and preserve its Makefile,
-release helpers and public certificate in runner temporary storage. Validation
+Both jobs check out the workflow launch SHA and preserve the release helpers,
+Maven installer and public certificate in runner temporary storage. Validation
 then selects the requested source and records its exact SHA. The release job
-uses that SHA even if the selected tag moves after validation. It executes the
-preserved tooling through explicit paths, so historical Makefiles and helpers
-cannot replace it. POMs and Maven runtime options from the selected source must
-pass the trusted credential safety checks before any signing key is imported.
-Shell commands, Make recipes and workflow structure are reviewed and tested with
-the repository; the runtime guard does not parse them. Historical releases never
-push their prepared commits or tags to SCM, and existing remote tags remain
-unchanged. Only a release targeting `master` pushes its prepared history.
+uses that SHA even if the selected tag moves. It calls the preserved Python runner
+through an explicit path; historical Makefiles and helpers cannot replace it.
+Historical releases never push prepared history or replace remote tags. Only a
+release targeting `master` pushes its prepared history.
 
-These checks inspect expressions without evaluating the Maven model. Simple
-nonreserved aliases and canonical public metadata such as `${project.version}`
-and `${project.build.directory}` are supported. Ambiguous Maven context-prefix
-names such as `${projectLabel}` and `${projectAlias.version}` are conservatively
-rejected even when a build could resolve a public value; use a nonreserved alias
-or canonical metadata path instead.
+The supported Maven configuration is deliberately small. The runner constructs
+fixed commands from `RELEASE_SKIP_TESTS` (true/false or 1/0), `RELEASE_VERSION`
+(letters, digits, dots, underscores, plus and minus), and the selected phase.
+It clears inherited `MAVEN_ARGS`, `MAVEN_OPTS`, `MAVEN_CONFIG`, JVM option variables,
+Maven base-directory overrides, recursive Make overrides, and SCM tokens. Startup
+`mavenrc` files are disabled. Only generated test-skip and pinned
+signing-key options enter Maven's environment. Validation also removes signing
+and publishing credentials; preparation removes publishing credentials.
+Nonempty `.mvn/maven.config` and `.mvn/jvm.config` files, including those in the
+nearest ancestor `.mvn` directory, are unsupported and fail before importing keys.
+Maintainers must review POMs and plugins as executable
+build configuration; the guard does not emulate Maven interpolation or argument
+parsing. It checks reactor path containment, GPG best-practice settings and the
+minimum Central publishing plugin version. Ordinary Maven metadata expressions
+and property aliases no longer need a custom parser's approval.
 
 Complex checks can run before preparation or against signed outputs after a session
 closes. Checks that need additional signatures can use their own scoped invocation:
@@ -134,18 +139,51 @@ uses the existing Actions job limit without a separate publication-step deadline
 Operators must interrupt hung local commands and check for partial publication
 before retrying.
 
-Log capture retains at most 64 MiB of combined stdout and stderr. Exceeding this
-limit discards both streams and records a fixed overflow message, even if only
-one stream was noisy. Maven continues running and its exit status is preserved;
-log overflow does not interrupt publication. Successful Maven parents with
-pipe-connected descendants wait for their output streams to close before the
-workflow can push release history.
+## Maven logs and final reporting
 
-A failed command propagates its exit status and still cleans up its session. Helper errors
-identify a fixed operation and status or category without printing command arguments,
-captured output, or exception payloads. Maven signs release artifacts; the helper's
-`verify-prepared` command verifies the prepared commits and tag using public
-material only. Run `make test-release-signing` to test with disposable keys.
+Maven runs in the foreground with stdout and stderr redirected to files with mode
+0600 in a private directory with mode 0700. Raw output is never echoed to the
+Actions console or included in an artifact upload. The runner has one process
+supervisor and does not inspect output while Maven runs. Release plugins must
+finish publication before their Maven command exits; detached background
+publication is unsupported. There is no output-size rule that interrupts Maven.
+Raw files consume runner disk space until the cycle ends; operators must provide
+enough disk space for their builds.
+
+In CI, `--defer-logs` leaves output private until an `if: always()` report step
+runs after publication, SCM push and any recovery-bundle preparation. Local Make
+commands report automatically when their phase ends. Run the report manually if
+a local process is killed before cleanup:
+
+```sh
+python3 scripts/release/release.py report
+```
+
+`RELEASE_LOG_DIR` defaults locally to a directory under the system temporary
+directory, specific to the current user and checkout. Keep any explicit override
+outside the source tree so Maven clean and SCM preparation cannot remove or commit
+it. The sibling directory with a `-private` suffix is reserved exclusively for raw
+captures. Never upload that directory. Each report reads at most 64 MiB across completed command
+logs. An invocation exceeding the remaining scan budget, interrupted output, or
+a possible credential match causes both streams of that invocation to be withheld.
+The scanner uses fixed-string searches for configured credentials and common
+encoded forms, plus a small pattern for credential assignments and authorization
+headers. It does not interpret Maven syntax. Detection is conservative and does
+not guarantee discovery of arbitrary transformations or unknown credentials.
+
+Only cleared streams or fixed withholding messages enter `stdout.log` and
+`stderr.log`. `log-report.txt` records the result without matched values; CI also
+adds warnings and a job summary. Raw captures are deleted after processing,
+including when scanning fails. Abrupt runner loss or SIGKILL can prevent cleanup;
+local operators must remove the private directory after recovery.
+
+Maven and signature-verification failures still stop the release. Log findings or
+reporting failures do not change a completed Maven result, interrupt publication,
+or prevent a successful release's SCM push. A log warning alone is never a reason
+to repeat publication. Check the Maven, verification and SCM step outcomes and
+Central deployment state before retrying. Helper diagnostics withhold command
+arguments, captured output and unexpected exception values. Run the release tests
+with `python3 -m unittest discover -s scripts/release -p 'test_*.py' -v`.
 
 Consumers should obtain this public certificate from this repository at a reviewed
 commit, check the certification fingerprint above through a trusted channel, and

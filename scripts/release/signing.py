@@ -180,13 +180,13 @@ def session_signals():
         interrupted.check()
 
 
-def execute(command, env):
+def execute(command, env, **output):
     with session_signals() as interrupted:
         process = None
         try:
             interrupted.check()
             try:
-                process = subprocess.Popen(command, env=env, start_new_session=True)
+                process = subprocess.Popen(command, env=env, start_new_session=True, **output)
             except OSError:
                 raise SigningError(command_operation(command) + " could not start (OS error).") from None
             while True:
@@ -196,6 +196,11 @@ def execute(command, env):
                 except subprocess.TimeoutExpired:
                     continue
                 interrupted.check()
+                if status != 0:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                 return status if status >= 0 else 128 - status
         except BaseException as error:
             if process is None:
@@ -214,7 +219,7 @@ def execute(command, env):
             except subprocess.TimeoutExpired:
                 # Escalate to SIGKILL after the child exhausts its grace period.
                 pass
-            # Make may exit before guard finishes stopping its separate Maven group.
+            # Allow descendants their grace period even if the parent has exited.
             time.sleep(max(0, deadline - time.monotonic()))
             try:
                 os.killpg(process.pid, signal.SIGKILL)
@@ -226,8 +231,8 @@ def execute(command, env):
 
 
 @contextmanager
-def signing_session():
-    env = dict(os.environ)
+def signing_session(env=None):
+    env = dict(os.environ if env is None else env)
     passphrase_value(env)
     private = env.pop("RELEASE_GPG_PRIVATE_KEY", "")
     if "RELEASE_GPG_PRIVATE_KEY_FILE" in env:
