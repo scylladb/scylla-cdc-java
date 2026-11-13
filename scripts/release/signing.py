@@ -120,11 +120,7 @@ def public_environment():
 
 
 def passphrase_value(env):
-    value = env.get("RELEASE_GPG_PASSPHRASE",
-                    env.get("MAVEN_GPG_PASSPHRASE", env.get("PGP_PASSPHRASE", "")))
-    if "RELEASE_GPG_PASSPHRASE_FILE" in env:
-        with Path(env["RELEASE_GPG_PASSPHRASE_FILE"]).open(newline="") as source:
-            value = source.read()
+    value = env.get("MAVEN_GPG_PASSPHRASE", "")
     value = value.removesuffix("\n")
     if not value or "\n" in value or "\r" in value or len(value.encode()) > 1024:
         raise SigningError("Release signing requires a nonempty single-line passphrase.")
@@ -238,16 +234,8 @@ def signing_session(env=None):
     env = dict(os.environ if env is None else env)
     passphrase_value(env)
     private = env.pop("RELEASE_GPG_PRIVATE_KEY", "")
-    if "RELEASE_GPG_PRIVATE_KEY_FILE" in env:
-        private = Path(env.pop("RELEASE_GPG_PRIVATE_KEY_FILE")).read_text()
     if not private:
         raise SigningError("Release signing requires a protected signing-subkey export.")
-    # Recursive Make can restore consumed credentials and replace the session's
-    # Maven options from serialized command-line overrides. Ordinary overrides
-    # already exist in env; keep execution flags without re-exporting that list.
-    env.pop("MAKEOVERRIDES", None)
-    if "MAKEFLAGS" in env:
-        env["MAKEFLAGS"] = (" " + env["MAKEFLAGS"]).split(" -- ", 1)[0][1:]
     with session_signals() as interrupted, tempfile.TemporaryDirectory(prefix="release-signing-", dir=env.get("RUNNER_TEMP")) as temp:
         directory = Path(temp)
         signing_home = directory / "keyring"
@@ -298,6 +286,8 @@ def signing_session(env=None):
 
 
 def maven(phase, command):
+    if phase != "validate" and os.environ.get("GITHUB_ACTIONS") != "true":
+        raise SigningError("Publication is supported only by the protected CI workflow")
     directory = logs.log_directory()
     if directory.resolve().is_relative_to(Path.cwd().resolve()):
         raise SigningError("RELEASE_LOG_DIR must be outside the source checkout")
@@ -308,7 +298,7 @@ def maven(phase, command):
     if phase == "validate":
         env = {name: value for name, value in env.items()
                if not name.startswith("RELEASE_GPG_")
-               and name not in ("MAVEN_GPG_PASSPHRASE", "PGP_PASSPHRASE")}
+               and name != "MAVEN_GPG_PASSPHRASE"}
     skip = env.get("RELEASE_SKIP_TESTS", "false")
     if skip not in ("true", "false", "1", "0"):
         raise SigningError("RELEASE_SKIP_TESTS must be a Boolean")
@@ -357,50 +347,22 @@ def verify_prepared(baseline=None):
     verify_release(tags[0], baseline)
 
 
-def sign_files(files, signing_env=None):
-    if not files:
-        raise SigningError("At least one release artifact is required.")
-    # Explicit callers pass the environment from an already validated signing_session.
-    if (signing_env is None
-            and any(not Path(str(Path(filename).resolve()) + ".asc").exists() for filename in files)):
-        with signing_session() as session:
-            sign_files(files, session)
-            return
-    with session_signals() as interrupted, public_environment() as env:
-        for filename in files:
-            interrupted.check()
-            artifact = Path(filename).resolve()
-            if not artifact.is_file() or artifact.suffix == ".asc":
-                raise SigningError("Expected an unsigned release artifact.")
-            # Existing signatures are immutable: never overwrite them on a rerun.
-            signature = Path(str(artifact) + ".asc")
-            if not signature.exists():
-                credential_gpg(["--local-user", SIGNING + "!", "--armor",
-                                "--detach-sign", "--output", signature, artifact], env=signing_env)
-                interrupted.check()
-            verify_status(gpg("--status-fd", "1", "--verify", signature, artifact, env=env))
-
-
 def main():
     try:
         if len(sys.argv) > 1 and sys.argv[1] == "gpg-program":
             # Git requires stdout/stderr byte-for-byte; do not print a success banner.
             return credential_gpg(sys.argv[2:], capture=False)
         if (len(sys.argv) > 3 and sys.argv[1] == "maven"
-                and sys.argv[2] in ("validate", "prepare", "perform", "dry-run")):
+                and sys.argv[2] in ("validate", "prepare", "perform", "dry-run")
+                and sys.argv[3] == "mvn"):
             return maven(sys.argv[2], sys.argv[3:])
         if len(sys.argv) in (2, 3) and sys.argv[1] == "verify-prepared":
             verify_prepared(*sys.argv[2:])
         elif len(sys.argv) in (3, 4) and sys.argv[1] == "verify-release":
             verify_release(*sys.argv[2:])
-        elif len(sys.argv) > 2 and sys.argv[1] == "sign-files":
-            sign_files(sys.argv[2:])
-        elif len(sys.argv) > 2 and sys.argv[1] == "exec":
-            with signing_session() as env:
-                return execute(sys.argv[2:], env)
         else:
             raise SigningError("Expected verify-prepared [BASELINE], verify-release TAG [BASELINE], "
-                               "sign-files FILE..., maven PHASE COMMAND..., or exec COMMAND...")
+                               "or maven PHASE COMMAND...")
         print("Release signing " + sys.argv[1] + " passed.")
         return 0
     except SigningError as error:
@@ -409,7 +371,7 @@ def main():
         category = ("OS error" if isinstance(error, OSError) else
                     "invalid value" if isinstance(error, ValueError) else "internal error")
         operation = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in (
-            "gpg-program", "verify-prepared", "verify-release", "sign-files", "maven", "exec") else "command"
+            "gpg-program", "verify-prepared", "verify-release", "maven") else "command"
         print(f"Release signing {operation} failed ({category}); values withheld.", file=sys.stderr)
     return 1
 

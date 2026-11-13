@@ -31,7 +31,7 @@ class ReleaseCommandTests(unittest.TestCase):
         for name in ("Scan validation logs", "Scan release logs"):
             step = workflow.split(f"      - name: {name}\n", 1)[1].split("\n      - name:", 1)[0]
             self.assertIn("if: always()", step)
-            self.assertIn('make -f "$RELEASE_MAKEFILE" release-report', step)
+            self.assertIn("make release-report", step)
         self.assertNotIn("release-logs-private", workflow)
 
     def test_release_accepts_only_master_dispatch(self):
@@ -51,16 +51,14 @@ class ReleaseCommandTests(unittest.TestCase):
         self.assertLess(workflow.index("Checkout validated target"), workflow.index("Check release configuration"))
         self.assertLess(workflow.index("Check release configuration"), workflow.index("RELEASE_GPG_PRIVATE_KEY:"))
         self.assertNotIn("gpg-private-key:", workflow)
-        self.assertLess(workflow.index("Preserve release tooling"),
-                        workflow.index("Checkout validated target"))
-        self.assertIn("default: master", workflow)
+        self.assertNotIn("target-tag", workflow)
         self.assertLess(workflow.index("Push changes to SCM"), workflow.index("Upload sanitized stdout"))
         self.assertEqual(workflow.count("if: always()"), 6)
         self.assertRegex(workflow, r"(?m)^    environment: release$")
-        self.assertEqual(workflow_command("Prepare release").splitlines()[-1], 'make -f "$RELEASE_MAKEFILE" ci-release-prepare RELEASE_DEFER_LOGS=true')
+        self.assertEqual(workflow_command("Prepare release").splitlines()[-1], 'make ci-release-prepare')
         self.assertIn("RELEASE_DRY_RUN: ${{ inputs.dry-run }}", workflow)
         self.assertEqual(workflow_command("Verify prepared release commits and tag with public key only"),
-                         'python3 "$RELEASE_SIGNING_HELPER" verify-prepared')
+                         'python3 scripts/release/signing.py verify-prepared')
 
 
     def test_workflow_keeps_scm_credentials_in_the_push_process_only(self):
@@ -156,8 +154,7 @@ class ReleaseCommandTests(unittest.TestCase):
         self.assertEqual(release.count("RELEASE_SKIP_TESTS: 'true'"), 2)
         self.assertIn("python3 -m unittest discover", validation)
         self.assertNotIn("ci-release", validation)
-        self.assertIn("ref: ${{ github.sha }}", release)
-        self.assertIn("git fetch --no-tags origin \"$RELEASE_TARGET_COMMIT\"", release)
+        self.assertIn("ref: ${{ needs.validate.outputs.target-sha }}", release)
 
 
     def test_validation_builds_unsigned_release_artifacts_without_deployment(self):
@@ -181,7 +178,6 @@ class ReleaseCommandTests(unittest.TestCase):
                    and key not in ("MAVEN_GPG_PASSPHRASE", "SONATYPE_TOKEN_USERNAME",
                                    "SONATYPE_TOKEN_PASSWORD")}
             env.update(PATH=str(root) + os.pathsep + os.environ["PATH"],
-                       RELEASE_MAKEFILE=str(ROOT / "Makefile"),
                        RELEASE_GUARD=str(ROOT / "scripts/release/guard.py"),
                        RELEASE_LOG_DIR=str(root / "logs"), TRACE=str(root / "trace"))
             for skip in ("false", "true"):
@@ -221,7 +217,7 @@ class ReleaseCommandTests(unittest.TestCase):
         ).strip()
 
 
-    def checkout_validated_target(self, root, source, expected, tag="master"):
+    def checkout_validated_target(self, root, source, expected):
         resolve = workflow_command("Record validated commit")
         checkout = workflow_command("Checkout validated target")
         validation = root / "validation"
@@ -229,7 +225,7 @@ class ReleaseCommandTests(unittest.TestCase):
         output = root / "output"
         result = subprocess.run(
             ["bash", "-eo", "pipefail", "-c", resolve], cwd=validation,
-            env={**os.environ, "GITHUB_OUTPUT": str(output), "RELEASE_TARGET_TAG": tag},
+            env={**os.environ, "GITHUB_OUTPUT": str(output)},
             capture_output=True, text=True, timeout=10,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -245,7 +241,7 @@ class ReleaseCommandTests(unittest.TestCase):
             source, commits = self.target_fixture(root)
             checkout, publisher = self.checkout_validated_target(root, source, commits[-1])
             env = {**os.environ, "GITHUB_REF": "refs/heads/master",
-                   "RELEASE_TARGET_COMMIT": commits[-1], "RELEASE_TARGET_TAG": "master"}
+                   "RELEASE_TARGET_COMMIT": commits[-1]}
             result = subprocess.run(["bash", "-eo", "pipefail", "-c", checkout], cwd=publisher,
                                     env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -265,7 +261,7 @@ class ReleaseCommandTests(unittest.TestCase):
             self.assertIn("master advanced after validation", result.stdout)
 
 
-    def test_publication_rechecks_master_after_local_release_preparation(self):
+    def test_publication_rechecks_master_after_release_preparation(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertLess(workflow.index("Recheck for open release blockers"),
                         workflow.index("Recheck validated master before publication"))
@@ -279,8 +275,7 @@ class ReleaseCommandTests(unittest.TestCase):
             env = dict(os.environ)
             source, commits = self.target_fixture(root)
             checkout, publisher = self.checkout_validated_target(root, source, commits[-1])
-            env.update(GITHUB_REF="refs/heads/master", RELEASE_TARGET_COMMIT=commits[-1],
-                       RELEASE_TARGET_TAG="master")
+            env.update(GITHUB_REF="refs/heads/master", RELEASE_TARGET_COMMIT=commits[-1])
             result = subprocess.run(
                 ["bash", "-eo", "pipefail", "-c", checkout], cwd=publisher,
                 env=env, capture_output=True, text=True, timeout=10,
@@ -311,32 +306,6 @@ class ReleaseCommandTests(unittest.TestCase):
             self.assertEqual(self.git(publisher, "rev-parse", "HEAD"), prepared)
 
 
-    def test_publishing_historical_target_does_not_resolve_a_moved_tag_again(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            source, commits = self.target_fixture(root)
-            checkout, publisher = self.checkout_validated_target(root, source, commits[0], tag="v1.0")
-            self.git(source, "tag", "--force", "v1.0", commits[-1])
-            result = subprocess.run(
-                ["bash", "-eo", "pipefail", "-c", checkout], cwd=publisher,
-                env={**os.environ, "GITHUB_REF": "refs/heads/master", "RELEASE_TARGET_TAG": "v1.0",
-                     "RELEASE_TARGET_COMMIT": commits[0]},
-                capture_output=True, text=True, timeout=10,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(self.git(publisher, "rev-parse", "HEAD"), commits[0])
-            self.assertEqual(self.git(publisher, "tag", "--list"), "")
-            self.assertEqual((publisher / "version").read_text(), "initial")
-            remote_refs = self.git(source, "show-ref")
-            self.git(publisher, "commit", "--quiet", "--allow-empty", "-m", "historical preparation")
-            self.git(publisher, "tag", "v1.0")
-            self.assertEqual(self.git(source, "show-ref"), remote_refs)
-            workflow = (ROOT / ".github/workflows/release.yml").read_text()
-            push = workflow.split("      - name: Push changes to SCM\n", 1)[1].split(
-                "\n      - name:", 1
-            )[0]
-            self.assertIn("if: ${{ inputs.dry-run == false && inputs.target-tag == 'master' }}", push)
-            self.assertIn("if: inputs.target-tag == 'master'", workflow)
 
 
     def test_publishing_main_pushes_from_a_sha_checkout_without_an_upstream(self):
@@ -354,7 +323,7 @@ class ReleaseCommandTests(unittest.TestCase):
             result = subprocess.run(
                 ["bash", "-eo", "pipefail", "-c", checkout], cwd=publisher,
                 env={**os.environ, "GITHUB_REF": "refs/heads/master",
-                     "RELEASE_TARGET_COMMIT": commits[-1], "RELEASE_TARGET_TAG": "master"},
+                     "RELEASE_TARGET_COMMIT": commits[-1]},
                 capture_output=True, text=True, timeout=10,
             )
             self.assertEqual(result.returncode, 0, result.stderr)

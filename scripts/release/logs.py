@@ -2,7 +2,6 @@
 
 from contextlib import contextmanager
 import base64
-import hashlib
 import html
 import json
 import os
@@ -24,9 +23,6 @@ CREDENTIAL = re.compile(
 def secret_forms(env):
     values = {value for name, value in env.items() if value and re.search(
         r"PASSWORD|PASSPHRASE|TOKEN|SECRET|PRIVATE_KEY|AUTHORIZATION", name, re.I)}
-    for name in ("RELEASE_GPG_PRIVATE_KEY_FILE", "RELEASE_GPG_PASSPHRASE_FILE"):
-        if env.get(name):
-            values.add(Path(env[name]).read_text())
     if env.get("SONATYPE_TOKEN_USERNAME") and env.get("SONATYPE_TOKEN_PASSWORD"):
         values.add(env["SONATYPE_TOKEN_USERNAME"] + ":" + env["SONATYPE_TOKEN_PASSWORD"])
     values |= {line for value in values for line in value.splitlines() if line}
@@ -162,10 +158,7 @@ def finish(directory):
 
 
 def log_directory():
-    # Maven clean and SCM preparation must never touch these files.
-    checkout = hashlib.sha256(os.fsencode(Path.cwd())).hexdigest()[:12]
-    default = Path(tempfile.gettempdir()) / f"cdc-release-{os.getuid()}-{checkout}"
-    return Path(os.environ.get("RELEASE_LOG_DIR", str(default))).absolute()
+    return Path(os.environ["RELEASE_LOG_DIR"]).absolute()
 
 
 if __name__ == "__main__":

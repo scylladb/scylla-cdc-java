@@ -38,7 +38,7 @@ class PolicyTests(unittest.TestCase):
         validation, release = workflow.split('\n  release:\n', 1)
         self.assertNotIn('secrets.', validation)
         self.assertLess(release.index('credentials.py'), release.index('- name: Prepare release'))
-        self.assertIn('run: python3 "$RUNNER_TEMP/release-tooling/credentials.py"', release)
+        self.assertIn('run: python3 scripts/release/credentials.py', release)
         self.assertIn('environment: release', release)
         self.assertNotIn('cache:', release)
         result = subprocess.run(

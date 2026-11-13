@@ -50,14 +50,12 @@ class LogTests(unittest.TestCase):
                     self.assertNotIn(value, path.read_bytes())
                     self.assertNotIn(secret.encode(), path.read_bytes())
 
-    def test_passphrase_file_and_encoded_output_are_scanned(self):
+    def test_encoded_passphrase_output_is_scanned(self):
         secret = "sëcret&phrase"
-        path = self.directory.parent / "passphrase"
-        path.write_text(secret + "\n")
         self.capture(stdout="sëcret&amp;phrase".encode())
         # HTML and JSON forms, as well as literal values, use fixed-string matching.
         self.capture(stdout=b"s\\u00ebcret&phrase")
-        messages = logs.report(self.directory, {"RELEASE_GPG_PASSPHRASE_FILE": str(path)})
+        messages = logs.report(self.directory, {"MAVEN_GPG_PASSPHRASE": secret})
         self.assertTrue(all("possible credential" in message for message in messages))
 
     def test_incomplete_and_oversized_logs_are_withheld(self):

@@ -32,9 +32,6 @@ class ReleaseTests(unittest.TestCase):
                           "print(os.environ.get('MAVEN_GPG_PASSPHRASE','no credentials'), file=sys.stderr)\n"
                           "raise SystemExit(int(os.environ.get('MAVEN_STATUS', '0')))\n")
         binary.chmod(0o700)
-        gh = self.root / "gh"
-        gh.write_text('#!/bin/sh\necho scylladb-publisher\n')
-        gh.chmod(0o700)
         helper = self.root / "signing.py"
         helper.write_text(
             "from contextlib import contextmanager\nimport os, sys\nfrom pathlib import Path\n"
@@ -84,7 +81,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_prepare_verifies_and_defers_log_scan(self):
         os.environ.update(RELEASE_VERSION="1.2.3", SONATYPE_TOKEN_PASSWORD="central-token")
-        result = self.invoke("ci-release-prepare", "RELEASE_DEFER_LOGS=true")
+        result = self.invoke("ci-release-prepare")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("-DreleaseVersion=1.2.3", self.trace()["args"])
         self.assertIn("-DpushChanges=false", self.trace()["args"])
@@ -102,26 +99,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse((self.root / "trace").exists())
 
     def test_dry_run_cannot_automatically_publish(self):
-        result = self.invoke("release-dry-run")
+        result = self.invoke("ci-release-dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("-Drelease.autopublish=false", self.trace()["args"])
         self.assertTrue((self.root / "verified").exists())
 
-    def test_failed_maven_status_survives_reporting_failure(self):
-        helper = self.root / "failed-report.py"
-        helper.write_text("raise SystemExit(33)\n")
-        os.environ.update(MAVEN_STATUS="17", RELEASE_LOG_HELPER=str(helper))
-        result = self.invoke("ci-release-prepare")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Error 17", result.stderr)
-        self.assertFalse((self.root / "verified").exists())
 
-    def test_success_survives_reporting_failure(self):
-        helper = self.root / "failed-report.py"
-        helper.write_text("raise SystemExit(33)\n")
-        os.environ["RELEASE_LOG_HELPER"] = str(helper)
-        result = self.invoke("ci-release")
-        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_broken_console_does_not_replace_maven_status(self):
         with patch("builtins.print", side_effect=BrokenPipeError), patch.object(os, "dup2"), redirect_stdout(StringIO()):
@@ -146,27 +129,31 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse((self.root / "trace").exists())
 
     def test_make_preview_runs_no_release_programs(self):
-        for target in ("release-prepare", "release", "release-dry-run", "ci-release",
-                       "_release-prepare", "_ci-release-dry-run"):
+        for target in ("ci-release-prepare", "ci-release", "ci-release-dry-run"):
             result = self.invoke(target, "-n")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse((self.root / "trace").exists())
             self.assertFalse((self.root / "session").exists())
 
-    def test_explicit_launch_makefile_ignores_historical_recipes(self):
-        source = self.root / "historical"
-        source.mkdir()
-        (source / "pom.xml").write_text(
-            '<project><properties><gpg.bestPractices>true</gpg.bestPractices>'
-            '</properties></project>')
-        marker = self.root / "historical-recipe-ran"
-        (source / "Makefile").write_text('release-validate:\n\ttouch "$$HISTORICAL_MARKER"\n')
-        result = subprocess.run(["make", "-f", str(ROOT / "Makefile"), "release-validate"],
-                                cwd=source, env={**os.environ, "HISTORICAL_MARKER": str(marker)},
-                                capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.trace()["args"][-1], "verify")
-        self.assertFalse(marker.exists())
+    def test_local_publication_targets_are_removed(self):
+        for target in ("release-prepare", "release", "release-dry-run", "_release",
+                       "_release-prepare", "_release-dry-run", "_ci-release"):
+            with self.subTest(target=target):
+                result = self.invoke(target)
+                self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "trace").exists())
+        self.assertFalse((self.root / "session").exists())
+
+    def test_ci_publication_targets_reject_local_use(self):
+        os.environ["GITHUB_ACTIONS"] = "false"
+        for target in ("ci-release-prepare", "ci-release", "ci-release-dry-run"):
+            with self.subTest(target=target):
+                result = self.invoke(target)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("only by the protected CI workflow", result.stderr)
+        self.assertFalse((self.root / "trace").exists())
+        self.assertFalse((self.root / "session").exists())
+
 
     def test_custom_option_files_are_rejected_without_interpreting_them(self):
         config = self.root / ".mvn"

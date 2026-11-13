@@ -182,4 +182,4 @@ The library is licensed under Apache License 2.0. You may obtain a copy of the L
 ## Releases
 
 Maintainers: see [release signing and recovery](scripts/release/SIGNING.md) for
-the protected validation/approval/publishing flow and local release commands.
+the protected CI validation, signing, publishing and recovery flow.
