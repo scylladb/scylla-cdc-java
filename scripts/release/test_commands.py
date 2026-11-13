@@ -31,7 +31,7 @@ class ReleaseCommandTests(unittest.TestCase):
         for name in ("Scan validation logs", "Scan release logs"):
             step = workflow.split(f"      - name: {name}\n", 1)[1].split("\n      - name:", 1)[0]
             self.assertIn("if: always()", step)
-            self.assertIn('python3 "$RELEASE_RUNNER" report', step)
+            self.assertIn('make -f "$RELEASE_MAKEFILE" release-report', step)
         self.assertNotIn("release-logs-private", workflow)
 
     def test_release_accepts_only_master_dispatch(self):
@@ -57,7 +57,7 @@ class ReleaseCommandTests(unittest.TestCase):
         self.assertLess(workflow.index("Push changes to SCM"), workflow.index("Upload sanitized stdout"))
         self.assertEqual(workflow.count("if: always()"), 6)
         self.assertRegex(workflow, r"(?m)^    environment: release$")
-        self.assertEqual(workflow_command("Prepare release").splitlines()[-1], 'python3 "$RELEASE_RUNNER" prepare --ci --defer-logs')
+        self.assertEqual(workflow_command("Prepare release").splitlines()[-1], 'make -f "$RELEASE_MAKEFILE" ci-release-prepare RELEASE_DEFER_LOGS=true')
         self.assertIn("RELEASE_DRY_RUN: ${{ inputs.dry-run }}", workflow)
         self.assertEqual(workflow_command("Verify prepared release commits and tag with public key only"),
                          'python3 "$RELEASE_SIGNING_HELPER" verify-prepared')
@@ -181,7 +181,8 @@ class ReleaseCommandTests(unittest.TestCase):
                    and key not in ("MAVEN_GPG_PASSPHRASE", "SONATYPE_TOKEN_USERNAME",
                                    "SONATYPE_TOKEN_PASSWORD")}
             env.update(PATH=str(root) + os.pathsep + os.environ["PATH"],
-                       RELEASE_RUNNER=str(ROOT / "scripts/release/release.py"),
+                       RELEASE_MAKEFILE=str(ROOT / "Makefile"),
+                       RELEASE_GUARD=str(ROOT / "scripts/release/guard.py"),
                        RELEASE_LOG_DIR=str(root / "logs"), TRACE=str(root / "trace"))
             for skip in ("false", "true"):
                 with self.subTest(skip=skip):
@@ -293,7 +294,7 @@ class ReleaseCommandTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(self.git(publisher, "rev-parse", "HEAD"), prepared)
-            make = root / "python3"
+            make = root / "make"
             make.write_text('#!/bin/sh\ntouch "$PERFORM_TRACE"\n')
             make.chmod(0o755)
             env["PATH"] = str(root) + os.pathsep + os.environ["PATH"]

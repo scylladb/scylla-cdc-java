@@ -2,12 +2,14 @@
 
 from contextlib import contextmanager
 import base64
+import hashlib
 import html
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import tempfile
 import urllib.parse
 
@@ -116,3 +118,57 @@ def cleanup(logs):
                     and directory.is_dir() and not directory.is_symlink()):
                 shutil.rmtree(directory)
         raw.rmdir()
+
+
+def notice(message):
+    try:
+        print(message, flush=True)
+    except OSError:
+        # Avoid a failed interpreter-shutdown flush replacing Maven's status.
+        try:
+            with open(os.devnull, "w") as sink:
+                os.dup2(sink.fileno(), sys.stdout.fileno())
+        except OSError:
+            pass
+
+
+def finish(directory):
+    # Reporting never changes a completed Maven result or prevents the SCM push.
+    messages = []
+    try:
+        messages = report(directory, os.environ)
+    except Exception:
+        messages = ["Maven log processing failed; raw output withheld. Check publication state before retrying."]
+    finally:
+        try:
+            cleanup(directory)
+        except OSError:
+            messages.append("Raw Maven log cleanup failed; remove the private capture directory after recovery.")
+    for message in messages:
+        prefix = "::warning::" if os.environ.get("GITHUB_ACTIONS") == "true" and "cleared" not in message else ""
+        notice(prefix + message)
+    try:
+        if messages:
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with (directory / "log-report.txt").open("a") as output:
+                output.write("\n".join(messages) + "\n")
+        if messages and os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+                summary.write("\n### Maven log report\n\n")
+                summary.write("Log findings do not change the release outcome; inspect the Maven and SCM steps before retrying.\n\n")
+                summary.write("\n".join("- " + message for message in messages) + "\n")
+    except OSError:
+        pass
+
+
+def log_directory():
+    # Maven clean and SCM preparation must never touch these files.
+    checkout = hashlib.sha256(os.fsencode(Path.cwd())).hexdigest()[:12]
+    default = Path(tempfile.gettempdir()) / f"cdc-release-{os.getuid()}-{checkout}"
+    return Path(os.environ.get("RELEASE_LOG_DIR", str(default))).absolute()
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] != ["report"]:
+        sys.exit("Expected report")
+    finish(log_directory())

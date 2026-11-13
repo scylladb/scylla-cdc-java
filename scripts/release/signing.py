@@ -11,6 +11,9 @@ import sys
 import tempfile
 import time
 
+import guard
+import logs
+
 PRIMARY = "FF45B448B57DFA0A43CD1E3C875E93451534DD48"
 SIGNING = "79222D636C67BCEA99DDCBDCE5AEA706F2A39824"
 PUBLIC_KEY = Path(__file__).with_name("publisher.asc")
@@ -294,6 +297,38 @@ def signing_session(env=None):
                 pass
 
 
+def maven(phase, command):
+    directory = logs.log_directory()
+    if directory.resolve().is_relative_to(Path.cwd().resolve()):
+        raise SigningError("RELEASE_LOG_DIR must be outside the source checkout")
+    env = guard.maven_environment(os.environ)
+    if phase in ("validate", "prepare"):
+        for name in ("SONATYPE_TOKEN_USERNAME", "SONATYPE_TOKEN_PASSWORD"):
+            env.pop(name, None)
+    if phase == "validate":
+        env = {name: value for name, value in env.items()
+               if not name.startswith("RELEASE_GPG_")
+               and name not in ("MAVEN_GPG_PASSPHRASE", "PGP_PASSPHRASE")}
+    skip = env.get("RELEASE_SKIP_TESTS", "false")
+    if skip not in ("true", "false", "1", "0"):
+        raise SigningError("RELEASE_SKIP_TESTS must be a Boolean")
+    if skip in ("true", "1"):
+        env["MAVEN_OPTS"] = "-DskipTests=true -DskipITs=true"
+    with logs.capture(directory, phase) as (raw, stdout, stderr):
+        if phase == "validate":
+            status = execute(command, env, stdout=stdout, stderr=stderr)
+        else:
+            with signing_session(env) as session:
+                status = execute(command, session, stdout=stdout, stderr=stderr)
+        try:
+            (raw / "complete").touch(mode=0o600, exist_ok=False)
+        except OSError:
+            # The report withholds unmarked output; preserve Maven's result.
+            pass
+    logs.notice(f"Maven {phase} exited with status {status}; logs will be scanned before upload.")
+    return status
+
+
 def verify_release(tag, baseline=None):
     baseline = baseline or os.environ.get("RELEASE_BASE_COMMIT")
     if not baseline:
@@ -351,6 +386,9 @@ def main():
         if len(sys.argv) > 1 and sys.argv[1] == "gpg-program":
             # Git requires stdout/stderr byte-for-byte; do not print a success banner.
             return credential_gpg(sys.argv[2:], capture=False)
+        if (len(sys.argv) > 3 and sys.argv[1] == "maven"
+                and sys.argv[2] in ("validate", "prepare", "perform", "dry-run")):
+            return maven(sys.argv[2], sys.argv[3:])
         if len(sys.argv) in (2, 3) and sys.argv[1] == "verify-prepared":
             verify_prepared(*sys.argv[2:])
         elif len(sys.argv) in (3, 4) and sys.argv[1] == "verify-release":
@@ -362,7 +400,7 @@ def main():
                 return execute(sys.argv[2:], env)
         else:
             raise SigningError("Expected verify-prepared [BASELINE], verify-release TAG [BASELINE], "
-                               "sign-files FILE..., or exec COMMAND...")
+                               "sign-files FILE..., maven PHASE COMMAND..., or exec COMMAND...")
         print("Release signing " + sys.argv[1] + " passed.")
         return 0
     except SigningError as error:
@@ -371,7 +409,7 @@ def main():
         category = ("OS error" if isinstance(error, OSError) else
                     "invalid value" if isinstance(error, ValueError) else "internal error")
         operation = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in (
-            "gpg-program", "verify-prepared", "verify-release", "sign-files", "exec") else "command"
+            "gpg-program", "verify-prepared", "verify-release", "sign-files", "maven", "exec") else "command"
         print(f"Release signing {operation} failed ({category}); values withheld.", file=sys.stderr)
     return 1
 

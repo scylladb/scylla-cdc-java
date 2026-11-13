@@ -11,7 +11,6 @@ import unittest
 from unittest.mock import patch
 
 import logs
-import release
 
 
 class LogTests(unittest.TestCase):
@@ -77,7 +76,7 @@ class LogTests(unittest.TestCase):
         with patch.object(logs, "secret_forms", side_effect=OSError("sensitive-error")), \
                 patch.dict(os.environ, GITHUB_ACTIONS="true", GITHUB_STEP_SUMMARY=str(summary)), \
                 redirect_stdout(StringIO()) as output:
-            release.report(self.directory)
+            logs.finish(self.directory)
         self.assertIn("::warning::", output.getvalue())
         self.assertNotIn("sensitive-error", output.getvalue())
         self.assertIn("do not change the release outcome", summary.read_text())

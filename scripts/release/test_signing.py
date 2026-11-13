@@ -735,7 +735,7 @@ class SigningTests(unittest.TestCase):
         with self.repository() as directory:
             for name in ["Makefile", "pom.xml", ".github/workflows/release.yml",
                          "scripts/release/signing.py", "scripts/release/guard.py",
-                         "scripts/release/release.py", "scripts/release/logs.py"]:
+                         "scripts/release/logs.py"]:
                 target = Path(name)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / name, target)
@@ -820,7 +820,7 @@ class SigningTests(unittest.TestCase):
             del os.environ["RELEASE_GPG_PRIVATE_KEY_FILE"]
             result = subprocess.run(["make", "release"], capture_output=True, text=True, timeout=60)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Release operation failed", result.stderr)
+            self.assertIn("verify-prepared", result.stderr)
             self.assertNotIn("protected signing-subkey export", result.stderr)
             self.assertFalse(list(directory.glob("release-signing-*")))
 

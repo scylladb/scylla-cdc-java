@@ -96,10 +96,10 @@ jobs:
       - name: Preserve validation tooling
         run: |
           mkdir -p "$RUNNER_TEMP/release-tooling"
-          cp scripts/release/*.py scripts/release/*.sh scripts/release/publisher.asc "$RUNNER_TEMP/release-tooling/"
+          cp Makefile scripts/release/*.py scripts/release/*.sh scripts/release/publisher.asc "$RUNNER_TEMP/release-tooling/"
           echo "RELEASE_GUARD=$RUNNER_TEMP/release-tooling/guard.py" >> "$GITHUB_ENV"
           echo "RELEASE_SIGNING_HELPER=$RUNNER_TEMP/release-tooling/signing.py" >> "$GITHUB_ENV"
-          echo "RELEASE_RUNNER=$RUNNER_TEMP/release-tooling/release.py" >> "$GITHUB_ENV"
+          echo "RELEASE_MAKEFILE=$RUNNER_TEMP/release-tooling/Makefile" >> "$GITHUB_ENV"
           echo "RELEASE_LOG_DIR=$RUNNER_TEMP/release-logs" >> "$GITHUB_ENV"
 
       - name: Record validated commit
@@ -117,13 +117,13 @@ jobs:
         env:
           RELEASE_SKIP_TESTS: ${{ inputs.skip-tests }}
         run: |
-          python3 "$RELEASE_RUNNER" validate --defer-logs
+          make -f "$RELEASE_MAKEFILE" release-validate RELEASE_DEFER_LOGS=true
 
       - name: Scan validation logs
         if: always()
         run: |
-          if [[ -n "${RELEASE_RUNNER:-}" && -f "$RELEASE_RUNNER" ]]; then
-            python3 "$RELEASE_RUNNER" report
+          if [[ -n "${RELEASE_MAKEFILE:-}" && -f "$RELEASE_MAKEFILE" ]]; then
+            make -f "$RELEASE_MAKEFILE" release-report
           fi
 
       - name: Upload sanitized validation stdout
@@ -167,10 +167,10 @@ jobs:
       - name: Preserve release tooling
         run: |
           mkdir -p "$RUNNER_TEMP/release-tooling"
-          cp scripts/release/*.py scripts/release/*.sh scripts/release/publisher.asc "$RUNNER_TEMP/release-tooling/"
+          cp Makefile scripts/release/*.py scripts/release/*.sh scripts/release/publisher.asc "$RUNNER_TEMP/release-tooling/"
           echo "RELEASE_GUARD=$RUNNER_TEMP/release-tooling/guard.py" >> "$GITHUB_ENV"
           echo "RELEASE_SIGNING_HELPER=$RUNNER_TEMP/release-tooling/signing.py" >> "$GITHUB_ENV"
-          echo "RELEASE_RUNNER=$RUNNER_TEMP/release-tooling/release.py" >> "$GITHUB_ENV"
+          echo "RELEASE_MAKEFILE=$RUNNER_TEMP/release-tooling/Makefile" >> "$GITHUB_ENV"
           echo "RELEASE_LOG_DIR=$RUNNER_TEMP/release-logs" >> "$GITHUB_ENV"
 
       - name: Checkout validated target
@@ -232,7 +232,7 @@ jobs:
           baseline=$(git rev-parse HEAD)
           export RELEASE_BASE_COMMIT="$baseline"
           echo "RELEASE_BASE_COMMIT=$baseline" >> "$GITHUB_ENV"
-          python3 "$RELEASE_RUNNER" prepare --ci --defer-logs
+          make -f "$RELEASE_MAKEFILE" ci-release-prepare RELEASE_DEFER_LOGS=true
 
       - name: Verify prepared release commits and tag with public key only
         run: python3 "$RELEASE_SIGNING_HELPER" verify-prepared
@@ -282,9 +282,9 @@ jobs:
           IS_CICD: true
         run: |
           if [[ "$RELEASE_DRY_RUN" == true ]]; then
-            python3 "$RELEASE_RUNNER" dry-run --ci --defer-logs
+            make -f "$RELEASE_MAKEFILE" ci-release-dry-run RELEASE_DEFER_LOGS=true
           else
-            python3 "$RELEASE_RUNNER" perform --ci --defer-logs
+            make -f "$RELEASE_MAKEFILE" ci-release RELEASE_DEFER_LOGS=true
           fi
 
       - name: Push changes to SCM
@@ -327,8 +327,8 @@ jobs:
           SONATYPE_TOKEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_USERNAME }}
           SONATYPE_TOKEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASSWORD }}
         run: |
-          if [[ -n "${RELEASE_RUNNER:-}" && -f "$RELEASE_RUNNER" ]]; then
-            python3 "$RELEASE_RUNNER" report
+          if [[ -n "${RELEASE_MAKEFILE:-}" && -f "$RELEASE_MAKEFILE" ]]; then
+            make -f "$RELEASE_MAKEFILE" release-report
           fi
 
       - name: Upload sanitized stdout
