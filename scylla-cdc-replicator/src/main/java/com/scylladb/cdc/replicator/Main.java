@@ -113,8 +113,8 @@ public class Main {
         parser.addArgument("-t", "--table").required(true).help("Table names, provided as a comma delimited string");
         parser.addArgument("-s", "--source").required(true).help("Address of a node in source cluster");
         parser.addArgument("-d", "--destination").required(true).help("Address of a node in destination cluster");
-        parser.addArgument("-cl", "--consistency-level").setDefault("quorum")
-                .help("Consistency level of writes. QUORUM by default");
+        parser.addArgument("-cl", "--consistency-level").setDefault("local_quorum")
+                .help("Consistency level of writes. LOCAL_QUORUM by default");
 
         try {
             return parser.parseArgs(args);

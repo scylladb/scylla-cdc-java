@@ -185,11 +185,12 @@ public final class CDCConsumer implements AutoCloseable {
          * old {@code USING TIMESTAMP} values, such as backfills, can fall outside any practical
          * confidence window.
          *
-         * <p>By default, CDC log reads use QUORUM. Base-table writes need a consistency level whose
-         * acknowledged replicas overlap those reads (QUORUM, or LOCAL_QUORUM in a single-DC cluster).
-         * Writes at ONE, LOCAL_ONE (the Java driver default), ANY, or LOCAL_QUORUM across DCs may not
-         * yet be visible to a QUORUM read. A shorter window reduces latency at the risk of missing
-         * late entries. Query-window size affects latency separately.
+         * <p>By default, CDC log reads use LOCAL_QUORUM. For a guaranteed overlap with
+         * acknowledged base-table writes, use LOCAL_QUORUM with the write and read coordinators
+         * in the same datacenter, or write at ALL. Writes acknowledged only in another datacenter,
+         * or at ONE, LOCAL_ONE, or ANY, may not yet be visible to a LOCAL_QUORUM read. A shorter
+         * window reduces latency at the risk of missing late entries. Query-window size affects
+         * latency separately.
          *
          * @param confidenceWindowSizeMs confidence window in milliseconds
          * @return this builder

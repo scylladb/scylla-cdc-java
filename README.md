@@ -88,12 +88,17 @@ allow for time spent in the client queue, retries, and speculative executions af
 assignment. Writes using explicitly old `USING TIMESTAMP` values, such as backfills, can fall
 outside any practical confidence window.
 
-By default, the CDC log is read at QUORUM. Writes to the base table need a consistency level
-whose acknowledged replicas overlap those reads (QUORUM, or LOCAL_QUORUM in a single-DC cluster).
-Writes at ONE, LOCAL_ONE (the Java driver default), ANY, or LOCAL_QUORUM across DCs may not
-yet be visible to a QUORUM read. The timeout is a starting point, not a guarantee that every
-write will be visible by then. Shorter confidence windows can reduce latency but increase the
-risk of missing late entries; `withQueryTimeWindowSizeMs()` affects latency separately.
+By default, the CDC log is read at LOCAL_QUORUM. For a guaranteed overlap between
+acknowledged base-table writes and CDC reads, use LOCAL_QUORUM with the write and read
+coordinators in the same datacenter, or write at ALL. Writes acknowledged only in another
+datacenter, or at ONE, LOCAL_ONE, or ANY, may not yet be visible to a LOCAL_QUORUM read.
+The timeout is a starting point, not a guarantee that every write will be visible by then.
+Shorter confidence windows can reduce latency but increase the risk of missing late entries;
+`withQueryTimeWindowSizeMs()` affects latency separately.
+
+The lower-level `CQLConfiguration.Builder.withConsistencyLevel()` option overrides CDC log
+read consistency. Generation and topology queries use a separate policy: QUORUM when the
+driver knows more than one host, and ONE otherwise.
 
 ## Checkpoint persistence (CDCStateStore)
 

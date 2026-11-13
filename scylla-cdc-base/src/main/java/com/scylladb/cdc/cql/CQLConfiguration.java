@@ -8,7 +8,7 @@ import java.util.Collection;
 import java.util.List;
 
 public class CQLConfiguration {
-    private static final ConsistencyLevel DEFAULT_CONSISTENCY_LEVEL = ConsistencyLevel.QUORUM;
+    private static final ConsistencyLevel DEFAULT_CONSISTENCY_LEVEL = ConsistencyLevel.LOCAL_QUORUM;
     private static final AddressTranslatorType DEFAULT_ADDRESS_TRANSLATOR = AddressTranslatorType.NONE;
 
     /**
@@ -118,7 +118,7 @@ public class CQLConfiguration {
     }
 
     /**
-     * Returns the configured consistency level.
+     * Returns the configured consistency level, which defaults to LOCAL_QUORUM.
      * <p>
      * This consistency level is used in read queries to the
      * CDC log table. The queries to system tables, such
@@ -253,7 +253,7 @@ public class CQLConfiguration {
         }
 
         /**
-         * Sets the consistency level of CDC table read queries.
+         * Sets the consistency level of CDC table read queries (LOCAL_QUORUM by default).
          * <p>
          * This consistency level is used only for read queries
          * to the CDC log table. The queries to system tables, such
