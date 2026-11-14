@@ -142,13 +142,16 @@ public class BaseScyllaIntegrationTest {
      */
     public Driver3Session buildLibrarySession() {
         if (librarySession == null) {
-            CQLConfiguration cqlConfiguration = CQLConfiguration.builder()
-                    .addContactPoint(hostname, port)
-                    .build();
+            CQLConfiguration cqlConfiguration = libraryConfigurationBuilder().build();
             librarySession = new Driver3Session(cqlConfiguration);
         }
 
         return librarySession;
+    }
+
+    /** Returns a configuration builder using the fixture's parsed contact point. */
+    protected CQLConfiguration.Builder libraryConfigurationBuilder() {
+        return CQLConfiguration.builder().addContactPoint(hostname, port);
     }
 
     /**
