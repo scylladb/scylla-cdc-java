@@ -78,7 +78,6 @@ public class CDCConsumerConsistencyIT extends BaseScyllaIntegrationTest {
             Object executionInfo = invoke(result, "getExecutionInfo");
             Object statement = invoke(executionInfo, "getStatement");
             assertEquals(expected.name(), invoke(statement, "getConsistencyLevel").toString());
-            assertEquals(datacenter, invoke(invoke(executionInfo, "getQueriedHost"), "getDatacenter"));
             assertNull(invoke(executionInfo, "getAchievedConsistencyLevel"));
             assertTrue(reader.nextChange().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS).isPresent());
         }

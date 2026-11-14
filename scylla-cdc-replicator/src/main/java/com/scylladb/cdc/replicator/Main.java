@@ -18,6 +18,7 @@ import sun.misc.Signal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -27,19 +28,17 @@ public class Main {
         // Parse command-line arguments.
         Namespace parsedArguments = parseArguments(args);
         Mode replicatorMode = Mode.fromString(parsedArguments.getString("mode"));
-        String source = parsedArguments.getString("source");
-        String destination = parsedArguments.getString("destination");
-        String keyspace = parsedArguments.getString("keyspace");
-        String table = parsedArguments.getString("table");
-        ConsistencyLevel consistencyLevel = ConsistencyLevel.valueOf(parsedArguments.getString("consistency_level").toUpperCase());
 
         // Start replicating changes from source cluster to destination cluster
         // of selected tables.
-        startReplicator(replicatorMode, source, destination, keyspace, table, consistencyLevel);
+        startReplicator(replicatorMode, parsedArguments);
     }
 
-    private static void startReplicator(Mode mode, String source, String destination, String keyspace, String tables,
-                                        ConsistencyLevel consistencyLevel) {
+    private static void startReplicator(Mode mode, Namespace parsedArguments) {
+        String destination = parsedArguments.getString("destination");
+        String keyspace = parsedArguments.getString("keyspace");
+        String tables = parsedArguments.getString("table");
+        ConsistencyLevel consistencyLevel = ConsistencyLevel.valueOf(parsedArguments.getString("consistency_level").toUpperCase());
         // Connect to the destination cluster.
         try (Cluster destinationCluster = Cluster.builder().addContactPoint(destination).build();
              Session destinationSession = destinationCluster.connect()) {
@@ -54,8 +53,7 @@ public class Main {
                 // Start a CDCConsumer for each replicated table,
                 // which will read the RawChanges and apply them
                 // onto the destination cluster.
-                CDCConsumer consumer = CDCConsumer.builder()
-                        .addContactPoint(source)
+                CDCConsumer consumer = sourceConsumerBuilder(parsedArguments)
                         .withConsumerProvider((threadId) ->
                                 new ReplicatorConsumer(mode, destinationCluster, destinationSession,
                                         keyspace, table, consistencyLevel))
@@ -106,7 +104,20 @@ public class Main {
         }
     }
 
-    private static Namespace parseArguments(String[] args) {
+    static CDCConsumer.Builder sourceConsumerBuilder(Namespace parsedArguments) {
+        CDCConsumer.Builder builder = CDCConsumer.builder().addContactPoint(parsedArguments.getString("source"));
+        String readConsistency = parsedArguments.getString("source_read_consistency");
+        if (readConsistency != null) {
+            builder.withConsistencyLevel(CQLConfiguration.ConsistencyLevel.valueOf(readConsistency.toUpperCase(Locale.ROOT)));
+        }
+        String datacenter = parsedArguments.getString("source_datacenter");
+        if (datacenter != null) {
+            builder.withLocalDCName(datacenter);
+        }
+        return builder;
+    }
+
+    static Namespace parseArguments(String[] args) {
         ArgumentParser parser = ArgumentParsers.newFor("./scylla-cdc-replicator").build().defaultHelp(true);
         parser.addArgument("-m", "--mode").setDefault("delta").help("Mode of operation. Can be delta, preimage or postimage. Default is delta");
         parser.addArgument("-k", "--keyspace").required(true).help("Keyspace name");
@@ -115,6 +126,10 @@ public class Main {
         parser.addArgument("-d", "--destination").required(true).help("Address of a node in destination cluster");
         parser.addArgument("-cl", "--consistency-level").setDefault("local_quorum")
                 .help("Consistency level of writes. LOCAL_QUORUM by default");
+        parser.addArgument("--source-read-consistency")
+                .help("Consistency level of source CDC reads. Uses the library default (LOCAL_QUORUM) when omitted");
+        parser.addArgument("--source-datacenter")
+                .help("Datacenter for source CDC queries. Query routing can use any datacenter when omitted");
 
         try {
             return parser.parseArgs(args);
