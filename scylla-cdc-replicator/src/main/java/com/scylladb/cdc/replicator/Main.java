@@ -16,12 +16,14 @@ import net.sourceforge.argparse4j.inf.Namespace;
 import sun.misc.Signal;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
 
 public class Main {
     public static void main(String[] args) {
@@ -118,6 +120,17 @@ public class Main {
     }
 
     static Namespace parseArguments(String[] args) {
+        ArgumentParser parser = argumentParser();
+        try {
+            return parser.parseArgs(args);
+        } catch (ArgumentParserException e) {
+            parser.handleError(e);
+            System.exit(-1);
+            return null;
+        }
+    }
+
+    static ArgumentParser argumentParser() {
         ArgumentParser parser = ArgumentParsers.newFor("./scylla-cdc-replicator").build().defaultHelp(true);
         parser.addArgument("-m", "--mode").setDefault("delta").help("Mode of operation. Can be delta, preimage or postimage. Default is delta");
         parser.addArgument("-k", "--keyspace").required(true).help("Keyspace name");
@@ -127,17 +140,15 @@ public class Main {
         parser.addArgument("-cl", "--consistency-level").setDefault("local_quorum")
                 .help("Consistency level of writes. LOCAL_QUORUM by default");
         parser.addArgument("--source-read-consistency")
+                .type((argumentParser, argument, value) -> value.toLowerCase(Locale.ROOT))
+                .choices(Arrays.stream(CQLConfiguration.ConsistencyLevel.values())
+                        .map(consistency -> consistency.name().toLowerCase(Locale.ROOT))
+                        .collect(Collectors.toList()))
                 .help("Consistency level of source CDC reads. Uses the library default (LOCAL_QUORUM) when omitted");
         parser.addArgument("--source-datacenter")
                 .help("Datacenter for source CDC queries. Query routing can use any datacenter when omitted");
 
-        try {
-            return parser.parseArgs(args);
-        } catch (ArgumentParserException e) {
-            parser.handleError(e);
-            System.exit(-1);
-            return null;
-        }
+        return parser;
     }
 
     public enum Mode {

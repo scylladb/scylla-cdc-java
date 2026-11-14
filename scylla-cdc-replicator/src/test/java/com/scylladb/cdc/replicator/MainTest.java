@@ -2,10 +2,12 @@ package com.scylladb.cdc.replicator;
 
 import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.lib.CDCConsumer;
+import net.sourceforge.argparse4j.inf.ArgumentParserException;
 import net.sourceforge.argparse4j.inf.Namespace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -15,6 +17,8 @@ import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MainTest {
     @Test
@@ -59,11 +63,39 @@ public class MainTest {
         assertNull(source.getLocalDCName());
     }
 
-    private static Namespace parseArguments(String... options) {
+    @ParameterizedTest
+    @ValueSource(strings = {"qurom", "each_quorum", "serial", "local_serial", "any"})
+    public void invalidSourceConsistencyIsRejectedDuringParsing(String consistency) {
+        ArgumentParserException error = assertThrows(ArgumentParserException.class,
+                () -> Main.argumentParser().parseArgs(arguments("--source-read-consistency", consistency)));
+
+        assertTrue(error.getMessage().contains(consistency));
+    }
+
+    @ParameterizedTest
+    @EnumSource(CQLConfiguration.ConsistencyLevel.class)
+    public void uppercaseSourceConsistencyIsAccepted(CQLConfiguration.ConsistencyLevel consistency) throws Exception {
+        CQLConfiguration source = sourceConfiguration(parseArguments("--source-read-consistency", consistency.name()));
+
+        assertEquals(consistency, source.getConsistencyLevel());
+    }
+
+    @Test
+    public void sourceConsistencyHelpListsSupportedValues() {
+        String help = Main.argumentParser().formatHelp();
+
+        assertTrue(help.contains("{local_one,one,two,three,local_quorum,quorum,all}"));
+    }
+
+    private static Namespace parseArguments(String... options) throws ArgumentParserException {
+        return Main.argumentParser().parseArgs(arguments(options));
+    }
+
+    private static String[] arguments(String... options) {
         List<String> arguments = new ArrayList<>(Arrays.asList(
                 "-k", "ks", "-t", "table", "-s", "127.0.0.1", "-d", "127.0.0.2"));
         arguments.addAll(Arrays.asList(options));
-        return Main.parseArguments(arguments.toArray(new String[0]));
+        return arguments.toArray(new String[0]);
     }
 
     private static CQLConfiguration sourceConfiguration(Namespace arguments) throws Exception {

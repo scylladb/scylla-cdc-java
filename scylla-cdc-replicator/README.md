@@ -15,13 +15,16 @@ cd scylla-cdc-replicator
 
 Command-line arguments:
 ```
-usage: ./scylla-cdc-replicator [-h] [-m MODE] -k KEYSPACE -t TABLE -s SOURCE -d DESTINATION
-                             [-cl CONSISTENCY_LEVEL] [--source-read-consistency SOURCE_READ_CONSISTENCY]
-                             [--source-datacenter SOURCE_DATACENTER]
+usage: ./scylla-cdc-replicator [-h] [-m MODE] -k KEYSPACE -t TABLE
+                               -s SOURCE -d DESTINATION
+                               [-cl CONSISTENCY_LEVEL]
+                               [--source-read-consistency {local_one,one,two,three,local_quorum,quorum,all}]
+                               [--source-datacenter SOURCE_DATACENTER]
 
 named arguments:
   -h, --help             show this help message and exit
-  -m MODE, --mode MODE   Mode of operation. Can be delta, preimage or postimage. Default is delta (default: delta)
+  -m MODE, --mode MODE   Mode of  operation.  Can  be  delta,  preimage  or
+                         postimage. Default is delta (default: delta)
   -k KEYSPACE, --keyspace KEYSPACE
                          Keyspace name
   -t TABLE, --table TABLE
@@ -31,11 +34,14 @@ named arguments:
   -d DESTINATION, --destination DESTINATION
                          Address of a node in destination cluster
   -cl CONSISTENCY_LEVEL, --consistency-level CONSISTENCY_LEVEL
-                         Consistency level of writes. LOCAL_QUORUM by default (default: local_quorum)
-  --source-read-consistency SOURCE_READ_CONSISTENCY
-                         Consistency level of source CDC reads. Uses the library default (LOCAL_QUORUM) when omitted
+                         Consistency  level  of   writes.  LOCAL_QUORUM  by
+                         default (default: local_quorum)
+  --source-read-consistency {local_one,one,two,three,local_quorum,quorum,all}
+                         Consistency level of  source  CDC  reads. Uses the
+                         library default (LOCAL_QUORUM) when omitted
   --source-datacenter SOURCE_DATACENTER
-                         Datacenter for source CDC queries. Query routing can use any datacenter when omitted
+                         Datacenter for source  CDC  queries. Query routing
+                         can use any datacenter when omitted
 ```
 
 The source options affect CDC reads; `-cl` controls destination writes independently.
