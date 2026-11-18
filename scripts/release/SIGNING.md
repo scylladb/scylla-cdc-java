@@ -249,7 +249,7 @@ Before the first real release, confirm Java 11 validation (including Docker test
 Maven 3.9.16, publisher key registration and public certificate availability, the
 protected environment rules, and all four environment secrets. Check that base,
 driver3 and lib artifacts retain their main, sources and javadoc artifacts and
-that printer, replicator and state-redis examples are excluded. Review every
+that the printer, replicator and state-redis examples and scylla-cdc-driver4 are excluded. Review every
 prepared commit and annotated `scylla-cdc-<version>` tag signature against the exact
 subkey above. Only then approve automatic publication.
 
