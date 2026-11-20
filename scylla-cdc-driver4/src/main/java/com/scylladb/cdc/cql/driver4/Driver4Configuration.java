@@ -28,8 +28,9 @@ final class Driver4Configuration {
     /**
      * Builds the driver configuration for a library session.
      * <p>
-     * Only the driver's reference.conf is used as a fallback. Neither an application.conf nor
-     * {@code -Ddatastax-java-driver.*} system properties meant for the application's own sessions
+     * The fallback is every reference.conf the driver's class loader sees: the driver's own and
+     * those of libraries that extend it. An application.conf, {@code -Ddatastax-java-driver.*}
+     * system properties and environment variables meant for the application's own sessions do not
      * change the CDC session.
      */
     static DriverConfigLoader configLoader(CQLConfiguration configuration) {

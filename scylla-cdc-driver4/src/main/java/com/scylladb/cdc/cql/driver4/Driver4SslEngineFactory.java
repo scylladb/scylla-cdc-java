@@ -104,7 +104,8 @@ class Driver4SslEngineFactory implements SslEngineFactory {
     }
 
     /**
-     * Releases the context; only an {@code OPENSSL_REFCNT} context is reference-counted.
+     * Releases the context, which frees the native memory of an OpenSSL context; a JDK context is
+     * not reference-counted, so releasing it does nothing.
      */
     @Override
     public void close() {
