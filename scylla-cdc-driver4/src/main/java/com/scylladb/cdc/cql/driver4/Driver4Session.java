@@ -31,8 +31,11 @@ public class Driver4Session implements AutoCloseable {
             logger.atWarning().log("%s", setting);
         }
         consistencyLevel = Driver4Configuration.consistencyLevel(cqlConfiguration.getConsistencyLevel());
+        driverSession = configure(CqlSession.builder(), cqlConfiguration).build();
+    }
 
-        CqlSessionBuilder builder = CqlSession.builder()
+    static CqlSessionBuilder configure(CqlSessionBuilder builder, CQLConfiguration cqlConfiguration) {
+        builder = builder
                 .withConfigLoader(Driver4Configuration.configLoader(cqlConfiguration))
                 .addContactPoints(cqlConfiguration.contactPoints);
         if (cqlConfiguration.user != null && cqlConfiguration.password != null) {
@@ -41,7 +44,7 @@ public class Driver4Session implements AutoCloseable {
         if (cqlConfiguration.sslConfig != null) {
             builder = builder.withSslEngineFactory(new Driver4SslEngineFactory(cqlConfiguration.sslConfig));
         }
-        driverSession = builder.build();
+        return builder;
     }
 
     protected CqlSession getDriverSession() {
