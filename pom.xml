@@ -15,12 +15,14 @@
         <module>scylla-cdc-replicator</module>
         <module>scylla-cdc-printer</module>
         <module>scylla-cdc-driver3</module>
+        <module>scylla-cdc-driver4</module>
         <module>examples/scylla-cdc-state-redis</module>
     </modules>
 
     <properties>
         <gpg.bestPractices>true</gpg.bestPractices>
         <scylla.driver.version>3.11.5.20</scylla.driver.version>
+        <scylla.driver4.version>4.19.4.0</scylla.driver4.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
@@ -37,6 +39,11 @@
                 <groupId>com.scylladb</groupId>
                 <artifactId>scylla-driver-core</artifactId>
                 <version>${scylla.driver.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.scylladb</groupId>
+                <artifactId>java-driver-core</artifactId>
+                <version>${scylla.driver4.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.junit</groupId>
@@ -226,7 +233,8 @@
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>
-                            <excludeArtifacts>scylla-cdc-printer,scylla-cdc-replicator,scylla-cdc-state-redis</excludeArtifacts>
+                            <!-- scylla-cdc-driver4 is published once it reaches parity (DRIVER-1288). -->
+                            <excludeArtifacts>scylla-cdc-printer,scylla-cdc-replicator,scylla-cdc-state-redis,scylla-cdc-driver4</excludeArtifacts>
                             <autoPublish>${release.autopublish}</autoPublish>
                             <waitUntil>${release.waitUntil}</waitUntil>
                             <waitMaxTime>${release.waitMaxTime}</waitMaxTime>
