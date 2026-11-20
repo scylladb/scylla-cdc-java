@@ -48,7 +48,7 @@ public class BaseScyllaTabletsIntegrationTest {
                     + "AND tablets = {'initial': 2}");
         } catch (QueryValidationException e) {
             if (e.getMessage() != null && e.getMessage().contains("Unknown property 'tablets'")) {
-                skip("This ScyllaDB version does not support tablets: " + e.getMessage());
+                failOnLatestElseAbort("This ScyllaDB version does not support tablets: " + e.getMessage());
             }
             throw e;
         }
@@ -59,13 +59,17 @@ public class BaseScyllaTabletsIntegrationTest {
         } catch (QueryValidationException e) {
             if (e.getMessage() != null && e.getMessage().contains("Cannot create CDC log for a table")
                     && e.getMessage().contains("because keyspace uses tablets")) {
-                skip("This ScyllaDB version does not support CDC with tablets: " + e.getMessage());
+                failOnLatestElseAbort("This ScyllaDB version does not support CDC with tablets: " + e.getMessage());
             }
             throw e;
         }
     }
 
-    private void skip(String reason) {
+    /**
+     * Aborts the test, so it is reported as skipped, or fails it on {@code latest}, where every
+     * capability probed in {@link #beforeEach()} must be present.
+     */
+    private void failOnLatestElseAbort(String reason) {
         if ("latest".equals(scyllaVersion)) {
             fail("ScyllaDB latest must support CDC with tablets. " + reason);
         }
