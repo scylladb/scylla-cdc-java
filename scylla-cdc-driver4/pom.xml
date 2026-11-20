@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>scylla-cdc</artifactId>
+        <groupId>com.scylladb</groupId>
+        <version>1.3.19-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>scylla-cdc-driver4</artifactId>
+    <name>Java Library for Scylla CDC - driver 4.x</name>
+    <description>A CQL backend for scylla-cdc-java using Scylla Java Driver 4.x.</description>
+    <packaging>jar</packaging>
+
+    <properties>
+        <!-- Integration tests. Other modules use 4301 and 4302, so this one can run alongside them. -->
+        <docker.skip>false</docker.skip>
+        <scylla.docker.port>4303</scylla.docker.port>
+        <scylla.docker.version>latest</scylla.docker.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.scylladb</groupId>
+            <artifactId>scylla-cdc-base</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.scylladb</groupId>
+            <artifactId>java-driver-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.flogger</groupId>
+            <artifactId>flogger-system-backend</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>0.48.1</version>
+                <configuration>
+                    <imagePullPolicy>Always</imagePullPolicy>
+                    <images>
+                        <image>
+                            <alias>scylla</alias>
+                            <name>scylladb/scylla:${scylla.docker.version}</name>
+                            <run>
+                                <containerNamePattern>scylla-cdc-driver4-%i</containerNamePattern>
+                                <ports>
+                                    <port>${scylla.docker.port}:9042</port>
+                                </ports>
+                                <wait>
+                                    <!-- Wait for Scylla to start up. -->
+                                    <log>init - serving</log>
+                                    <time>90000</time>
+                                </wait>
+                                <cpuSet>0</cpuSet>
+                            </run>
+                        </image>
+                    </images>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>start</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>start</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>stop</id>
+                        <phase>post-integration-test</phase>
+                        <goals>
+                            <goal>stop</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.6.1</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <scylla.docker.hostname>${docker.host.address}</scylla.docker.hostname>
+                        <scylla.docker.port>${scylla.docker.port}</scylla.docker.port>
+                        <scylla.docker.version>${scylla.docker.version}</scylla.docker.version>
+                    </systemPropertyVariables>
+                    <trimStackTrace>false</trimStackTrace>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>skip-integration-tests</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+                <property>
+                    <name>skipITs</name>
+                </property>
+            </activation>
+            <properties>
+                <docker.skip>true</docker.skip>
+            </properties>
+        </profile>
+    </profiles>
+</project>
