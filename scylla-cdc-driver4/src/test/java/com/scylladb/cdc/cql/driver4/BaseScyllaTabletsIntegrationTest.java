@@ -58,7 +58,7 @@ public class BaseScyllaTabletsIntegrationTest {
             driverSession.execute("DROP TABLE ks.cdc_probe");
         } catch (QueryValidationException e) {
             if (e.getMessage() != null && e.getMessage().contains("Cannot create CDC log for a table")
-                    && e.getMessage().contains("because keyspace uses tablets")) {
+                    && e.getMessage().contains("keyspace uses tablets")) {
                 failOnLatestElseAbort("This ScyllaDB version does not support CDC with tablets: " + e.getMessage());
             }
             throw e;

@@ -7,6 +7,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
+import io.netty.util.ReferenceCountUtil;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLEngine;
@@ -102,8 +103,12 @@ class Driver4SslEngineFactory implements SslEngineFactory {
         return context.newEngine(ByteBufAllocator.DEFAULT);
     }
 
+    /**
+     * Releases the context; only an {@code OPENSSL_REFCNT} context is reference-counted.
+     */
     @Override
     public void close() {
+        ReferenceCountUtil.release(context);
     }
 
     private static KeyStore createKeyStore(String path, String password) {

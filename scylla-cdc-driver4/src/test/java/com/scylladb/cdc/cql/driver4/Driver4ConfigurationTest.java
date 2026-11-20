@@ -9,6 +9,7 @@ import com.datastax.oss.driver.internal.core.config.typesafe.DefaultDriverConfig
 import com.scylladb.cdc.cql.CQLConfiguration;
 import com.scylladb.cdc.cql.ReplicaOrdering;
 import com.typesafe.config.ConfigFactory;
+import com.typesafe.config.ConfigResolveOptions;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -32,9 +33,14 @@ public class Driver4ConfigurationTest {
         return CQLConfiguration.builder().addContactPoint("127.0.0.1");
     }
 
+    /**
+     * The driver's reference profile without system properties, as the library loads it. Fails if
+     * {@code reference.conf} is missing.
+     */
     private static DriverExecutionProfile referenceProfile() {
         try (DriverConfigLoader loader = new DefaultDriverConfigLoader(
-                () -> ConfigFactory.defaultReference(CqlSession.class.getClassLoader())
+                () -> ConfigFactory.parseResources(CqlSession.class.getClassLoader(), "reference.conf")
+                        .resolve(ConfigResolveOptions.noSystem())
                         .getConfig(DefaultDriverConfigLoader.DEFAULT_ROOT_PATH))) {
             return loader.getInitialConfig().getDefaultProfile();
         }
@@ -72,6 +78,8 @@ public class Driver4ConfigurationTest {
         String protocolVersion = "datastax-java-driver." + DefaultDriverOption.PROTOCOL_VERSION.getPath();
         String requestTimeout = "datastax-java-driver." + DefaultDriverOption.REQUEST_TIMEOUT.getPath();
         Duration referenceTimeout = referenceProfile().getDuration(DefaultDriverOption.REQUEST_TIMEOUT);
+        String originalProtocolVersion = System.getProperty(protocolVersion);
+        String originalRequestTimeout = System.getProperty(requestTimeout);
         System.setProperty(protocolVersion, "V5");
         System.setProperty(requestTimeout, "7 seconds");
         ConfigFactory.invalidateCaches();
@@ -87,9 +95,17 @@ public class Driver4ConfigurationTest {
             assertEquals("V4", profile.getString(DefaultDriverOption.PROTOCOL_VERSION));
             assertEquals(referenceTimeout, profile.getDuration(DefaultDriverOption.REQUEST_TIMEOUT));
         } finally {
-            System.clearProperty(protocolVersion);
-            System.clearProperty(requestTimeout);
+            restoreProperty(protocolVersion, originalProtocolVersion);
+            restoreProperty(requestTimeout, originalRequestTimeout);
             ConfigFactory.invalidateCaches();
+        }
+    }
+
+    private static void restoreProperty(String name, String value) {
+        if (value == null) {
+            System.clearProperty(name);
+        } else {
+            System.setProperty(name, value);
         }
     }
 
