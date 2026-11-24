@@ -218,10 +218,37 @@ public class Driver4SslEngineFactoryTest {
                 .redirectErrorStream(true)
                 .redirectOutput(log)
                 .start();
-        assertTrue(process.waitFor(60, TimeUnit.SECONDS), "keytool finished");
+        try {
+            assertTrue(process.waitFor(60, TimeUnit.SECONDS), "keytool finished");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
+        } finally {
+            destroy(process);
+        }
         assertEquals(0, process.exitValue(),
                 () -> "keytool failed: " + new String(readAll(log.toPath()), StandardCharsets.UTF_8));
         return keyStore;
+    }
+
+    /**
+     * Kills a process that is still running and waits for it to exit, keeping the interrupt flag.
+     */
+    private static void destroy(Process process) {
+        if (!process.isAlive()) {
+            return;
+        }
+        process.destroyForcibly();
+        boolean interrupted = Thread.interrupted();
+        try {
+            process.waitFor(10, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            interrupted = true;
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     private static byte[] readAll(Path path) {

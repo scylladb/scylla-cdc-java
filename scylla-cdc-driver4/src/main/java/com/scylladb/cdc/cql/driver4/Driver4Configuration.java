@@ -100,7 +100,8 @@ final class Driver4Configuration {
         for (InetSocketAddress contactPoint : configuration.contactPoints) {
             if (contactPoint.getPort() != configuration.defaultPort) {
                 unsupported.add("defaultPort " + configuration.defaultPort + " is ignored: Java driver 4.x gives"
-                        + " discovered nodes the port of its first control connection, and contact point "
+                        + " discovered nodes the port they advertise or, if none, the port of its first control"
+                        + " connection, and contact point "
                         + contactPoint + " uses port " + contactPoint.getPort() + ".");
                 break;
             }

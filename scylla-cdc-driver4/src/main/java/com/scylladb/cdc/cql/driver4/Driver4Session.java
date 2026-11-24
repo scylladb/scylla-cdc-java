@@ -14,9 +14,10 @@ import com.scylladb.cdc.cql.CQLConfiguration;
  * <ul>
  *   <li>Without a local datacenter, the driver uses the datacenter of the first contact point
  *       it reaches; scylla-cdc-driver3 balanced over all datacenters.</li>
- *   <li>{@code defaultPort} is not applied to discovered nodes: the driver gives them the port of
- *       its first control connection, saved once when the session starts. A warning is logged when
- *       a contact point's port differs from {@code defaultPort}.</li>
+ *   <li>{@code defaultPort} is not applied to discovered nodes: the driver uses the port a node
+ *       advertises in the peers table or, when it advertises none (as on ScyllaDB), the port of its
+ *       first control connection. A warning is logged when a contact point's port differs from
+ *       {@code defaultPort}.</li>
  *   <li>Settings 4.x cannot honour are ignored, with a warning when the session is built.</li>
  * </ul>
  */
