@@ -37,6 +37,7 @@ import java.security.cert.CertificateException;
  */
 class Driver4SslEngineFactory implements SslEngineFactory {
     private final SslContext context;
+    private boolean closed;
 
     Driver4SslEngineFactory(SslConfig sslConfig) {
         SslContextBuilder builder = SslContextBuilder.forClient().endpointIdentificationAlgorithm(null);
@@ -95,21 +96,31 @@ class Driver4SslEngineFactory implements SslEngineFactory {
 
     @Override
     public SSLEngine newSslEngine(EndPoint remoteEndpoint) {
+        // Resolve outside the lock: it may block on DNS.
         SocketAddress address = remoteEndpoint.resolve();
-        if (address instanceof InetSocketAddress) {
-            InetSocketAddress socketAddress = (InetSocketAddress) address;
-            return context.newEngine(ByteBufAllocator.DEFAULT, socketAddress.getHostString(), socketAddress.getPort());
+        synchronized (this) {
+            // The driver may still open a connection while the session closes.
+            if (closed) {
+                throw new IllegalStateException("SSL engine factory is closed");
+            }
+            if (address instanceof InetSocketAddress) {
+                InetSocketAddress socketAddress = (InetSocketAddress) address;
+                return context.newEngine(ByteBufAllocator.DEFAULT, socketAddress.getHostString(), socketAddress.getPort());
+            }
+            return context.newEngine(ByteBufAllocator.DEFAULT);
         }
-        return context.newEngine(ByteBufAllocator.DEFAULT);
     }
 
     /**
-     * Releases the context, which frees the native memory of an OpenSSL context; a JDK context is
-     * not reference-counted, so releasing it does nothing.
+     * Releases the context once, which frees the native memory of an OpenSSL context; a JDK context
+     * is not reference-counted, so releasing it does nothing. Open engines keep their own reference.
      */
     @Override
-    public void close() {
-        ReferenceCountUtil.release(context);
+    public synchronized void close() {
+        if (!closed) {
+            closed = true;
+            ReferenceCountUtil.release(context);
+        }
     }
 
     private static KeyStore createKeyStore(String path, String password) {

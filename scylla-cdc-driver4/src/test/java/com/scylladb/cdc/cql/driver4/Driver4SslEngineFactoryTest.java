@@ -75,6 +75,16 @@ public class Driver4SslEngineFactoryTest {
     }
 
     @Test
+    public void testNoEngineAfterClose() {
+        Driver4SslEngineFactory factory = new Driver4SslEngineFactory(new SslConfig("JDK", null, null, null, null, null, null, null));
+        assertDoesNotThrow(() -> newEngine(factory));
+        factory.close();
+
+        assertThrows(IllegalStateException.class, () -> newEngine(factory));
+        assertDoesNotThrow(factory::close);
+    }
+
+    @Test
     public void testProviderIsTakenFromTheConfiguration() {
         assertDoesNotThrow(() -> new Driver4SslEngineFactory(new SslConfig("JDK", null, null, null, null, null, null, null)));
         assertThrows(IllegalArgumentException.class,
