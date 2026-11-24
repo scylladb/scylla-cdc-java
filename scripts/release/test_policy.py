@@ -322,8 +322,10 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(value('m:properties/m:maven.compiler.target'), '11')
         self.assertEqual(value('.//m:tagNameFormat'), 'scylla-cdc-@{project.version}')
         self.assertEqual(value('.//m:autoVersionSubmodules'), 'true')
+        # scylla-cdc-driver4 stays unpublished until DRIVER-1288.
         self.assertEqual(value('.//m:excludeArtifacts'),
-                         'scylla-cdc-printer,scylla-cdc-replicator,scylla-cdc-state-redis')
+                         'scylla-cdc-printer,scylla-cdc-replicator,scylla-cdc-state-redis,'
+                         'scylla-cdc-driver4')
         self.assertIn('jar-no-fork', [e.text for e in pom.findall('.//m:goal', ns)])
         self.assertIn('jar', [e.text for e in pom.findall('.//m:goal', ns)])
 
