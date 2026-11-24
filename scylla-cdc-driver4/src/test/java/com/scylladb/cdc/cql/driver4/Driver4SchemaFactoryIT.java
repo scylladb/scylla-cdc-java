@@ -1,29 +1,22 @@
 package com.scylladb.cdc.cql.driver4;
 
-import com.datastax.oss.driver.api.core.CqlSession;
-import com.datastax.oss.driver.api.core.cql.PreparedStatement;
-import com.datastax.oss.driver.api.core.cql.Row;
-import com.datastax.oss.driver.api.core.uuid.Uuids;
 import com.google.common.collect.Lists;
+import com.scylladb.cdc.model.TableName;
 import com.scylladb.cdc.model.worker.ChangeSchema;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * The port of {@code Driver3SchemaFactoryIT}, building the schema from a CDC log row read by the
- * worker's prepared statement.
+ * The port of {@code Driver3SchemaFactoryIT}.
  */
 @Tag("integration")
 public class Driver4SchemaFactoryIT extends BaseScyllaIntegrationTest {
@@ -241,22 +234,7 @@ public class Driver4SchemaFactoryIT extends BaseScyllaIntegrationTest {
         assertEquals(cdcLogType, changeSchema.getColumnDefinition(column).getCdcLogDataType(), column);
     }
 
-    /**
-     * Reads the first row of the CDC log of {@code ks.<table>} with the query the 3.x worker
-     * prepares, as the 4.x worker does not exist yet, and builds its change schema.
-     */
     private ChangeSchema getFirstChangeSchema(String table) throws Exception {
-        CqlSession session = buildLibrarySession().getDriverSession();
-        String cdcLog = "ks.\"" + table + "_scylla_cdc_log\"";
-        Row first = session.execute("SELECT \"cdc$stream_id\", \"cdc$time\" FROM " + cdcLog + " LIMIT 1").one();
-        assertNotNull(first, "the CDC log has a row");
-        ByteBuffer streamId = first.getByteBuffer(0);
-        UUID time = first.getUuid(1);
-
-        PreparedStatement select = session.prepare("SELECT * FROM " + cdcLog
-                + " WHERE \"cdc$stream_id\" = ? AND \"cdc$time\" > ? AND \"cdc$time\" <= ?");
-        Row row = session.execute(select.bind(streamId, Uuids.startOf(0), time)).one();
-        assertNotNull(row, "the prepared statement reads the row");
-        return Driver4SchemaFactory.getChangeSchema(row, session.getMetadata());
+        return getFirstRawChange(new TableName("ks", table)).getSchema();
     }
 }
