@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -51,6 +52,18 @@ public class Driver4WorkerCQLIT extends BaseScyllaIntegrationTest {
                 assertSame(changes.get(0).getSchema(), changes.get(ck).getSchema());
             }
         }
+    }
+
+    @Test
+    public void testExhaustedReaderStaysEmpty() throws Exception {
+        createPagedTable();
+        driverSession.execute("INSERT INTO ks.paged (pk, ck, v) VALUES (1, 0, 0)");
+
+        WorkerCQL.Reader reader = preparedWorker(buildLibrarySession()).createReader(getTaskWithFirstRow(PAGED))
+                .get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        assertEquals(0, next(reader).getAsObject("ck"));
+        assertEquals(Optional.empty(), reader.nextChange().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        assertEquals(Optional.empty(), reader.nextChange().get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     }
 
     @Test

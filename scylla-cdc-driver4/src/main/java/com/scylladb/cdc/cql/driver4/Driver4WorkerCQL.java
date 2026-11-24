@@ -163,6 +163,8 @@ public class Driver4WorkerCQL implements WorkerCQL {
         private void findNext(CompletableFuture<Optional<RawChange>> fut) {
             if (currentReaderIndex.get() >= readers.size()) {
                 fut.complete(Optional.empty());
+                // 3.x falls through here and fails on the missing reader.
+                return;
             }
 
             readers.get(currentReaderIndex.get()).nextChange()
