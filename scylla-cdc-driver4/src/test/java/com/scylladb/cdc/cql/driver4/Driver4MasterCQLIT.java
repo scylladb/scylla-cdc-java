@@ -113,11 +113,17 @@ public class Driver4MasterCQLIT extends BaseScyllaIntegrationTest {
         assertEquals(Optional.empty(), ttl(masterCQL, "ks", "no_ttl"));
         ExecutionException e = assertThrows(ExecutionException.class, () -> ttl(masterCQL, "ks", "plain"));
         assertTrue(e.getCause().getMessage().contains("does not have Scylla CDC enabled"), e.getCause().getMessage());
+        e = assertThrows(ExecutionException.class, () -> ttl(masterCQL, "no_such_ks", "t"));
+        assertEquals("Could not fetch the metadata of keyspace no_such_ks.", e.getCause().getMessage());
+        e = assertThrows(ExecutionException.class, () -> ttl(masterCQL, "ks", "no_such_table"));
+        assertEquals("Could not fetch the metadata of table ks.no_such_table.", e.getCause().getMessage());
     }
 
     @Test
     public void testNamesThatNeedQuotes() throws InterruptedException, ExecutionException, TimeoutException {
         driverSession.execute("CREATE TABLE ks.\"order\" (p int PRIMARY KEY, v int) WITH cdc = {'enabled': true, 'ttl': 3600}");
+        // A run killed before the finally block leaves the keyspace behind.
+        driverSession.execute("DROP KEYSPACE IF EXISTS \"select\"");
         createVnodeKeyspace("\"select\"");
         try {
             driverSession.execute("CREATE TABLE \"select\".events (p int PRIMARY KEY, v int) WITH cdc = {'enabled': true}");
