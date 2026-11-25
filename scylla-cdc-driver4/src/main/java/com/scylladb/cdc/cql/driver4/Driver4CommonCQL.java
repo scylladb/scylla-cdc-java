@@ -76,7 +76,12 @@ class Driver4CommonCQL {
     }
 
     private static String readString(ByteBuffer data) {
-        byte[] bytes = new byte[data.getInt()];
+        int length = data.getInt();
+        // Checked before allocating: a huge length would throw OutOfMemoryError, not fail the future.
+        if (length < 0 || length > data.remaining()) {
+            throw new IllegalArgumentException("Invalid string length in a map extension: " + length);
+        }
+        byte[] bytes = new byte[length];
         data.get(bytes);
         return new String(bytes, StandardCharsets.UTF_8);
     }

@@ -95,6 +95,15 @@ public class Driver4CommonCQLTest {
     }
 
     @Test
+    public void testDecodeTTLFailsOnInvalidStringLength() {
+        for (int length : new int[] {Integer.MAX_VALUE, -1}) {
+            ByteBuffer raw = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 1).putInt(4, length);
+            ExecutionException e = assertThrows(ExecutionException.class, Driver4CommonCQL.decodeTTL(TABLE, raw)::get);
+            assertEquals("Invalid string length in a map extension: " + length, e.getCause().getCause().getMessage());
+        }
+    }
+
+    @Test
     public void testParseTTL() throws Exception {
         assertEquals(Optional.of(86400L),
                 Driver4CommonCQL.parseTTL(TABLE, Collections.singletonMap("ttl", "86400")).get());
