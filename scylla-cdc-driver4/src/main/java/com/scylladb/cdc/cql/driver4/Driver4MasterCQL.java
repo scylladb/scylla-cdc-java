@@ -203,17 +203,24 @@ public final class Driver4MasterCQL extends BaseMasterCQL {
                         .thenApply(Driver4MasterCQL::minTimestamp));
     }
 
+    // Binds the stored name that validateTable resolves to: "Events" quoted is Events, KS unquoted is ks.
+    private static String internalName(String name) {
+        return Driver4CommonCQL.identifier(name).asInternal();
+    }
+
     @Override
     protected CompletableFuture<Optional<Date>> fetchSmallestTableGenerationAfter(TableName tableName, Date after) {
         return prepare(FETCH_SMALLEST_TABLE_GENERATION_AFTER)
-                .thenCompose(statement -> executeOne(statement.bind(tableName.keyspace, tableName.name, after.toInstant())))
+                .thenCompose(statement -> executeOne(statement.bind(
+                        internalName(tableName.keyspace), internalName(tableName.name), after.toInstant())))
                 .thenApply(Driver4MasterCQL::minTimestamp);
     }
 
     @Override
     protected CompletableFuture<Set<ByteBuffer>> fetchStreamsForTableGeneration(TableName tableName, Date generationStart) {
         return prepare(FETCH_TABLE_STREAMS).thenCompose(statement ->
-                executeMany(statement.bind(tableName.keyspace, tableName.name, generationStart.toInstant())).thenApply(
+                executeMany(statement.bind(internalName(tableName.keyspace), internalName(tableName.name),
+                        generationStart.toInstant())).thenApply(
                         rows -> rows.stream()
                                 .map(row -> row.getByteBuffer("stream_id"))
                                 .collect(Collectors.toSet())));

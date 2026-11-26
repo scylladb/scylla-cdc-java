@@ -45,20 +45,37 @@ public class Driver4MasterCQLTabletsIT extends BaseScyllaTabletsIntegrationTest 
                     .get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
             assertEquals(tableGeneration.getGenerationStart(), metadata.getStart());
-            assertEquals(currentStreams(tableGeneration.getGenerationStart().toDate().toInstant()), metadata.getStreams());
+            assertEquals(currentStreams("test", tableGeneration.getGenerationStart().toDate().toInstant()), metadata.getStreams());
             // The table was just created, so its first generation is still open.
             assertFalse(metadata.getEnd().isPresent(), "the only generation is open");
             session.assertAllIdempotent();
         }
     }
 
+    @Test
+    public void testTabletsMasterResolvesNamesAsValidation() throws InterruptedException, ExecutionException, TimeoutException {
+        driverSession.execute("CREATE TABLE ks.\"Events\"(p int PRIMARY KEY, v int) WITH cdc = {'enabled': true}");
+        MasterCQL masterCQL = new Driver4MasterCQL(buildLibrarySession());
+
+        // A quoted name is exact and an unquoted one is case-insensitive, as validateTable resolves them.
+        for (TableName tableName : new TableName[] {new TableName("ks", "\"Events\""), new TableName("KS", "\"Events\"")}) {
+            assertTrue(masterCQL.usesTablets(tableName));
+            GenerationId tableGeneration = masterCQL.fetchFirstTableGenerationId(tableName)
+                    .get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            GenerationMetadata metadata = masterCQL.fetchTableGenerationMetadata(tableName, tableGeneration)
+                    .get(SCYLLA_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            assertEquals(currentStreams("Events", tableGeneration.getGenerationStart().toDate().toInstant()),
+                    metadata.getStreams(), tableName.toString());
+        }
+    }
+
     /**
-     * Reads the streams of {@code ks.test} that are current at a timestamp, filtering in the test.
+     * Reads the streams of a table in {@code ks} that are current at a timestamp, filtering in the test.
      */
-    private Set<StreamId> currentStreams(Instant timestamp) {
+    private Set<StreamId> currentStreams(String table, Instant timestamp) {
         Set<StreamId> streams = new HashSet<>();
         for (Row row : driverSession.execute("SELECT timestamp, stream_state, stream_id FROM system.cdc_streams "
-                + "WHERE keyspace_name = 'ks' AND table_name = 'test'")) {
+                + "WHERE keyspace_name = 'ks' AND table_name = ?", table)) {
             if (timestamp.equals(row.getInstant("timestamp")) && row.getByte("stream_state") == 0) {
                 streams.add(new StreamId(row.getByteBuffer("stream_id")));
             }
