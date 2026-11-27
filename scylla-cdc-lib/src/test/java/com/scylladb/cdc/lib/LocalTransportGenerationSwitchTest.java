@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.function.BooleanSupplier;
@@ -54,6 +55,7 @@ class LocalTransportGenerationSwitchTest {
 
     private final FlakyStore store = new FlakyStore();
     private final FakeMasterCQL cql = new FakeMasterCQL();
+    private final PendingWorkerCQL workerCql = new PendingWorkerCQL();
     private final List<ScheduledThreadPoolExecutor> executors = new ArrayList<>();
     private final List<LocalTransport> transports = new ArrayList<>();
 
@@ -186,6 +188,98 @@ class LocalTransportGenerationSwitchTest {
         }
     }
 
+    @Test
+    void tabletRestartPastDoneGenerationDeletesItsCheckpoints() throws Exception {
+        consumeTabletG1ThenRestart();
+        // A checkpoint from before tablet streams got one task each, left behind by a failed delete.
+        TaskId legacy = TaskId.legacyTabletTask(G1.getId(), TABLE);
+        consumedToEnd(Collections.singleton(legacy));
+        LocalTransport transport = newTransport();
+
+        new TableCDCController(TABLE, masterConfiguration(transport)).initCurrentGeneration();
+
+        assertTrue(storedOf(tabletTaskIds(G1)).isEmpty());
+        assertTrue(storedOf(Collections.singleton(legacy)).isEmpty());
+        assertEquals(Optional.of(G2.getId()), store.loadGenerationId(TABLE));
+        assertEquals(tabletTaskIds(G2), storedOf(tabletTaskIds(G2)));
+    }
+
+    @Test
+    void vnodeRestartPastDoneGenerationDeletesItsCheckpoints() throws Exception {
+        cql.generations = List.of(G1_OPEN);
+        LocalTransport before = newTransport();
+        Thread first = runVnodeMaster(before);
+        await(() -> storedOf(vnodeTaskIds(G1)).equals(vnodeTaskIds(G1)));
+        first.interrupt();
+        first.join(5_000);
+        before.stop();
+        consumedToEnd(vnodeTaskIds(G1));
+        cql.generations = List.of(G1, G2);
+
+        Thread restarted = runVnodeMaster(newTransport());
+        try {
+            await(() -> store.loadGenerationId().equals(Optional.of(G2.getId()))
+                    && storedOf(vnodeTaskIds(G1)).isEmpty()
+                    && storedOf(vnodeTaskIds(G2)).equals(vnodeTaskIds(G2)));
+        } finally {
+            restarted.interrupt();
+            restarted.join(5_000);
+        }
+    }
+
+    @Test
+    void restartDeletesSkippedGenerationEvenIfWorkerStartFails() throws Exception {
+        consumeTabletG1ThenRestart();
+        workerCql.prepareFailure = new ExecutionException(new IllegalStateException("injected"));
+        LocalTransport transport = newTransport();
+
+        assertThrows(RuntimeException.class,
+                () -> new TableCDCController(TABLE, masterConfiguration(transport)).initCurrentGeneration());
+
+        assertTrue(storedOf(tabletTaskIds(G1)).isEmpty());
+        assertEquals(Optional.of(G2.getId()), store.loadGenerationId(TABLE));
+    }
+
+    @Test
+    void restartFailedDeleteStillStartsTheNewGeneration() throws Exception {
+        consumeTabletG1ThenRestart();
+        store.failDelete = true;
+        LocalTransport transport = newTransport();
+
+        new TableCDCController(TABLE, masterConfiguration(transport)).initCurrentGeneration();
+
+        assertEquals(Optional.of(G2.getId()), store.loadGenerationId(TABLE));
+        assertEquals(tabletTaskIds(G2), storedOf(tabletTaskIds(G2)));
+    }
+
+    @Test
+    void restartRetryAfterFailedSaveDeletesSkippedGeneration() throws Exception {
+        consumeTabletG1ThenRestart();
+        LocalTransport transport = newTransport();
+        store.failGenerationSave = true;
+        assertThrows(IllegalStateException.class,
+                () -> new TableCDCController(TABLE, masterConfiguration(transport)).initCurrentGeneration());
+        assertEquals(tabletTaskIds(G1), storedOf(tabletTaskIds(G1)));
+        store.failGenerationSave = false;
+
+        // Master.run retries in-process: same transport, new model, workers stopped first.
+        transport.stopWorkers();
+        new TableCDCController(TABLE, masterConfiguration(transport)).initCurrentGeneration();
+
+        assertTrue(storedOf(tabletTaskIds(G1)).isEmpty());
+        assertEquals(Optional.of(G2.getId()), store.loadGenerationId(TABLE));
+    }
+
+    // Consumes G1 to its end with one transport, stops it, and closes G1; the next transport is the restart.
+    private void consumeTabletG1ThenRestart() throws Exception {
+        cql.tableGenerations = List.of(G1_OPEN);
+        LocalTransport before = newTransport();
+        new TableCDCController(TABLE, masterConfiguration(before)).initCurrentGeneration();
+        before.stop();
+        consumedToEnd(tabletTaskIds(G1));
+        cql.tableGenerations = List.of(G1, G2);
+    }
+
     private LocalTransport newTransport() {
         Supplier<ScheduledExecutorService> executorSupplier = () -> {
             ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
@@ -194,7 +288,7 @@ class LocalTransportGenerationSwitchTest {
             return executor;
         };
         LocalTransport transport = new LocalTransport(WorkerConfiguration.builder()
-                .withCQL(new PendingWorkerCQL())
+                .withCQL(workerCql)
                 .withConsumer(change -> CompletableFuture.completedFuture(null)),
                 executorSupplier, new StoreBackedTaskStateBackend(store));
         transports.add(transport);
@@ -372,8 +466,13 @@ class LocalTransportGenerationSwitchTest {
     }
 
     private static final class PendingWorkerCQL implements WorkerCQL {
+        volatile ExecutionException prepareFailure;
+
         @Override
-        public void prepare(Set<TableName> tables) {
+        public void prepare(Set<TableName> tables) throws ExecutionException {
+            if (prepareFailure != null) {
+                throw prepareFailure;
+            }
         }
 
         @Override

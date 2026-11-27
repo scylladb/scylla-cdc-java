@@ -31,6 +31,10 @@ public class MockMasterTransport implements MasterTransport {
     private final Map<TableName, List<Map<TaskId, SortedSet<StreamId>>>> configureWorkersPerTableInvocations =
             new ConcurrentHashMap<>();
 
+    // Superseded tasks of each configureWorkers call that passed them, in call order
+    private final List<Set<TaskId>> supersededInvocations = Collections.synchronizedList(new ArrayList<>());
+    private final Map<TableName, List<Set<TaskId>>> supersededPerTableInvocations = new ConcurrentHashMap<>();
+
     private final AtomicInteger areTasksFullyConsumedUntilCount = new AtomicInteger(0);
 
     private final AtomicInteger stopWorkersCount = new AtomicInteger(0);
@@ -78,6 +82,15 @@ public class MockMasterTransport implements MasterTransport {
         return tableInvocations != null ? tableInvocations.size() : 0;
     }
 
+    public Set<TaskId> getSupersededTasks(int index) {
+        return index < supersededInvocations.size() ? supersededInvocations.get(index) : null;
+    }
+
+    public Set<TaskId> getSupersededTasks(TableName tableName, int index) {
+        List<Set<TaskId>> tableInvocations = supersededPerTableInvocations.get(tableName);
+        return tableInvocations != null && index < tableInvocations.size() ? tableInvocations.get(index) : null;
+    }
+
     public int getAreTasksFullyConsumedUntilCount() {
         return areTasksFullyConsumedUntilCount.get();
     }
@@ -107,6 +120,12 @@ public class MockMasterTransport implements MasterTransport {
     }
 
     @Override
+    public void configureWorkers(GroupedTasks workerTasks, Set<TaskId> superseded) throws InterruptedException {
+        supersededInvocations.add(superseded);
+        configureWorkers(workerTasks);
+    }
+
+    @Override
     public Optional<GenerationId> getCurrentGenerationId(TableName tableName) {
         return tableGenerationIds.getOrDefault(tableName, Optional.empty());
     }
@@ -125,6 +144,15 @@ public class MockMasterTransport implements MasterTransport {
         // Update the current generation ID for this table
         GenerationId genId = workerTasks.getGenerationId();
         tableGenerationIds.put(tableName, Optional.of(genId));
+    }
+
+    @Override
+    public void configureWorkers(TableName tableName, GroupedTasks workerTasks, Set<TaskId> superseded)
+            throws InterruptedException {
+        supersededPerTableInvocations.computeIfAbsent(tableName,
+                t -> Collections.synchronizedList(new ArrayList<>()))
+                .add(superseded);
+        configureWorkers(tableName, workerTasks);
     }
 
     @Override

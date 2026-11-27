@@ -1,5 +1,6 @@
 package com.scylladb.cdc.lib;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -77,11 +78,18 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
-    public synchronized void configureWorkers(GroupedTasks workerTasks)
+    public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
+        configureWorkers(workerTasks, Collections.emptySet());
+    }
+
+    @Override
+    public synchronized void configureWorkers(GroupedTasks workerTasks, Set<TaskId> superseded)
             throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
+        // Active tasks are known only in this process; after a restart the master supplies superseded.
         Set<TaskId> toDelete = new HashSet<>(backend.getActiveTasks());
+        toDelete.addAll(superseded);
         toDelete.removeAll(tasks.keySet());
 
         // Save before deleting: a stored generation without its checkpoints is re-read from its start.
@@ -99,17 +107,24 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
-    public synchronized void configureWorkers(TableName tableName, GroupedTasks workerTasks)
+    public void configureWorkers(TableName tableName, GroupedTasks workerTasks)
             throws InterruptedException {
+        configureWorkers(tableName, workerTasks, Collections.emptySet());
+    }
+
+    @Override
+    public synchronized void configureWorkers(TableName tableName, GroupedTasks workerTasks,
+                                              Set<TaskId> superseded) throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
-        // Determine which tasks for this table are being removed
-        Set<TaskId> toDelete = new HashSet<>();
+        // Active tasks are known only in this process; after a restart the master supplies superseded.
+        Set<TaskId> toDelete = new HashSet<>(superseded);
         for (TaskId taskId : backend.getActiveTasks()) {
-            if (taskId.getTable().equals(tableName) && !tasks.containsKey(taskId)) {
+            if (taskId.getTable().equals(tableName)) {
                 toDelete.add(taskId);
             }
         }
+        toDelete.removeAll(tasks.keySet());
 
         // Save before deleting: a stored generation without its checkpoints is re-read from its start.
         GenerationId generationId = workerTasks.getGenerationId();
