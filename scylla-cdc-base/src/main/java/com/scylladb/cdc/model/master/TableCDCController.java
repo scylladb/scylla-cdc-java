@@ -31,28 +31,36 @@ public class TableCDCController {
         this.tasks = null;
     }
 
-    private static GenerationId getGenerationId(TableName table, MasterConfiguration masterConfiguration) {
+    private static GenerationId getGenerationId(TableName table, MasterConfiguration masterConfiguration,
+                                                Optional<GenerationId> storedGenerationId) {
         // If we already have a current generation stored in the transport state, return it, and
         // otherwise fetch the first generation.
-        Optional<GenerationId> generationId = masterConfiguration.transport.getCurrentGenerationId(table);
-        if (generationId.isPresent()) {
-            return generationId.get();
+        if (storedGenerationId.isPresent()) {
+            return storedGenerationId.get();
         }
         return masterConfiguration.cql.fetchFirstTableGenerationId(table).join();
     }
 
     public void initCurrentGeneration() throws InterruptedException, ExecutionException {
         // Initialize the current generation metadata for this table.
-        GenerationId generationId = getGenerationId(table, masterConfiguration);
+        Optional<GenerationId> storedGenerationId = masterConfiguration.transport.getCurrentGenerationId(table);
+        GenerationId generationId = getGenerationId(table, masterConfiguration, storedGenerationId);
         this.currentGeneration = masterConfiguration.cql.fetchTableGenerationMetadata(table, generationId).get();
         this.tasks = createTasks(currentGeneration, table);
+        GroupedTasks storedTasks = tasks;
         logger.atInfo().log("Initialized current generation for table %s with ID %s.", table, generationId);
 
         while (generationDone()) {
             advanceToNextGeneration();
         }
 
-        configureWorkers();
+        Set<TaskId> superseded = Collections.emptySet();
+        if (storedGenerationId.isPresent() && !currentGeneration.getId().equals(generationId)) {
+            superseded = new HashSet<>(storedTasks.getTaskIds());
+            // The checkpoint of a generation consumed before tablet streams got one task each.
+            superseded.add(TaskId.legacyTabletTask(generationId, table));
+        }
+        configureWorkers(superseded);
     }
 
     public void advanceToNextGeneration() throws InterruptedException, ExecutionException {
@@ -162,11 +170,15 @@ public class TableCDCController {
      * @throws InterruptedException
      */
     public void configureWorkers() throws InterruptedException {
+        configureWorkers(Collections.emptySet());
+    }
+
+    private void configureWorkers(Set<TaskId> superseded) throws InterruptedException {
         logger.atFine().log("Configuring workers for table %s: %s",
                 table, currentGeneration.getId());
         tasks.getTasks().forEach((task, streams) -> logger.atFine().log("Created Task: %s with streams: %s", task, streams));
 
-        masterConfiguration.transport.configureWorkers(this.table, tasks);
+        masterConfiguration.transport.configureWorkers(this.table, tasks, superseded);
     }
 
     public void runMasterStep() throws InterruptedException, ExecutionException {

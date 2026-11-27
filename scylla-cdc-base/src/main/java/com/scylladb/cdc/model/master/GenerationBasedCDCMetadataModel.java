@@ -1,6 +1,7 @@
 package com.scylladb.cdc.model.master;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -30,11 +31,12 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
         this.masterConfiguration = Preconditions.checkNotNull(masterConfiguration);
     }
 
-    private GenerationId getGenerationId() throws InterruptedException, ExecutionException {
-        Optional<GenerationId> generationId = masterConfiguration.transport.getCurrentGenerationId();
-        if (generationId.isPresent()) {
-            return generationId.get();
+    private GenerationId getGenerationId(Optional<GenerationId> storedGenerationId)
+            throws InterruptedException, ExecutionException {
+        if (storedGenerationId.isPresent()) {
+            return storedGenerationId.get();
         }
+        Optional<GenerationId> generationId;
         while (true) {
             generationId = masterConfiguration.cql.fetchFirstGenerationId().get();
             if (generationId.isPresent()) {
@@ -117,9 +119,12 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
 
     @Override
     public void runMasterLoop() throws InterruptedException, ExecutionException {
-        GenerationId generationId = getGenerationId();
+        Optional<GenerationId> storedGenerationId = masterConfiguration.transport.getCurrentGenerationId();
+        GenerationId generationId = getGenerationId(storedGenerationId);
         GenerationMetadata generation = masterConfiguration.cql.fetchGenerationMetadata(generationId).get();
         GroupedTasks tasks = createTasks(generation);
+        // Passed as superseded if the first configure moves past the stored generation.
+        Set<TaskId> storedTasks = storedGenerationId.isPresent() ? tasks.getTaskIds() : Collections.emptySet();
         while (!Thread.currentThread().isInterrupted()) {
             while (generationDone(generation, tasks.getTaskIds())) {
                 generation = getNextGeneration(generation);
@@ -130,7 +135,9 @@ public class GenerationBasedCDCMetadataModel implements CDCMetadataModel {
             tasks.getTasks().forEach((task, streams) ->
                     logger.atFine().log("Created Task: %s with streams: %s", task, streams));
 
-            masterConfiguration.transport.configureWorkers(tasks);
+            Set<TaskId> superseded = generation.getId().equals(generationId) ? Collections.emptySet() : storedTasks;
+            storedTasks = Collections.emptySet();
+            masterConfiguration.transport.configureWorkers(tasks, superseded);
             while (!generationDone(generation, tasks.getTaskIds())) {
                 Thread.sleep(masterConfiguration.sleepBeforeGenerationDoneMs);
                 if (!generation.isClosed()) {

@@ -1,5 +1,6 @@
 package com.scylladb.cdc.lib;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -10,6 +11,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import com.google.common.base.Preconditions;
 import com.google.common.flogger.FluentLogger;
@@ -76,49 +78,59 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     }
 
     @Override
-    public synchronized void configureWorkers(GroupedTasks workerTasks)
+    public void configureWorkers(GroupedTasks workerTasks) throws InterruptedException {
+        configureWorkers(workerTasks, Collections.emptySet());
+    }
+
+    @Override
+    public synchronized void configureWorkers(GroupedTasks workerTasks, Set<TaskId> superseded)
             throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
-        // Determine which tasks are being removed and clean them up
+        // Active tasks are known only in this process; after a restart the master supplies superseded.
         Set<TaskId> toDelete = new HashSet<>(backend.getActiveTasks());
+        toDelete.addAll(superseded);
         toDelete.removeAll(tasks.keySet());
-        if (!toDelete.isEmpty()) {
-            backend.deleteTasks(toDelete);
-        }
 
-        currentGenerationId = Optional.ofNullable(workerTasks.getGenerationId());
-        if (workerTasks.getGenerationId() != null) {
-            backend.saveGenerationId(workerTasks.getGenerationId());
+        // Save before deleting: a stored generation without its checkpoints is re-read from its start.
+        GenerationId generationId = workerTasks.getGenerationId();
+        if (generationId != null) {
+            backend.saveGenerationId(generationId);
         }
+        currentGenerationId = Optional.ofNullable(generationId);
 
-        // Stop current worker if exists
+        // Stopped first, so no old task can write its checkpoint back after the delete.
         stopCurrentWorker();
+        deleteSupersededTasks(toDelete, generationId);
 
-        // Create and start a new worker
         startNewWorker(workerTasks);
     }
 
     @Override
-    public synchronized void configureWorkers(TableName tableName, GroupedTasks workerTasks)
+    public void configureWorkers(TableName tableName, GroupedTasks workerTasks)
             throws InterruptedException {
+        configureWorkers(tableName, workerTasks, Collections.emptySet());
+    }
+
+    @Override
+    public synchronized void configureWorkers(TableName tableName, GroupedTasks workerTasks,
+                                              Set<TaskId> superseded) throws InterruptedException {
         Map<TaskId, SortedSet<StreamId>> tasks = workerTasks.getTasks();
 
-        // Determine which tasks for this table are being removed
-        Set<TaskId> toDelete = new HashSet<>();
+        // Active tasks are known only in this process; after a restart the master supplies superseded.
+        Set<TaskId> toDelete = new HashSet<>(superseded);
         for (TaskId taskId : backend.getActiveTasks()) {
-            if (taskId.getTable().equals(tableName) && !tasks.containsKey(taskId)) {
+            if (taskId.getTable().equals(tableName)) {
                 toDelete.add(taskId);
             }
         }
-        if (!toDelete.isEmpty()) {
-            backend.deleteTasks(toDelete);
-        }
+        toDelete.removeAll(tasks.keySet());
 
-        // Update generation ID for this table
+        // Save before deleting: a stored generation without its checkpoints is re-read from its start.
         GenerationId generationId = workerTasks.getGenerationId();
-        currentGenerationByTable.put(tableName, generationId);
         backend.saveGenerationId(tableName, generationId);
+        currentGenerationByTable.put(tableName, generationId);
+        deleteSupersededTasks(toDelete, generationId);
 
         if (currentWorker == null) {
             // No worker exists, start a new one
@@ -146,6 +158,22 @@ class LocalTransport implements MasterTransport, WorkerTransport {
     @Override
     public synchronized void stopWorkers() throws InterruptedException {
         stopCurrentWorker();
+    }
+
+    // Best-effort: once the new generation is saved these rows are never read again, so a failure
+    // only leaves them behind and must not stop consumption.
+    private void deleteSupersededTasks(Set<TaskId> tasks, GenerationId newGeneration) {
+        if (tasks.isEmpty()) {
+            return;
+        }
+        try {
+            backend.deleteTasks(tasks);
+        } catch (RuntimeException e) {
+            Set<TableName> tables = tasks.stream().map(TaskId::getTable).collect(Collectors.toSet());
+            logger.atWarning().withCause(e).log("Could not delete %d checkpoints of tables %s superseded by "
+                    + "generation %s. They are never read again and can be deleted from the state store.",
+                    tasks.size(), tables, newGeneration);
+        }
     }
 
     private void startNewWorker(GroupedTasks workerTasks) throws InterruptedException {
