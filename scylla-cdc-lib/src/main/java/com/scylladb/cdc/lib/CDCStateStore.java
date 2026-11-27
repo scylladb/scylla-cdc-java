@@ -98,9 +98,19 @@ public interface CDCStateStore {
     /**
      * Deletes saved states for tasks that are no longer active.
      *
-     * <p>Called when transitioning between CDC generations: the old generation's tasks are pruned
-     * before the new generation's tasks are started. Implementations may silently ignore task IDs
-     * that have no saved state.
+     * <p>Called when the consumer moves to a new CDC generation, after the new generation ID is
+     * saved, so a failed or interrupted switch never leaves the saved generation without its task
+     * states. The tasks are the previous generation's tasks that ran in this process and, when the
+     * consumer starts and finds the saved generation already consumed or expired, that generation's
+     * tasks. Also called to delete a legacy tablet task state once the per-stream states replacing
+     * it are saved. If this method throws, the failure is logged and consumption continues.
+     * Implementations may silently ignore task IDs that have no saved state.
+     *
+     * <p><b>Leftover states:</b> a failed delete, a crash between saving the generation and the
+     * delete, and earlier library versions can leave states behind. The library never reads a task
+     * state whose {@link TaskId#getGenerationId() generation} is older than the generation saved for
+     * its table (tablet-based CDC) or the saved vnode-based generation, so such states can be
+     * deleted at any time.
      *
      * @param tasks the set of task IDs whose state should be deleted
      */
